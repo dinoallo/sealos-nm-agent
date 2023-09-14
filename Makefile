@@ -39,11 +39,11 @@ generate:
 	go generate ./...
 
 .PHONY: docker-build
-docker-build: ## Build docker image with the agent.
+docker-build: generate## Build docker image with the agent.
 	docker build -t ${IMG} .
 
 .PHONY: docker-build-debug
-docker-build-debug:
+docker-build-debug: generate
 	docker build -t ${DEBUG_IMG} -f ./Dockerfile.debug .
 
 .PHONY: docker-push
