@@ -53,14 +53,16 @@ type bpfSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfProgramSpecs struct {
-	CustomHook *ebpf.ProgramSpec `ebpf:"custom_hook"`
+	Ipv4EgressBytecountCustomHook  *ebpf.ProgramSpec `ebpf:"ipv4_egress_bytecount_custom_hook"`
+	Ipv4IngressBytecountCustomHook *ebpf.ProgramSpec `ebpf:"ipv4_ingress_bytecount_custom_hook"`
 }
 
 // bpfMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type bpfMapSpecs struct {
-	BytecountMap *ebpf.MapSpec `ebpf:"bytecount_map"`
+	Ipv4EgressBytecountMap  *ebpf.MapSpec `ebpf:"ipv4_egress_bytecount_map"`
+	Ipv4IngressBytecountMap *ebpf.MapSpec `ebpf:"ipv4_ingress_bytecount_map"`
 }
 
 // bpfObjects contains all objects after they have been loaded into the kernel.
@@ -82,12 +84,14 @@ func (o *bpfObjects) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfMaps struct {
-	BytecountMap *ebpf.Map `ebpf:"bytecount_map"`
+	Ipv4EgressBytecountMap  *ebpf.Map `ebpf:"ipv4_egress_bytecount_map"`
+	Ipv4IngressBytecountMap *ebpf.Map `ebpf:"ipv4_ingress_bytecount_map"`
 }
 
 func (m *bpfMaps) Close() error {
 	return _BpfClose(
-		m.BytecountMap,
+		m.Ipv4EgressBytecountMap,
+		m.Ipv4IngressBytecountMap,
 	)
 }
 
@@ -95,12 +99,14 @@ func (m *bpfMaps) Close() error {
 //
 // It can be passed to loadBpfObjects or ebpf.CollectionSpec.LoadAndAssign.
 type bpfPrograms struct {
-	CustomHook *ebpf.Program `ebpf:"custom_hook"`
+	Ipv4EgressBytecountCustomHook  *ebpf.Program `ebpf:"ipv4_egress_bytecount_custom_hook"`
+	Ipv4IngressBytecountCustomHook *ebpf.Program `ebpf:"ipv4_ingress_bytecount_custom_hook"`
 }
 
 func (p *bpfPrograms) Close() error {
 	return _BpfClose(
-		p.CustomHook,
+		p.Ipv4EgressBytecountCustomHook,
+		p.Ipv4IngressBytecountCustomHook,
 	)
 }
 

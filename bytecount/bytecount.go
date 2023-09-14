@@ -21,12 +21,25 @@ type CountingServer struct {
 	counterpb.UnimplementedCountingServiceServer
 }
 
+type BytecountMapType struct {
+	s string
+	t uint32
+}
+
+var (
+	Unknown     = BytecountMapType{s: "unknown type", t: 0}
+	IPv4Ingress = BytecountMapType{s: "ipv4 ingress", t: 1}
+	IPv4Engress = BytecountMapType{s: "ipv4 egress", t: 2}
+)
+
 func (s *CountingServer) DumpCounter(ctx context.Context, in *counterpb.Counter) (*counterpb.CounterDumps, error) {
 	eid := in.GetEndpointId()
 	log.Printf("Received dumping request for endpoint_id: %v", eid)
 
-	pinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/bytecount_%05d", eid)
-	if _, err := os.Stat(pinPath); errors.Is(err, os.ErrNotExist) {
+	ipv4IngressBytecountPinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_ingress_bytecount_%05d", eid)
+	ipv4EgressBytecountPintPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_egress_bytecount_%05d", eid)
+	pinPaths := []string{ipv4IngressBytecountPinPath, ipv4EgressBytecountPintPath}
+	if flag, err := checkCounterMapExists(pinPaths); err == nil && flag == false {
 		// counter does not exist
 		log.Printf("this counter doesn't exist, try to create one")
 		_, counterCreateError := s.CreateCounter(ctx, &counterpb.NewCounter{EndpointId: eid})
@@ -38,23 +51,36 @@ func (s *CountingServer) DumpCounter(ctx context.Context, in *counterpb.Counter)
 		log.Printf("unable to check if the counter exist")
 		return nil, util.ErrBPFMapFailedToCheck
 	}
-	m, err := ebpf.LoadPinnedMap(pinPath, nil)
-	if err != nil {
-		log.Printf("unable to load the bytecount map for the endpoint %5d", eid)
-		return nil, util.ErrBPFMapNotLoaded
-	}
-	defer m.Close()
-	var entries = m.Iterate()
-	var (
-		key   uint32
-		value uint64
-	)
 
+	var bytecountMapType BytecountMapType
 	dumps := []*counterpb.Dump{}
+	for t, pinPath := range pinPaths {
+		log.Printf("bytecount map type: %d", t)
+		switch t {
+		case 0:
+			bytecountMapType = IPv4Ingress
+		case 1:
+			bytecountMapType = IPv4Engress
+		default:
+			bytecountMapType = Unknown
+		}
+		m, err := ebpf.LoadPinnedMap(pinPath, nil)
+		if err != nil {
+			log.Printf("unable to load the %s bytecount map for the endpoint %5d", bytecountMapType.s, eid)
+			return nil, util.ErrBPFMapNotLoaded
+		}
+		defer m.Close()
+		var entries = m.Iterate()
+		var (
+			key   uint32
+			value uint64
+		)
 
-	for entries.Next(&key, &value) {
-		dump := counterpb.Dump{Bytes: value, Identity: key}
-		dumps = append(dumps, &dump)
+		for entries.Next(&key, &value) {
+			dump := counterpb.Dump{Bytes: value, Identity: key, Type: bytecountMapType.t}
+			dumps = append(dumps, &dump)
+		}
+
 	}
 
 	counterDumps := &counterpb.CounterDumps{
@@ -93,17 +119,32 @@ func (s *CountingServer) CreateCounter(ctx context.Context, in *counterpb.NewCou
 	}
 	defer objs.Close()
 
-	if !objs.bpfMaps.BytecountMap.IsPinned() {
-		pinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/bytecount_%05d", eid)
-		if err := objs.bpfMaps.BytecountMap.Pin(pinPath); err != nil {
-			log.Printf("unable to pin the counter program: %s", err.Error())
-			return nil, util.ErrBPFProgramNotPinned
+	// pin the bytecounter map for ipv4 ingress
+	if !objs.bpfMaps.Ipv4IngressBytecountMap.IsPinned() {
+		pinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_ingress_bytecount_%05d", eid)
+		if err := objs.bpfMaps.Ipv4IngressBytecountMap.Pin(pinPath); err != nil {
+			log.Printf("unable to pin the IPv4 ingress bytecounter map: %s", err.Error())
+			return nil, util.ErrBPFMapNotPinned
+		}
+	}
+
+	// pin the bytecounter map for ipv4 egress
+	if !objs.bpfMaps.Ipv4EgressBytecountMap.IsPinned() {
+		pinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_egress_bytecount_%05d", eid)
+		if err := objs.bpfMaps.Ipv4EgressBytecountMap.Pin(pinPath); err != nil {
+			log.Printf("unable to pin the IPv4 egress bytecounter map: %s", err.Error())
+			return nil, util.ErrBPFMapNotPinned
 		}
 	}
 
 	// update the IPv4 ingress map on the custom map
-	if err := ccm.Put(uint32(0), objs.bpfPrograms.CustomHook); err != nil {
+	if err := ccm.Put(uint32(0), objs.bpfPrograms.Ipv4IngressBytecountCustomHook); err != nil {
 		log.Printf("unable to update the custom hook map for the endpoint %05d on IPv4 ingress", eid)
+		return nil, util.ErrBPFMapNotUpdated
+	}
+
+	if err := ccm.Put(uint32(1), objs.bpfPrograms.Ipv4EgressBytecountCustomHook); err != nil {
+		log.Printf("unable to update the custom hook map for the endpoint %05d on IPv4 egress", eid)
 		return nil, util.ErrBPFMapNotUpdated
 	}
 
@@ -112,4 +153,15 @@ func (s *CountingServer) CreateCounter(ctx context.Context, in *counterpb.NewCou
 		EndpointId: eid,
 	}
 	return counter, nil
+}
+
+func checkCounterMapExists(pinPaths []string) (bool, error) {
+	for _, pinPath := range pinPaths {
+		if _, err := os.Stat(pinPath); errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		} else if err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }

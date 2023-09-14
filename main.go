@@ -1,5 +1,6 @@
 package main
 
+//go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative proto/counter.proto
 import (
 	"log"
 	"net"
@@ -29,6 +30,6 @@ func main() {
 	log.Printf("server listening at %v", lis.Addr())
 
 	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to server: %v", err)
+		log.Fatalf("failed to serve: %v", err)
 	}
 }
