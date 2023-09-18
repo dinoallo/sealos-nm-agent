@@ -155,7 +155,7 @@ func (s *CountingServer) CreateCounter(ctx context.Context, in *counterpb.NewCou
 	return counter, nil
 }
 
-func (s *CountingServer) RemoveCounter(ctx context.Context, in *counterpb.NewCounter) error {
+func (s *CountingServer) RemoveCounter(ctx context.Context, in *counterpb.Counter) (*counterpb.Empty, error) {
 	// get the endpoint id from the request
 	eid := in.GetEndpointId()
 	log.Printf("Received remove counter request for endpoint_id: %v", eid)
@@ -168,15 +168,15 @@ func (s *CountingServer) RemoveCounter(ctx context.Context, in *counterpb.NewCou
 		for _, pinPath := range pinPaths {
 			if counterRemoveError := removeCounterMap(pinPath); counterRemoveError != nil {
 				log.Printf("unable to remove counter map %s for endpoint: %05d", pinPath, eid)
-				return util.ErrBPFMapNotRemoved
+				return nil, util.ErrBPFMapNotRemoved
 			}
 		}
 	} else if err != nil {
 		log.Printf("unable to check if the counter exist")
-		return util.ErrBPFMapFailedToCheck
+		return nil, util.ErrBPFMapFailedToCheck
 	}
 
-	return nil
+	return nil, nil
 }
 
 func checkCounterMapExists(pinPaths []string) (bool, error) {
