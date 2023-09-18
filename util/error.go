@@ -12,5 +12,6 @@ var (
 	ErrBPFMapNotLoaded          = errors.New("the bpf map was not loaded")
 	ErrBPFMapNotPinned          = errors.New("the bpf map was not pinned")
 	ErrBPFMapNotUpdated         = errors.New("the bpf map was not updated")
+	ErrBPFMapNotRemoved         = errors.New("the bpf map was not removed")
 	ErrBPFCustomCallMapNotExist = errors.New("the bpf map for custom call does not exist")
 )

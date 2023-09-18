@@ -37,8 +37,8 @@ func (s *CountingServer) DumpCounter(ctx context.Context, in *counterpb.Counter)
 	log.Printf("Received dumping request for endpoint_id: %v", eid)
 
 	ipv4IngressBytecountPinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_ingress_bytecount_%05d", eid)
-	ipv4EgressBytecountPintPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_egress_bytecount_%05d", eid)
-	pinPaths := []string{ipv4IngressBytecountPinPath, ipv4EgressBytecountPintPath}
+	ipv4EgressBytecountPinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_egress_bytecount_%05d", eid)
+	pinPaths := []string{ipv4IngressBytecountPinPath, ipv4EgressBytecountPinPath}
 	if flag, err := checkCounterMapExists(pinPaths); err == nil && flag == false {
 		// counter does not exist
 		log.Printf("this counter doesn't exist, try to create one")
@@ -155,6 +155,30 @@ func (s *CountingServer) CreateCounter(ctx context.Context, in *counterpb.NewCou
 	return counter, nil
 }
 
+func (s *CountingServer) RemoveCounter(ctx context.Context, in *counterpb.NewCounter) error {
+	// get the endpoint id from the request
+	eid := in.GetEndpointId()
+	log.Printf("Received remove counter request for endpoint_id: %v", eid)
+
+	ipv4IngressBytecountPinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_ingress_bytecount_%05d", eid)
+	ipv4EgressBytecountPinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_egress_bytecount_%05d", eid)
+	pinPaths := []string{ipv4IngressBytecountPinPath, ipv4EgressBytecountPinPath}
+
+	if flag, err := checkCounterMapExists(pinPaths); err == nil && flag == true {
+		for _, pinPath := range pinPaths {
+			if counterRemoveError := removeCounterMap(pinPath); counterRemoveError != nil {
+				log.Printf("unable to remove counter map %s for endpoint: %05d", pinPath, eid)
+				return util.ErrBPFMapNotRemoved
+			}
+		}
+	} else if err != nil {
+		log.Printf("unable to check if the counter exist")
+		return util.ErrBPFMapFailedToCheck
+	}
+
+	return nil
+}
+
 func checkCounterMapExists(pinPaths []string) (bool, error) {
 	for _, pinPath := range pinPaths {
 		if _, err := os.Stat(pinPath); errors.Is(err, os.ErrNotExist) {
@@ -164,4 +188,9 @@ func checkCounterMapExists(pinPaths []string) (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+func removeCounterMap(pinPath string) error {
+	err := os.Remove(pinPath)
+	return err
 }
