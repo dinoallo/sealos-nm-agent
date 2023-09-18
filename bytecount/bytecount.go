@@ -168,15 +168,15 @@ func (s *CountingServer) RemoveCounter(ctx context.Context, in *counterpb.Counte
 		for _, pinPath := range pinPaths {
 			if counterRemoveError := removeCounterMap(pinPath); counterRemoveError != nil {
 				log.Printf("unable to remove counter map %s for endpoint: %05d", pinPath, eid)
-				return nil, util.ErrBPFMapNotRemoved
+				return &counterpb.Empty{}, util.ErrBPFMapNotRemoved
 			}
 		}
 	} else if err != nil {
 		log.Printf("unable to check if the counter exist")
-		return nil, util.ErrBPFMapFailedToCheck
+		return &counterpb.Empty{}, util.ErrBPFMapFailedToCheck
 	}
 
-	return nil, nil
+	return &counterpb.Empty{}, nil
 }
 
 func checkCounterMapExists(pinPaths []string) (bool, error) {
