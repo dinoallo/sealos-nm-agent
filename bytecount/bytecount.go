@@ -11,6 +11,7 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/util"
 	"log"
 	"os"
+	"sync"
 )
 
 const (
@@ -29,10 +30,11 @@ type BytecountMapType struct {
 var (
 	Unknown     = BytecountMapType{s: "unknown type", t: 0}
 	IPv4Ingress = BytecountMapType{s: "ipv4 ingress", t: 1}
-	IPv4Engress = BytecountMapType{s: "ipv4 egress", t: 2}
+	IPv4Egress  = BytecountMapType{s: "ipv4 egress", t: 2}
 )
 
-func (s *CountingServer) DumpCounter(ctx context.Context, in *counterpb.Counter) (*counterpb.CounterDumps, error) {
+// TODO: dump ingress and egress counter concurrently
+func (s *CountingServer) DumpCounter(in *counterpb.Counter, srv counterpb.CountingService_DumpCounterServer) error {
 	eid := in.GetEndpointId()
 	log.Printf("Received dumping request for endpoint_id: %v", eid)
 
@@ -42,32 +44,32 @@ func (s *CountingServer) DumpCounter(ctx context.Context, in *counterpb.Counter)
 	if flag, err := checkCounterMapExists(pinPaths); err == nil && flag == false {
 		// counter does not exist
 		log.Printf("this counter doesn't exist, try to create one")
-		_, counterCreateError := s.CreateCounter(ctx, &counterpb.NewCounter{EndpointId: eid})
+		_, counterCreateError := s.CreateCounter(context.TODO(), &counterpb.Counter{EndpointId: eid})
 		if counterCreateError != nil {
 			log.Printf("unable to create counter before dumping it")
-			return nil, counterCreateError
+			return counterCreateError
 		}
 	} else if err != nil {
 		log.Printf("unable to check if the counter exist")
-		return nil, util.ErrBPFMapFailedToCheck
+		return util.ErrBPFMapFailedToCheck
 	}
 
 	var bytecountMapType BytecountMapType
-	dumps := []*counterpb.Dump{}
+	var wg sync.WaitGroup
 	for t, pinPath := range pinPaths {
 		log.Printf("bytecount map type: %d", t)
 		switch t {
 		case 0:
 			bytecountMapType = IPv4Ingress
 		case 1:
-			bytecountMapType = IPv4Engress
+			bytecountMapType = IPv4Egress
 		default:
 			bytecountMapType = Unknown
 		}
 		m, err := ebpf.LoadPinnedMap(pinPath, nil)
 		if err != nil {
 			log.Printf("unable to load the %s bytecount map for the endpoint %5d", bytecountMapType.s, eid)
-			return nil, util.ErrBPFMapNotLoaded
+			return util.ErrBPFMapNotLoaded
 		}
 		defer m.Close()
 		var entries = m.Iterate()
@@ -77,21 +79,21 @@ func (s *CountingServer) DumpCounter(ctx context.Context, in *counterpb.Counter)
 		)
 
 		for entries.Next(&key, &value) {
-			dump := counterpb.Dump{Bytes: value, Identity: key, Type: bytecountMapType.t}
-			dumps = append(dumps, &dump)
+			wg.Add(1)
+			go func(eid int64, bytes uint64, identity uint32, t uint32) {
+				defer wg.Done()
+				dump := counterpb.CounterDump{EndpointId: eid, Bytes: bytes, Identity: identity, Type: t}
+				if err := srv.Send(&dump); err != nil {
+					log.Printf("send error %v", err)
+				}
+			}(eid, value, key, bytecountMapType.t)
 		}
-
 	}
-
-	counterDumps := &counterpb.CounterDumps{
-		EndpointId: eid,
-		Dumps:      dumps,
-	}
-
-	return counterDumps, nil
+	wg.Wait()
+	return nil
 }
 
-func (s *CountingServer) CreateCounter(ctx context.Context, in *counterpb.NewCounter) (*counterpb.Counter, error) {
+func (s *CountingServer) CreateCounter(ctx context.Context, in *counterpb.Counter) (*counterpb.Counter, error) {
 	// get the endpoint id from the request
 	eid := in.GetEndpointId()
 	log.Printf("Received create counter request for endpoint_id: %v", eid)
