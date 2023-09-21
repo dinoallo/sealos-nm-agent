@@ -11,7 +11,6 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/util"
 	"log"
 	"os"
-	"sync"
 )
 
 const (
@@ -33,7 +32,6 @@ var (
 	IPv4Egress  = BytecountMapType{s: "ipv4 egress", t: 2}
 )
 
-// TODO: dump ingress and egress counter concurrently
 func (s *CountingServer) DumpCounter(in *counterpb.Counter, srv counterpb.CountingService_DumpCounterServer) error {
 	eid := in.GetEndpointId()
 	log.Printf("Received dumping request for endpoint_id: %v", eid)
@@ -55,7 +53,6 @@ func (s *CountingServer) DumpCounter(in *counterpb.Counter, srv counterpb.Counti
 	}
 
 	var bytecountMapType BytecountMapType
-	var wg sync.WaitGroup
 	for t, pinPath := range pinPaths {
 		log.Printf("bytecount map type: %d", t)
 		switch t {
@@ -77,19 +74,14 @@ func (s *CountingServer) DumpCounter(in *counterpb.Counter, srv counterpb.Counti
 			key   uint32
 			value uint64
 		)
-
 		for entries.Next(&key, &value) {
-			wg.Add(1)
-			go func(eid int64, bytes uint64, identity uint32, t uint32) {
-				defer wg.Done()
-				dump := counterpb.CounterDump{EndpointId: eid, Bytes: bytes, Identity: identity, Type: t}
-				if err := srv.Send(&dump); err != nil {
-					log.Printf("send error %v", err)
-				}
-			}(eid, value, key, bytecountMapType.t)
+			dump := counterpb.CounterDump{EndpointId: eid, Bytes: value, Identity: key, Type: bytecountMapType.t}
+			if err := srv.Send(&dump); err != nil {
+				log.Printf("send error %v", err)
+			}
 		}
+
 	}
-	wg.Wait()
 	return nil
 }
 
