@@ -4,10 +4,12 @@ package main
 import (
 	"log"
 	"net"
+	"time"
 
 	bytecount "github.com/dinoallo/sealos-networkmanager-agent/bytecount"
 	counterpb "github.com/dinoallo/sealos-networkmanager-agent/proto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 )
 
@@ -23,7 +25,11 @@ func main() {
 		log.Fatalf("failed connection: %v", err)
 	}
 
-	s := grpc.NewServer()
+	s := grpc.NewServer(
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionIdle: 5 * time.Minute,
+		}),
+	)
 	counterpb.RegisterCountingServiceServer(s, &bytecount.CountingServer{})
 	reflection.Register(s)
 
