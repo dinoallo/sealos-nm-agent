@@ -88,7 +88,14 @@ func (s *CountingServer) CreateCounter(ctx context.Context, in *counterpb.Counte
 	ipv4EgressBytecountPinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_egress_bytecount_%05d", eid)
 	pinPaths := []string{ipv4IngressBytecountPinPath, ipv4EgressBytecountPinPath}
 	if flag, err := checkCounterMapExists(pinPaths); err == nil && flag {
-		return nil, util.ErrBPFMapAlreadyExists
+		if err := os.Remove(ipv4EgressBytecountPinPath); err != nil {
+			log.Printf("unable to remove the stale ipv4 egress counter map")
+			return nil, util.ErrBPFMapNotRemoved
+		}
+		if err := os.Remove(ipv4IngressBytecountPinPath); err != nil {
+			log.Printf("unable to remove the stale ipv4 ingress counter map")
+			return nil, util.ErrBPFMapNotRemoved
+		}
 	} else if err != nil {
 		log.Printf("unable to check if the counter exist")
 		return nil, util.ErrBPFMapFailedToCheck
