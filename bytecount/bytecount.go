@@ -84,6 +84,16 @@ func (s *CountingServer) CreateCounter(ctx context.Context, in *counterpb.Counte
 	eid := in.GetEndpointId()
 	log.Printf("Received create counter request for endpoint_id: %v", eid)
 
+	ipv4IngressBytecountPinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_ingress_bytecount_%05d", eid)
+	ipv4EgressBytecountPinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_egress_bytecount_%05d", eid)
+	pinPaths := []string{ipv4IngressBytecountPinPath, ipv4EgressBytecountPinPath}
+	if flag, err := checkCounterMapExists(pinPaths); err == nil && flag {
+		return nil, util.ErrBPFMapAlreadyExists
+	} else if err != nil {
+		log.Printf("unable to check if the counter exist")
+		return nil, util.ErrBPFMapFailedToCheck
+	}
+
 	// check and load the custom call map for this endpoint. if the ccm doesn't exist, (may due to the migration for cilium configuration, which leads to new endpoints have ccm while others don't)
 	// we inform the caller by returning a special error
 	ccmPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/cilium_calls_custom_%05d", eid)
@@ -109,8 +119,7 @@ func (s *CountingServer) CreateCounter(ctx context.Context, in *counterpb.Counte
 
 	// pin the bytecounter map for ipv4 ingress
 	if !objs.bpfMaps.Ipv4IngressBytecountMap.IsPinned() {
-		pinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_ingress_bytecount_%05d", eid)
-		if err := objs.bpfMaps.Ipv4IngressBytecountMap.Pin(pinPath); err != nil {
+		if err := objs.bpfMaps.Ipv4IngressBytecountMap.Pin(ipv4IngressBytecountPinPath); err != nil {
 			log.Printf("unable to pin the IPv4 ingress bytecounter map: %s", err.Error())
 			return nil, util.ErrBPFMapNotPinned
 		}
@@ -118,8 +127,7 @@ func (s *CountingServer) CreateCounter(ctx context.Context, in *counterpb.Counte
 
 	// pin the bytecounter map for ipv4 egress
 	if !objs.bpfMaps.Ipv4EgressBytecountMap.IsPinned() {
-		pinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_egress_bytecount_%05d", eid)
-		if err := objs.bpfMaps.Ipv4EgressBytecountMap.Pin(pinPath); err != nil {
+		if err := objs.bpfMaps.Ipv4EgressBytecountMap.Pin(ipv4EgressBytecountPinPath); err != nil {
 			log.Printf("unable to pin the IPv4 egress bytecounter map: %s", err.Error())
 			return nil, util.ErrBPFMapNotPinned
 		}
