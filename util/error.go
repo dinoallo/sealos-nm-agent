@@ -9,6 +9,7 @@ var (
 	ErrBPFProgramNotPinned      = errors.New("the bpf program was not pinned")
 	ErrBPFMapFailedToCheck      = errors.New("failed to check if the bpf map exists")
 	ErrBPFMapNotExist           = errors.New("the bpf map does not exist")
+	ErrBPFMapAlreadyExist       = errors.New("the bpf map already exists")
 	ErrBPFMapNotLoaded          = errors.New("the bpf map was not loaded")
 	ErrBPFMapNotPinned          = errors.New("the bpf map was not pinned")
 	ErrBPFMapNotUpdated         = errors.New("the bpf map was not updated")

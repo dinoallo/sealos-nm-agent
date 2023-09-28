@@ -40,13 +40,7 @@ func (s *CountingServer) DumpCounter(in *counterpb.Counter, srv counterpb.Counti
 	ipv4EgressBytecountPinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_egress_bytecount_%05d", eid)
 	pinPaths := []string{ipv4IngressBytecountPinPath, ipv4EgressBytecountPinPath}
 	if flag, err := checkCounterMapExists(pinPaths); err == nil && flag == false {
-		// counter does not exist
-		log.Printf("this counter doesn't exist, try to create one")
-		_, counterCreateError := s.CreateCounter(context.TODO(), &counterpb.Counter{EndpointId: eid})
-		if counterCreateError != nil {
-			log.Printf("unable to create counter before dumping it")
-			return counterCreateError
-		}
+		return util.ErrBPFMapNotExist
 	} else if err != nil {
 		log.Printf("unable to check if the counter exist")
 		return util.ErrBPFMapFailedToCheck
