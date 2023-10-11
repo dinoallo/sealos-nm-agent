@@ -13,6 +13,9 @@ var (
 	ErrBPFMapNotLoaded          = errors.New("the bpf map was not loaded")
 	ErrBPFMapNotPinned          = errors.New("the bpf map was not pinned")
 	ErrBPFMapNotUpdated         = errors.New("the bpf map was not updated")
+	ErrBPFMapNotInitialized     = errors.New("the bpf map was not initialized")
 	ErrBPFMapNotRemoved         = errors.New("the bpf map was not removed")
 	ErrBPFCustomCallMapNotExist = errors.New("the bpf map for custom call does not exist")
+
+	ErrUnknownBytecountMapType = errors.New("this bytecount map type is not known")
 )
