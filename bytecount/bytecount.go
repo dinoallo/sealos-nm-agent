@@ -85,145 +85,79 @@ func (s *CountingServer) CreateCounter(ctx context.Context, in *counterpb.Create
 	initValues := in.GetInitValues()
 	t := in.GetType()
 	var bytecountMapType BytecountMapType
+	var bytecountPinPath string
+	var bytecountMap *ebpf.Map
+	var bytecountCustomHook *ebpf.Program
+	var ccmKey uint32 // load the bytecount program
+
+	// check and load the custom call map for this endpoint. if the ccm doesn't exist, (may due to the migration for cilium configuration, which leads to new endpoints have ccm while others don't)
+	// we inform the caller by returning a special error
+	ccmPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/cilium_calls_custom_%05d", eid)
+	if _, err := os.Stat(ccmPath); errors.Is(err, os.ErrNotExist) {
+		log.Printf("unable to find the custom hook map for the endpoint %05d", eid)
+		return nil, util.ErrBPFCustomCallMapNotExist
+	}
+	ccm, err := ebpf.LoadPinnedMap(ccmPath, nil)
+
+	if err != nil {
+		log.Printf("unable to load the custom hook map for the endpoint %05d", eid)
+		return nil, util.ErrBPFMapNotLoaded
+	}
+	defer ccm.Close()
+	objs := bpfObjects{}
+	if err := loadBpfObjects(&objs, nil); err != nil {
+		log.Printf("unable to load the counter program to the kernel and assign it.")
+		return nil, util.ErrBPFProgramNotLoaded
+	}
+	defer objs.Close()
 
 	switch t {
 	case 1:
 		bytecountMapType = IPv4Ingress
+		bytecountPinPath = BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_ingress_bytecount_%05d", eid)
+		bytecountMap = objs.bpfMaps.Ipv4IngressBytecountMap
+		bytecountCustomHook = objs.bpfPrograms.Ipv4IngressBytecountCustomHook
+		ccmKey = 0
 	case 2:
 		bytecountMapType = IPv4Egress
+		bytecountPinPath = BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_egress_bytecount_%05d", eid)
+		bytecountMap = objs.bpfMaps.Ipv4EgressBytecountMap
+		bytecountCustomHook = objs.bpfPrograms.Ipv4EgressBytecountCustomHook
+		ccmKey = 1
 	default:
 		bytecountMapType = Unknown
 	}
-
-	if bytecountMapType == IPv4Ingress {
-		log.Printf("Received create ipv4 ingress counter request for endpoint_id: %v", eid)
-		ipv4IngressBytecountPinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_ingress_bytecount_%05d", eid)
-		pinPaths := []string{ipv4IngressBytecountPinPath}
-		if flag, err := checkCounterMapExists(pinPaths); err == nil && flag {
-			if err := os.Remove(ipv4IngressBytecountPinPath); err != nil {
-				log.Printf("unable to remove the stale ipv4 ingress counter map")
-				return nil, util.ErrBPFMapNotRemoved
-			}
-		} else if err != nil {
-			log.Printf("unable to check if the counter exist")
-			return nil, util.ErrBPFMapFailedToCheck
-		}
-		// check and load the custom call map for this endpoint. if the ccm doesn't exist, (may due to the migration for cilium configuration, which leads to new endpoints have ccm while others don't)
-		// we inform the caller by returning a special error
-		ccmPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/cilium_calls_custom_%05d", eid)
-		if _, err := os.Stat(ccmPath); errors.Is(err, os.ErrNotExist) {
-			log.Printf("unable to find the custom hook map for the endpoint %05d", eid)
-			return nil, util.ErrBPFCustomCallMapNotExist
-		}
-		ccm, err := ebpf.LoadPinnedMap(ccmPath, nil)
-
-		if err != nil {
-			log.Printf("unable to load the custom hook map for the endpoint %05d", eid)
-			return nil, util.ErrBPFMapNotLoaded
-		}
-		defer ccm.Close()
-
-		// load the bytecount program
-		objs := bpfObjects{}
-		if err := loadBpfObjects(&objs, nil); err != nil {
-			log.Printf("unable to load the counter program to the kernel and assign it.")
-			return nil, util.ErrBPFProgramNotLoaded
-		}
-		defer objs.Close()
-
-		// pin the bytecounter map for ipv4 ingress
-		if !objs.bpfMaps.Ipv4IngressBytecountMap.IsPinned() {
-			if err := objs.bpfMaps.Ipv4IngressBytecountMap.Pin(ipv4IngressBytecountPinPath); err != nil {
-				log.Printf("unable to pin the IPv4 ingress bytecounter map: %s", err.Error())
-				return nil, util.ErrBPFMapNotPinned
-			}
-		}
-		// initialize the bytecounter map for ipv4 ingress
-		bm, err := ebpf.LoadPinnedMap(ipv4IngressBytecountPinPath, nil)
-		if err != nil {
-			log.Printf("unable to load the bytecount map for endpoint %05d", eid)
-			return nil, util.ErrBPFMapNotLoaded
-		}
-		defer bm.Close()
-		for initKey, initValue := range initValues {
-			if err := bm.Put(initKey, initValue); err != nil {
-				log.Printf("unable to initialize the bytecount map for endpoint %05d on IPv4 ingress", eid)
-				return nil, util.ErrBPFMapNotInitialized
-			}
-		}
-
-		// update the IPv4 ingress map on the custom map
-		if err := ccm.Put(uint32(0), objs.bpfPrograms.Ipv4IngressBytecountCustomHook); err != nil {
-			log.Printf("unable to update the custom hook map for the endpoint %05d on IPv4 ingress", eid)
-			return nil, util.ErrBPFMapNotUpdated
-		}
-
-	} else if bytecountMapType == IPv4Egress {
-		log.Printf("Received create ipv4 egress counter request for endpoint_id: %v", eid)
-		ipv4EgressBytecountPinPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/ipv4_egress_bytecount_%05d", eid)
-		pinPaths := []string{ipv4EgressBytecountPinPath}
-		if flag, err := checkCounterMapExists(pinPaths); err == nil && flag {
-			if err := os.Remove(ipv4EgressBytecountPinPath); err != nil {
-				log.Printf("unable to remove the stale ipv4 egress counter map")
-				return nil, util.ErrBPFMapNotRemoved
-			}
-		} else if err != nil {
-			log.Printf("unable to check if the counter exist")
-			return nil, util.ErrBPFMapFailedToCheck
-		}
-		// check and load the custom call map for this endpoint. if the ccm doesn't exist, (may due to the migration for cilium configuration, which leads to new endpoints have ccm while others don't)
-		// we inform the caller by returning a special error
-		ccmPath := BPF_FS_ROOT + fmt.Sprintf("tc/globals/cilium_calls_custom_%05d", eid)
-		if _, err := os.Stat(ccmPath); errors.Is(err, os.ErrNotExist) {
-			log.Printf("unable to find the custom hook map for the endpoint %05d", eid)
-			return nil, util.ErrBPFCustomCallMapNotExist
-		}
-		ccm, err := ebpf.LoadPinnedMap(ccmPath, nil)
-
-		if err != nil {
-			log.Printf("unable to load the custom hook map for the endpoint %05d", eid)
-			return nil, util.ErrBPFMapNotLoaded
-		}
-		defer ccm.Close()
-
-		// load the bytecount program
-		objs := bpfObjects{}
-		if err := loadBpfObjects(&objs, nil); err != nil {
-			log.Printf("unable to load the counter program to the kernel and assign it.")
-			return nil, util.ErrBPFProgramNotLoaded
-		}
-		defer objs.Close()
-
-		// initialize the bytecounter map for ipv4 egress
-
-		bm, err := ebpf.LoadPinnedMap(ipv4EgressBytecountPinPath, nil)
-		if err != nil {
-			log.Printf("unable to load the bytecount map for endpoint %05d", eid)
-			return nil, util.ErrBPFMapNotLoaded
-		}
-		defer bm.Close()
-		for initKey, initValue := range initValues {
-			if err := bm.Put(initKey, initValue); err != nil {
-				log.Printf("unable to initialize the bytecount map for endpoint %05d on IPv4 egress", eid)
-				return nil, util.ErrBPFMapNotInitialized
-			}
-		}
-		// pin the bytecounter map for ipv4 egress
-		if !objs.bpfMaps.Ipv4EgressBytecountMap.IsPinned() {
-			if err := objs.bpfMaps.Ipv4EgressBytecountMap.Pin(ipv4EgressBytecountPinPath); err != nil {
-				log.Printf("unable to pin the IPv4 egress bytecounter map: %s", err.Error())
-				return nil, util.ErrBPFMapNotPinned
-			}
-		}
-
-		if err := ccm.Put(uint32(1), objs.bpfPrograms.Ipv4EgressBytecountCustomHook); err != nil {
-			log.Printf("unable to update the custom hook map for the endpoint %05d on IPv4 egress", eid)
-			return nil, util.ErrBPFMapNotUpdated
-		}
-
-	} else {
-		log.Printf("unknown bytecount map type")
+	if bytecountMapType == Unknown {
 		return nil, util.ErrUnknownBytecountMapType
+	}
+	log.Printf("create %s counter for endpoint_id: %05d", bytecountMapType.s, eid)
+
+	pinPaths := []string{bytecountPinPath}
+	if flag, err := checkCounterMapExists(pinPaths); err == nil && flag {
+		if err := os.Remove(bytecountPinPath); err != nil {
+			log.Printf("unable to remove the stale %s counter map", bytecountMapType.s)
+			return nil, util.ErrBPFMapNotRemoved
+		} else if err != nil {
+			log.Printf("unable to check if counter exist")
+			return nil, util.ErrBPFMapFailedToCheck
+		}
+	}
+
+	if !bytecountMap.IsPinned() {
+		if err := bytecountMap.Pin(bytecountPinPath); err != nil {
+			log.Printf("unable to pin the %s bytecount map: %s", bytecountMapType.s, err.Error())
+			return nil, util.ErrBPFMapNotPinned
+		}
+	}
+	for initKey, initValue := range initValues {
+		if err := bytecountMap.Put(initKey, initValue); err != nil {
+			log.Printf("unable to initialize the %s bytecount map for endpont %05d: %s", bytecountMapType.s, eid, err.Error())
+			return nil, util.ErrBPFMapNotInitialized
+		}
+	}
+	if err := ccm.Put(ccmKey, bytecountCustomHook); err != nil {
+		log.Printf("unable to update the custom hook map for the endpoint %05d on %s: %s", eid, bytecountMapType.s, err.Error())
+		return nil, util.ErrBPFMapNotUpdated
 	}
 
 	// return the counter id, which is the same for our endpoint
