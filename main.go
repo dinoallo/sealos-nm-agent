@@ -2,11 +2,21 @@ package main
 
 //go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative proto/counter.proto
 import (
-	"log"
-	"net"
+	"context"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
-	bytecount "github.com/dinoallo/sealos-networkmanager-agent/bytecount"
+	"github.com/cilium/ebpf/rlimit"
+	"github.com/dinoallo/sealos-networkmanager-agent/bpf/bytecount"
+	"github.com/dinoallo/sealos-networkmanager-agent/server"
+
+	// tp "github.com/dinoallo/sealos-networkmanager-agent/bpf/tp_traffic"
+	"net"
+
+	"go.uber.org/zap"
+
 	counterpb "github.com/dinoallo/sealos-networkmanager-agent/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
@@ -19,23 +29,80 @@ const (
 )
 
 func main() {
+	/*
+		var databaseHost string
+		var databasePort string
+		flag.StringVar(&databaseHost, "database-host", "nm-etcd-client", "The host where the database is")
+		flag.StringVar(&databasePort, "database-port", "2379", "The port where the database is listening")
+	*/
+	// Initialize the logger
+	logger, _ := zap.NewDevelopment()
+	defer logger.Sync()
+	devLogger := logger.Sugar()
+	devLogger.Info("the logger for development is ready...")
+
+	// Init logger for main
+	log := devLogger.With(zap.String("component", "main"))
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
+	// Allow the current process to lock memory for eBPF resources.
+	// only need this if the kernel version < 5.11
+	// requires CAP_SYS_RESOURCE on kernel < 5.11
+	if err := rlimit.RemoveMemlock(); err != nil {
+		log.Fatal(err)
+	}
+
+	/*
+		dbEndpoint := fmt.Sprintf("http://%s:%s", databaseHost, databasePort)
+		dbClient, err := etcdv3.New(etcdv3.Config{
+			Endpoints:   []string{dbEndpoint},
+			DialTimeout: 5 * time.Second,
+		})
+		if err != nil {
+			log.Fatal(err)
+		} else {
+			log.Print("successfully connecting to the database")
+		}
+		defer dbClient.Close() */
+
+	bytecountFactory := &bytecount.Factory{Logger: devLogger}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := bytecountFactory.Launch(ctx); err != nil {
+		log.Fatal(err)
+	}
+
 	lis, err := net.Listen("tcp", PORT)
 
 	if err != nil {
 		log.Fatalf("failed connection: %v", err)
 	}
 
+	log.Infof("server listening at %v", lis.Addr())
 	s := grpc.NewServer(
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			MaxConnectionIdle: 5 * time.Minute,
 		}),
 	)
-	counterpb.RegisterCountingServiceServer(s, &bytecount.CountingServer{})
-	reflection.Register(s)
 
-	log.Printf("server listening at %v", lis.Addr())
+	grpcServer, err := server.NewServer(devLogger, bytecountFactory)
+	if err != nil {
+		log.Fatalf("failed to create a new GRPC server: %v", err)
+	}
+
+	counterpb.RegisterCountingServiceServer(s, grpcServer)
+	reflection.Register(s)
+	go func() {
+		<-sig
+		cancel()
+		s.GracefulStop()
+		close(sig)
+	}()
 
 	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		log.Infof("failed to serve: %v", err)
 	}
+
 }

@@ -17,5 +17,5 @@ var (
 	ErrBPFMapNotRemoved         = errors.New("the bpf map was not removed")
 	ErrBPFCustomCallMapNotExist = errors.New("the bpf map for custom call does not exist")
 
-	ErrUnknownBytecountMapType = errors.New("this bytecount map type is not known")
+	ErrUnknownDirection = errors.New("this direction type is not known")
 )
