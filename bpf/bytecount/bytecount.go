@@ -76,7 +76,7 @@ func (s *Factory) Launch(ctx context.Context) error {
 			return
 		}
 		for {
-			if err := s.processTraffic(er); err != nil {
+			if err := s.processTraffic(er, 8); err != nil {
 				break
 			}
 			time.Sleep(1 * time.Second)
@@ -90,35 +90,39 @@ func (s *Factory) Launch(ctx context.Context) error {
 	return nil
 }
 
-func (s *Factory) processTraffic(er *perf.Reader) error {
+func (s *Factory) processTraffic(er *perf.Reader, consumerCount int) error {
 	log := s.Logger
-	rec, err := er.Read()
-	if err != nil {
-		if errors.Is(err, perf.ErrClosed) {
-			log.Infof("the perf event channel is closed")
-		} else {
-			log.Infof("reading from perf event reader: %s", err.Error())
-		}
-		return err
-	}
-	if rec.LostSamples != 0 {
-		log.Infof("perf event ring buffer full, dropped %d samples", rec.LostSamples)
-		return err
-	}
-	var event bytecountTrafficEventT
-	if err := binary.Read(bytes.NewBuffer(rec.RawSample), binary.LittleEndian, &event); err != nil {
-		log.Infof("Failed to decode received data: %+v", err)
-		return err
-	}
+	for i := 0; i < consumerCount; i++ {
+		go func() {
+			rec, err := er.Read()
+			if err != nil {
+				if errors.Is(err, perf.ErrClosed) {
+					log.Infof("the perf event channel is closed")
+				} else {
+					log.Infof("reading from perf event reader: %v", err)
+				}
+				return
+			}
+			if rec.LostSamples != 0 {
+				log.Infof("perf event ring buffer full, dropped %d samples", rec.LostSamples)
+				return
+			}
+			var event bytecountTrafficEventT
+			if err := binary.Read(bytes.NewBuffer(rec.RawSample), binary.LittleEndian, &event); err != nil {
+				log.Infof("Failed to decode received data: %+v", err)
+				return
+			}
 
-	if event.Family != unix.AF_INET {
-		log.Debugf("unsupported socket family type")
-		return nil
+			if event.Family != unix.AF_INET {
+				log.Debugf("unsupported socket family type")
+				return
+			}
+			srcIp4 := toIPv4(event.SrcIp4)
+			dstIp4 := toIPv4(event.DstIp4)
+			log.Debugf("%v:%v => %v:%v; %v bytes sent", srcIp4, event.SrcPort, dstIp4, event.DstPort, event.Len)
+			// log.Debugf("family used: %v; %v bytes sent", event.Protocol, event.Len)
+		}()
 	}
-	srcIp4 := toIPv4(event.SrcIp4)
-	dstIp4 := toIPv4(event.DstIp4)
-	log.Debugf("%v:%v => %v:%v; %v bytes sent", srcIp4, event.SrcPort, dstIp4, event.DstPort, event.Len)
-	// log.Debugf("family used: %v; %v bytes sent", event.Protocol, event.Len)
 	return nil
 }
 
