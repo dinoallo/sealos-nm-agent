@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"time"
+	// "time"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
@@ -13,10 +13,13 @@ import (
 
 	"bytes"
 	"encoding/binary"
+
 	"golang.org/x/sys/unix"
 
 	"os"
 
+	"github.com/cilium/cilium/pkg/identity"
+	"github.com/dinoallo/sealos-networkmanager-agent/store"
 	"github.com/dinoallo/sealos-networkmanager-agent/util"
 )
 
@@ -28,6 +31,7 @@ const (
 type Factory struct {
 	objs   bytecountObjects
 	Logger *zap.SugaredLogger
+	Store  *store.Store
 }
 
 type Counter struct {
@@ -68,20 +72,7 @@ func (s *Factory) Launch(ctx context.Context) error {
 	}
 	IPv4Ingress.ClsProgram = s.objs.IngressBytecountCustomHook
 	IPv4Egress.ClsProgram = s.objs.EgressBytecountCustomHook
-	go func() {
-		log := s.Logger
-		er, err := perf.NewReader(s.objs.EgressTrafficEvents, 32*1024)
-		if err != nil {
-			log.Infof("failed to create a new reader")
-			return
-		}
-		for {
-			if err := s.processTraffic(er, 8); err != nil {
-				break
-			}
-			time.Sleep(1 * time.Second)
-		}
-	}()
+	go s.processTraffic(ctx, IPv4Egress.TypeInt, 8)
 	go func(ctx context.Context) {
 		defer s.objs.Close()
 		<-ctx.Done()
@@ -90,38 +81,99 @@ func (s *Factory) Launch(ctx context.Context) error {
 	return nil
 }
 
-func (s *Factory) processTraffic(er *perf.Reader, consumerCount int) error {
-	log := s.Logger
+func (bf *Factory) processTraffic(ctx context.Context, t uint32, consumerCount int) {
+	log := bf.Logger
+	objs := bf.objs
+	var eventArray *ebpf.Map
+	switch t {
+	case IPv4Ingress.TypeInt:
+		eventArray = objs.IngressTrafficEvents
+	case IPv4Egress.TypeInt:
+		eventArray = objs.EgressTrafficEvents
+	default:
+		return
+	}
+	er, err := perf.NewReader(eventArray, 32*1024)
+	if err != nil {
+		log.Errorf("failed to create a new reader")
+		return
+	}
 	for i := 0; i < consumerCount; i++ {
+		log.Infof("perf event buffer consumer %v launched", i)
 		go func() {
-			rec, err := er.Read()
-			if err != nil {
-				if errors.Is(err, perf.ErrClosed) {
-					log.Infof("the perf event channel is closed")
-				} else {
-					log.Infof("reading from perf event reader: %v", err)
+			for {
+				rec, err := er.Read()
+				if err != nil {
+					if errors.Is(err, perf.ErrClosed) {
+						log.Infof("the perf event channel is closed")
+					} else {
+						log.Infof("reading from perf event reader: %v", err)
+					}
+					return
 				}
-				return
+				if rec.LostSamples != 0 {
+					log.Infof("perf event ring buffer full, dropped %d samples", rec.LostSamples)
+					return
+				}
+				var event bytecountTrafficEventT
+				if err := binary.Read(bytes.NewBuffer(rec.RawSample), binary.LittleEndian, &event); err != nil {
+					log.Infof("Failed to decode received data: %+v", err)
+					return
+				}
+				if err := bf.submit(ctx, &event, t); err != nil {
+					log.Infof("Failed to submit the traffic report: %+v", err)
+					return
+				}
 			}
-			if rec.LostSamples != 0 {
-				log.Infof("perf event ring buffer full, dropped %d samples", rec.LostSamples)
-				return
-			}
-			var event bytecountTrafficEventT
-			if err := binary.Read(bytes.NewBuffer(rec.RawSample), binary.LittleEndian, &event); err != nil {
-				log.Infof("Failed to decode received data: %+v", err)
-				return
-			}
-
-			if event.Family != unix.AF_INET {
-				log.Debugf("unsupported socket family type")
-				return
-			}
-			srcIp4 := toIPv4(event.SrcIp4)
-			dstIp4 := toIPv4(event.DstIp4)
-			log.Debugf("%v:%v => %v:%v; %v bytes sent", srcIp4, event.SrcPort, dstIp4, event.DstPort, event.Len)
 			// log.Debugf("family used: %v; %v bytes sent", event.Protocol, event.Len)
 		}()
+	}
+	go func(ctx context.Context) {
+		defer er.Close()
+		<-ctx.Done()
+	}(ctx)
+	return
+}
+
+func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t uint32) error {
+	log := bf.Logger
+
+	var dir store.TrafficDirection
+	__localIP := make([]uint32, 4)
+	__remoteIP := make([]uint32, 4)
+	var localPort uint32
+	var remotePort uint32
+	switch t {
+	case IPv4Ingress.TypeInt:
+		dir = store.V4Ingress
+		__localIP[0] = event.DstIp4
+		__remoteIP[0] = event.SrcIp4
+		localPort = uint32(event.DstPort)
+		remotePort = event.SrcPort
+	case IPv4Egress.TypeInt:
+		dir = store.V4Egress
+		__localIP[0] = event.SrcIp4
+		__remoteIP[0] = event.DstIp4
+		localPort = event.SrcPort
+		remotePort = uint32(event.DstPort)
+	default:
+		return nil
+	}
+
+	if event.Family == unix.AF_INET {
+		report := &store.TrafficReport{
+			Dir:        dir,
+			Protocol:   event.Protocol,
+			LocalIP:    toIP(__localIP[0], nil, 4),
+			RemoteIP:   toIP(__remoteIP[0], nil, 4),
+			LocalPort:  localPort,
+			RemotePort: remotePort,
+			DataBytes:  event.Len,
+			Identity:   identity.NumericIdentity(event.Identity),
+		}
+		// log.Debugf("protocol: %v; %v bytes sent", event.Protocol, event.Len)
+		log.Debugf("protocol: %v; identity: %v; %v => %v, %v bytes sent;", report.Protocol, report.LocalIP, report.Identity, report.RemoteIP, report.DataBytes)
+		bf.Store.AddTrafficReport(ctx, report)
 	}
 	return nil
 }
@@ -150,8 +202,16 @@ func (bf *Factory) CreateCounter(ctx context.Context, eid int64, c Counter) erro
 		return util.ErrBPFMapNotUpdated
 	}
 
-	log.Debugf("counter created")
+	// log.Debugf("counter created")
 	return nil
+}
+
+func (bf *Factory) CleanUp(ctx context.Context, ipAddr string) error {
+	if bf.Store == nil {
+		// the store is not initialized
+		return nil
+	}
+	return bf.Store.DeleteTrafficAccount(ctx, ipAddr)
 }
 
 func (bf *Factory) RemoveCounter(ctx context.Context, eid int64, c Counter) error {
@@ -186,8 +246,29 @@ func removeCounterMap(pinPath string) error {
 	return err
 }
 
+// TODO: implemented ipv6
+func toIP(_v4Addr uint32, _v6Addr []uint32, t int) net.IP {
+	if t == 4 {
+		return toIPv4(_v4Addr)
+	} else if t == 6 {
+		return toIPv6(_v6Addr)
+	}
+	return nil
+}
+
 func toIPv4(nn uint32) net.IP {
 	ip := make(net.IP, 4)
 	binary.LittleEndian.PutUint32(ip, nn)
 	return ip
+}
+
+func toIPv6(nn []uint32) net.IP {
+	/*
+		ip := make(net.IP, 16)
+		for i := 0; i < 8; i++ {
+			binary.BigEndian.PutUint16(ip[i*2:i*2+2], nn[i])
+		}
+		return ip*/
+	//TODO: implement me
+	return nil
 }
