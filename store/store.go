@@ -83,7 +83,7 @@ func (s *Store) processTrafficReport(ctx context.Context, report *TrafficReport)
 		return
 	}
 	byteFieldKey := constructKeyByIPandPort(report.LocalIP.String(), fmt.Sprint(report.LocalPort), byteField, report.RemoteIP.String(), fmt.Sprint(report.RemotePort), false)
-	identityKey := constructKeyByIdentity(report.LocalIP.String(), byteField, fmt.Sprint(report.Identity), false)
+	identityKey := constructKeyByIdentity(report.LocalIP.String(), fmt.Sprint(report.Identity), byteField, false)
 	value := uint64(report.DataBytes)
 	if err := s.add(ctx, byteFieldKey, value); err != nil {
 		log.Errorf("failed to update the value for key %v: %v", byteFieldKey, err)
