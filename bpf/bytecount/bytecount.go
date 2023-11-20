@@ -72,7 +72,7 @@ func (s *Factory) Launch(ctx context.Context) error {
 	}
 	IPv4Ingress.ClsProgram = s.objs.IngressBytecountCustomHook
 	IPv4Egress.ClsProgram = s.objs.EgressBytecountCustomHook
-	go s.processTraffic(ctx, IPv4Egress.TypeInt, 8)
+	go s.processTraffic(ctx, IPv4Egress.TypeInt, 32)
 	go func(ctx context.Context) {
 		defer s.objs.Close()
 		<-ctx.Done()
@@ -106,23 +106,24 @@ func (bf *Factory) processTraffic(ctx context.Context, t uint32, consumerCount i
 				if err != nil {
 					if errors.Is(err, perf.ErrClosed) {
 						log.Infof("the perf event channel is closed")
+						return
 					} else {
 						log.Infof("reading from perf event reader: %v", err)
+						continue
 					}
-					return
 				}
 				if rec.LostSamples != 0 {
 					log.Infof("perf event ring buffer full, dropped %d samples", rec.LostSamples)
-					return
+					continue
 				}
 				var event bytecountTrafficEventT
 				if err := binary.Read(bytes.NewBuffer(rec.RawSample), binary.LittleEndian, &event); err != nil {
 					log.Infof("Failed to decode received data: %+v", err)
-					return
+					continue
 				}
 				if err := bf.submit(ctx, &event, t); err != nil {
 					log.Infof("Failed to submit the traffic report: %+v", err)
-					return
+					continue
 				}
 			}
 			// log.Debugf("family used: %v; %v bytes sent", event.Protocol, event.Len)

@@ -95,12 +95,12 @@ func (s *Store) processTrafficReport(ctx context.Context, report *TrafficReport)
 	}
 	// duplicate the data for output usage
 	byteFieldKey = constructKeyByIPandPort(report.LocalIP.String(), fmt.Sprint(report.LocalPort), byteField, report.RemoteIP.String(), fmt.Sprint(report.RemotePort), true)
-	identityKey = constructKeyByIdentity(report.LocalIP.String(), byteField, fmt.Sprint(report.Identity), true)
-	if err := s.put(ctx, byteFieldKey, value); err != nil {
+	identityKey = constructKeyByIdentity(report.LocalIP.String(), fmt.Sprint(report.Identity), byteField, true)
+	if err := s.add(ctx, byteFieldKey, value); err != nil {
 		log.Errorf("failed to output the value for key %v: %v", byteFieldKey, err)
 		return
 	}
-	if err := s.put(ctx, identityKey, value); err != nil {
+	if err := s.add(ctx, identityKey, value); err != nil {
 		log.Errorf("failed to output the value for key %v: %v", identityKey, err)
 		return
 	}
