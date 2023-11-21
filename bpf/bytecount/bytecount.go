@@ -173,7 +173,7 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 			Identity:   identity.NumericIdentity(event.Identity),
 		}
 		// log.Debugf("protocol: %v; %v bytes sent", event.Protocol, event.Len)
-		log.Debugf("protocol: %v; identity: %v; %v => %v, %v bytes sent;", report.Protocol, report.LocalIP, report.Identity, report.RemoteIP, report.DataBytes)
+		log.Debugf("protocol: %v; identity: %v; %v => %v, %v bytes sent;", report.Protocol, report.Identity, report.LocalIP, report.RemoteIP, report.DataBytes)
 		bf.Store.AddTrafficReport(ctx, report)
 	}
 	return nil
