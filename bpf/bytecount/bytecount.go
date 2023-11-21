@@ -137,8 +137,6 @@ func (bf *Factory) processTraffic(ctx context.Context, t uint32, consumerCount i
 }
 
 func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t uint32) error {
-	log := bf.Logger
-
 	var dir store.TrafficDirection
 	__localIP := make([]uint32, 4)
 	__remoteIP := make([]uint32, 4)
@@ -173,7 +171,6 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 			Identity:   identity.NumericIdentity(event.Identity),
 		}
 		// log.Debugf("protocol: %v; %v bytes sent", event.Protocol, event.Len)
-		log.Debugf("protocol: %v; identity: %v; %v => %v, %v bytes sent;", report.Protocol, report.Identity, report.LocalIP, report.RemoteIP, report.DataBytes)
 		bf.Store.AddTrafficReport(ctx, report)
 	}
 	return nil

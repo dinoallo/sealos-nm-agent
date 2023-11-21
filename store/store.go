@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cilium/cilium/pkg/identity"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 )
@@ -82,27 +83,37 @@ func (s *Store) processTrafficReport(ctx context.Context, report *TrafficReport)
 		log.Infof("unknown direction when process traffic")
 		return
 	}
-	byteFieldKey := constructKeyByIPandPort(report.LocalIP.String(), fmt.Sprint(report.LocalPort), byteField, report.RemoteIP.String(), fmt.Sprint(report.RemotePort), false)
-	identityKey := constructKeyByIdentity(report.LocalIP.String(), fmt.Sprint(report.Identity), byteField, false)
 	value := uint64(report.DataBytes)
-	if err := s.add(ctx, byteFieldKey, value); err != nil {
-		log.Errorf("failed to update the value for key %v: %v", byteFieldKey, err)
-		return
-	}
-	if err := s.add(ctx, identityKey, value); err != nil {
-		log.Errorf("failed to update the value for key %v: %v", identityKey, err)
-		return
-	}
+	/*
+		byteFieldKey := constructKeyByIPandPort(report.LocalIP.String(), fmt.Sprint(report.LocalPort), byteField, report.RemoteIP.String(), fmt.Sprint(report.RemotePort), false)
+		identityKey := constructKeyByIdentity(report.LocalIP.String(), fmt.Sprint(report.Identity), byteField, false)
+		if err := s.add(ctx, byteFieldKey, value); err != nil {
+			log.Errorf("failed to update the value for key %v: %v", byteFieldKey, err)
+			return
+		}
+		if err := s.add(ctx, identityKey, value); err != nil {
+			log.Errorf("failed to update the value for key %v: %v", identityKey, err)
+			return
+		}*/
 	// duplicate the data for output usage
-	byteFieldKey = constructKeyByIPandPort(report.LocalIP.String(), fmt.Sprint(report.LocalPort), byteField, report.RemoteIP.String(), fmt.Sprint(report.RemotePort), true)
-	identityKey = constructKeyByIdentity(report.LocalIP.String(), fmt.Sprint(report.Identity), byteField, true)
-	if err := s.add(ctx, byteFieldKey, value); err != nil {
-		log.Errorf("failed to output the value for key %v: %v", byteFieldKey, err)
-		return
+	if report.Identity == identity.ReservedIdentityWorld {
+		identityKey := constructKeyByIdentity(report.LocalIP.String(), fmt.Sprint(report.Identity), byteField, true)
+		log.Debugf("protocol: %v; identity: %v; %v => %v, %v bytes sent;", report.Protocol, report.Identity, report.LocalIP, report.RemoteIP, report.DataBytes)
+		if err := s.add(ctx, identityKey, value); err != nil {
+			log.Errorf("failed to output the value for key %v: %v", identityKey, err)
+			return
+		}
 	}
-	if err := s.add(ctx, identityKey, value); err != nil {
-		log.Errorf("failed to output the value for key %v: %v", identityKey, err)
+	if ok, err := s.isFromTheExposedPorts(ctx, report); err != nil {
+		log.Errorf("failed to check if the port is exposed: %v", err)
 		return
+	} else if ok {
+		byteFieldKey := constructKeyByIPandPort(report.LocalIP.String(), fmt.Sprint(report.LocalPort), byteField, report.RemoteIP.String(), fmt.Sprint(report.RemotePort), true)
+		log.Debugf("protocol: %v; identity: %v; %v => %v, %v bytes sent;", report.Protocol, report.Identity, report.LocalIP, report.RemoteIP, report.DataBytes)
+		if err := s.add(ctx, byteFieldKey, value); err != nil {
+			log.Errorf("failed to output the value for key %v: %v", byteFieldKey, err)
+			return
+		}
 	}
 	// log.Infof("the data of ip %v, port %v has been updated", report.LocalIP, report.LocalPort)
 }
@@ -110,6 +121,30 @@ func (s *Store) processTrafficReport(ctx context.Context, report *TrafficReport)
 func (s *Store) DeleteTrafficAccount(ctx context.Context, ipAddr string) error {
 	prefix := constructPrefixByAccountIP(ipAddr)
 	return s.delByPrefix(ctx, prefix)
+}
+
+func (s *Store) isFromTheExposedPorts(ctx context.Context, report *TrafficReport) (bool, error) {
+
+	dbClient := s.dbClient
+	getCtx, cancel := context.WithTimeout(ctx, time.Second*1)
+	defer cancel()
+	prefix := getPrefixForExposedPortOfTheAddr(report.LocalIP.String())
+	if resp, err := dbClient.Get(getCtx, prefix, clientv3.WithPrefix()); err != nil {
+		return false, err
+	} else if len(resp.Kvs) < 1 {
+		return false, nil
+	} else {
+		for _, kv := range resp.Kvs {
+			if port, err := strconv.ParseUint(string(kv.Value), 10, 64); err != nil {
+				return false, err
+			} else {
+				if uint64(report.LocalPort) == port {
+					return true, nil
+				}
+			}
+		}
+	}
+	return false, nil
 }
 
 func (s *Store) add(ctx context.Context, key string, value uint64) error {
@@ -182,4 +217,8 @@ func constructKeyByIPandPort(localIP string, localPort string, field string, rem
 
 func constructPrefixByAccountIP(ipAddr string) string {
 	return fmt.Sprintf("/nm-agent/traffic_accounts/ips/%v/", ipAddr)
+}
+
+func getPrefixForExposedPortOfTheAddr(addr string) string {
+	return fmt.Sprintf("/nm-agent-input/addresses/%v/exposed_ports", addr)
 }
