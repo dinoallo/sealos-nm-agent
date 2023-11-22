@@ -53,3 +53,10 @@ func (s *GRPCServer) CreateCounter(ctx context.Context, in *counterpb.CreateCoun
 	// log.Debugf("receive create counter request")
 	return new(counterpb.Empty), bf.CreateCounter(ctx, eid, t)
 }
+
+func (s *GRPCServer) Subscribe(ctx context.Context, in *counterpb.SubscribeRequest) (*counterpb.Empty, error) {
+	addr := in.GetAddress()
+	port := in.GetPort()
+	bf := s.bytecountFactory
+	return new(counterpb.Empty), bf.Subscribe(ctx, addr, port)
+}

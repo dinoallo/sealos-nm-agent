@@ -5,6 +5,7 @@ go 1.21
 require (
 	github.com/cilium/cilium v1.14.3
 	github.com/cilium/ebpf v0.11.0
+	github.com/hashicorp/golang-lru/v2 v2.0.4
 	go.etcd.io/etcd/client/v3 v3.5.10
 	go.uber.org/zap v1.26.0
 	golang.org/x/sys v0.13.0

@@ -125,6 +125,7 @@ func (bf *Factory) processTraffic(ctx context.Context, t uint32, consumerCount i
 					log.Infof("Failed to submit the traffic report: %+v", err)
 					continue
 				}
+				// log.Debugf("protocol: %v; identity: %v; %v => %v, %v bytes sent;", event.Protocol, event.Identity, event.SrcPort, event.DstPort, event.Len)
 			}
 			// log.Debugf("family used: %v; %v bytes sent", event.Protocol, event.Len)
 		}()
@@ -210,6 +211,13 @@ func (bf *Factory) CleanUp(ctx context.Context, ipAddr string) error {
 		return nil
 	}
 	return bf.Store.DeleteTrafficAccount(ctx, ipAddr)
+}
+
+func (bf *Factory) Subscribe(ctx context.Context, addr string, port uint32) error {
+	if bf.Store == nil {
+		return nil
+	}
+	return bf.Store.AddSubscribedPort(ctx, addr, port)
 }
 
 func (bf *Factory) RemoveCounter(ctx context.Context, eid int64, c Counter) error {
