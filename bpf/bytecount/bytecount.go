@@ -125,7 +125,7 @@ func (bf *Factory) processTraffic(ctx context.Context, t uint32, consumerCount i
 					log.Infof("Failed to submit the traffic report: %+v", err)
 					continue
 				}
-				// log.Debugf("protocol: %v; identity: %v; %v => %v, %v bytes sent;", event.Protocol, event.Identity, event.SrcPort, event.DstPort, event.Len)
+				log.Debugf("family used: %v; protocol: %v; identity: %v; %v => %v, %v bytes sent;", event.Family, event.Protocol, event.Identity, event.SrcPort, event.DstPort, event.Len)
 			}
 			// log.Debugf("family used: %v; %v bytes sent", event.Protocol, event.Len)
 		}()
@@ -160,7 +160,7 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 		return nil
 	}
 
-	if event.Family == unix.AF_INET {
+	if event.Family == unix.AF_INET || event.Family == unix.AF_INET6 {
 		report := &store.TrafficReport{
 			Dir:        dir,
 			Protocol:   event.Protocol,

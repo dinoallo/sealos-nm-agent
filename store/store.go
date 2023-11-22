@@ -59,6 +59,8 @@ func (s *Store) Launch(ctx context.Context, workerCount int) error {
 	if err := s.initializeCache(ctx); err != nil {
 		return err
 	}
+
+	log.Info("finished initializing the cache")
 	go func(ctx context.Context) {
 		defer dbClient.Close()
 		<-ctx.Done()
@@ -162,17 +164,17 @@ func (s *Store) DeleteTrafficAccount(ctx context.Context, ipAddr string) error {
 }
 
 func (s *Store) isFromTheExposedPorts(ctx context.Context, report *TrafficReport) (bool, error) {
-	log := s.logger
 	dbClient := s.dbClient
-	getCtx, cancel := context.WithTimeout(ctx, time.Second*1)
-	defer cancel()
 	port := report.LocalPort
 	addr := report.LocalIP
 	key := getKeyForExposedPortOfTheAddr(addr.String(), fmt.Sprint(port))
+	log := s.logger.With(zap.String("key", key))
 	var flag bool = false
 	if _, ok := s.cache.Get(key); ok {
 		flag = true
 	} else {
+		getCtx, cancel := context.WithTimeout(ctx, time.Second*1)
+		defer cancel()
 		if resp, err := dbClient.Get(getCtx, key); err != nil {
 			log.Errorf("unable to get the data: %v", err)
 			flag = false
