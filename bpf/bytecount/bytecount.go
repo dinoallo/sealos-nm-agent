@@ -139,37 +139,37 @@ func (bf *Factory) processTraffic(ctx context.Context, t uint32, consumerCount i
 
 func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t uint32) error {
 	var dir store.TrafficDirection
-	__localIP := make([]uint32, 4)
-	__remoteIP := make([]uint32, 4)
-	var localPort uint32
-	var remotePort uint32
+	__srcIP := make([]uint32, 4)
+	__dstIP := make([]uint32, 4)
+	var srcPort uint32
+	var dstPort uint32
 	switch t {
 	case IPv4Ingress.TypeInt:
 		dir = store.V4Ingress
-		__localIP[0] = event.DstIp4
-		__remoteIP[0] = event.SrcIp4
-		localPort = uint32(event.DstPort)
-		remotePort = event.SrcPort
+		__srcIP[0] = event.DstIp4
+		__dstIP[0] = event.SrcIp4
+		srcPort = uint32(event.DstPort)
+		dstPort = event.SrcPort
 	case IPv4Egress.TypeInt:
 		dir = store.V4Egress
-		__localIP[0] = event.SrcIp4
-		__remoteIP[0] = event.DstIp4
-		localPort = event.SrcPort
-		remotePort = uint32(event.DstPort)
+		__srcIP[0] = event.SrcIp4
+		__dstIP[0] = event.DstIp4
+		srcPort = event.SrcPort
+		dstPort = uint32(event.DstPort)
 	default:
 		return nil
 	}
 
 	if event.Family == unix.AF_INET || event.Family == unix.AF_INET6 {
 		report := &store.TrafficReport{
-			Dir:        dir,
-			Protocol:   event.Protocol,
-			LocalIP:    toIP(__localIP[0], nil, 4),
-			RemoteIP:   toIP(__remoteIP[0], nil, 4),
-			LocalPort:  localPort,
-			RemotePort: remotePort,
-			DataBytes:  event.Len,
-			Identity:   identity.NumericIdentity(event.Identity),
+			Dir:       dir,
+			Protocol:  event.Protocol,
+			SrcIP:     toIP(__srcIP[0], nil, 4),
+			DstIP:     toIP(__dstIP[0], nil, 4),
+			SrcPort:   srcPort,
+			DstPort:   dstPort,
+			DataBytes: event.Len,
+			Identity:  identity.NumericIdentity(event.Identity),
 		}
 		// log.Debugf("protocol: %v; %v bytes sent", event.Protocol, event.Len)
 		bf.Store.AddTrafficReport(ctx, report)
@@ -218,6 +218,18 @@ func (bf *Factory) Subscribe(ctx context.Context, addr string, port uint32) erro
 		return nil
 	}
 	return bf.Store.AddSubscribedPort(ctx, addr, port)
+}
+
+func (bf *Factory) DumpTraffic(ctx context.Context, addr string, tag string, reset bool) (uint64, uint64, error) {
+	if bf.Store == nil {
+		return 0, 0, nil
+	}
+	if p, err := bf.Store.DumpTraffic(ctx, addr, tag, reset); err != nil {
+		return 0, 0, err
+	} else {
+		return p.SentBytes, p.RecvBytes, nil
+	}
+
 }
 
 func (bf *Factory) RemoveCounter(ctx context.Context, eid int64, c Counter) error {

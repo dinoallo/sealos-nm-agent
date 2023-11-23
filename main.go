@@ -13,8 +13,6 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/server"
 	"github.com/dinoallo/sealos-networkmanager-agent/store"
 
-	// tp "github.com/dinoallo/sealos-networkmanager-agent/bpf/tp_traffic"
-	"flag"
 	"go.uber.org/zap"
 	"net"
 
@@ -26,15 +24,21 @@ import (
 
 const (
 	// Port for gRPC server to listen to
-	PORT = "0.0.0.0:50051"
+	GRPC_SERVER_PORT = "0.0.0.0:50051"
+	DB_HOST_ENV      = "DB_HOST"
+	DB_PORT_ENV      = "DB_PORT"
+	DB_USER_ENV      = "DB_USER"
+	DB_NAME_ENV      = "DB_NAME"
+	DB_PASS_ENV      = "DB_PASS"
 )
 
 func main() {
 
-	var databaseHost string
-	var databasePort string
-	flag.StringVar(&databaseHost, "database-host", "nm-etcd-client", "The host where the database is")
-	flag.StringVar(&databasePort, "database-port", "2379", "The port where the database is listening")
+	var dbHost string = os.Getenv(DB_HOST_ENV)
+	var dbPort string = os.Getenv(DB_PORT_ENV)
+	var dbName string = os.Getenv(DB_NAME_ENV)
+	var dbUser string = os.Getenv(DB_USER_ENV)
+	var dbPass string = os.Getenv(DB_PASS_ENV)
 
 	// Initialize the logger
 	logger, _ := zap.NewDevelopment()
@@ -59,7 +63,14 @@ func main() {
 	defer cancel()
 
 	// Init Store
-	store, err := store.NewStore(databaseHost, databasePort, devLogger)
+	cred := &store.DBCred{
+		DBHost: dbHost,
+		DBPort: dbPort,
+		DBUser: dbUser,
+		DBPass: dbPass,
+		DB:     dbName,
+	}
+	store, err := store.NewStore(cred, devLogger)
 	if err != nil {
 		log.Fatalf("unable to start the store: %v", err)
 		return
@@ -81,7 +92,7 @@ func main() {
 
 	// Init GRPC Server
 
-	lis, err := net.Listen("tcp", PORT)
+	lis, err := net.Listen("tcp", GRPC_SERVER_PORT)
 
 	if err != nil {
 		log.Fatalf("failed connection: %v", err)

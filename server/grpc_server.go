@@ -49,8 +49,6 @@ func (s *GRPCServer) CreateCounter(ctx context.Context, in *counterpb.CreateCoun
 	default:
 		return new(counterpb.Empty), util.ErrUnknownDirection
 	}
-	// log := s.logger.With(zap.Int64("endpoint", eid), zap.String("type", t.TypeStr))
-	// log.Debugf("receive create counter request")
 	return new(counterpb.Empty), bf.CreateCounter(ctx, eid, t)
 }
 
@@ -59,4 +57,20 @@ func (s *GRPCServer) Subscribe(ctx context.Context, in *counterpb.SubscribeReque
 	port := in.GetPort()
 	bf := s.bytecountFactory
 	return new(counterpb.Empty), bf.Subscribe(ctx, addr, port)
+}
+
+func (s *GRPCServer) DumpTraffic(ctx context.Context, in *counterpb.DumpTrafficRequest) (*counterpb.DumpTrafficResponse, error) {
+	addr := in.GetAddress()
+	tag := in.GetTag()
+	reset := in.GetReset_()
+	bf := s.bytecountFactory
+	if sentBytes, recvBytes, err := bf.DumpTraffic(ctx, addr, tag, reset); err != nil {
+		return nil, err
+	} else {
+		dtr := counterpb.DumpTrafficResponse{
+			SentBytes: sentBytes,
+			RecvBytes: recvBytes,
+		}
+		return &dtr, nil
+	}
 }

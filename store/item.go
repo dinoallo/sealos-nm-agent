@@ -15,20 +15,23 @@ const (
 	V6Egress
 )
 
+type Property struct {
+	SentBytes uint64
+	RecvBytes uint64
+}
+
 type TrafficAccount struct {
-	name      string
-	ip        net.IP
-	sentBytes uint32 // for cache
-	recvBytes uint32 // for cache
+	IP         string `bson:"ip"`
+	Properties map[string]Property
 }
 
 type TrafficReport struct {
-	Dir        TrafficDirection
-	Protocol   uint32
-	LocalIP    net.IP
-	LocalPort  uint32
-	RemoteIP   net.IP
-	RemotePort uint32
-	DataBytes  uint32
-	Identity   identity.NumericIdentity
+	Dir       TrafficDirection
+	Protocol  uint32
+	SrcIP     net.IP
+	SrcPort   uint32
+	DstIP     net.IP
+	DstPort   uint32
+	DataBytes uint32
+	Identity  identity.NumericIdentity
 }
