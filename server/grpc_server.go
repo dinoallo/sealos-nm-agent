@@ -59,7 +59,7 @@ func (s *GRPCServer) Subscribe(ctx context.Context, in *counterpb.SubscribeReque
 	return new(counterpb.Empty), bf.Subscribe(ctx, addr, port)
 }
 
-func (s *GRPCServer) UnSubscribe(ctx context.Context, in *counterpb.UnsubscribeRequest) (*counterpb.Empty, error) {
+func (s *GRPCServer) Unsubscribe(ctx context.Context, in *counterpb.UnsubscribeRequest) (*counterpb.Empty, error) {
 	addr := in.GetAddress()
 	port := in.GetPort()
 	bf := s.bytecountFactory
