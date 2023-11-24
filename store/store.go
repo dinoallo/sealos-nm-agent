@@ -19,7 +19,7 @@ const (
 )
 
 var (
-	NilError error = fmt.Errorf("some arguments are nil!!!")
+	NilError error = fmt.Errorf("some arguments or store member variables are nil!!!")
 )
 
 type Store struct {
@@ -203,6 +203,36 @@ func (s *Store) processTrafficReport(ctx context.Context, report *TrafficReport)
 		}
 	}
 	// log.Infof("the data of ip %v, port %v has been updated", report.LocalIP, report.LocalPort)
+}
+
+func (s *Store) RemoveSubscribedPort(ctx context.Context, addr string, port uint32) error {
+	if s.cache == nil || s.database == nil {
+		return NilError
+	}
+	tag := fmt.Sprint(port)
+	updateCtx, cancel := context.WithTimeout(ctx, time.Second*1)
+	defer cancel()
+	coll := s.database.Collection("traffic_accounts")
+	filter := bson.D{{
+		Key:   "ip",
+		Value: addr,
+	}}
+	key := fmt.Sprintf("properties.%s", tag)
+	update := bson.D{{
+		Key: "$unset",
+		Value: bson.D{{
+			Key:   key,
+			Value: 1,
+		}},
+	}}
+	if _, err := coll.UpdateOne(updateCtx, filter, update); err != nil {
+		return err
+	}
+	if _, found := s.cache.Get(addr); found {
+		s.cache.Remove(addr)
+	}
+
+	return nil
 }
 
 func (s *Store) DeleteTrafficAccount(ctx context.Context, ipAddr string) error {

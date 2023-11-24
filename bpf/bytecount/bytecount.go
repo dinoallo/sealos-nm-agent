@@ -220,6 +220,13 @@ func (bf *Factory) Subscribe(ctx context.Context, addr string, port uint32) erro
 	return bf.Store.AddSubscribedPort(ctx, addr, port)
 }
 
+func (bf *Factory) Unsubscribe(ctx context.Context, addr string, port uint32) error {
+	if bf.Store == nil {
+		return nil
+	}
+	return bf.Store.RemoveSubscribedPort(ctx, addr, port)
+}
+
 func (bf *Factory) DumpTraffic(ctx context.Context, addr string, tag string, reset bool) (uint64, uint64, error) {
 	if bf.Store == nil {
 		return 0, 0, nil

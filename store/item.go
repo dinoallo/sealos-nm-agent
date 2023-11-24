@@ -16,13 +16,13 @@ const (
 )
 
 type Property struct {
-	SentBytes uint64
-	RecvBytes uint64
+	SentBytes uint64 `bson:"sent_bytes"`
+	RecvBytes uint64 `bson:"recv_bytes"`
 }
 
 type TrafficAccount struct {
-	IP         string `bson:"ip"`
-	Properties map[string]Property
+	IP         string              `bson:"ip"`
+	Properties map[string]Property `bson:"properties"`
 }
 
 type TrafficReport struct {
