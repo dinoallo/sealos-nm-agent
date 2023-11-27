@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	CACHE_ENTRIES_SIZE = 128
+	CACHE_ENTRIES_SIZE = 256
+	MAX_POOL_SIZE      = 32
 )
 
 var (
@@ -64,7 +65,7 @@ func (s *Store) Launch(ctx context.Context, workerCount int) error {
 	log.Infof("launch the store...")
 	// initialize the database
 	uri := fmt.Sprintf("mongodb://%s:%s@%s:%s/?maxPoolSize=20&w=majority", cred.DBUser, cred.DBPass, cred.DBHost, cred.DBPort)
-	clientOps := options.Client().ApplyURI(uri)
+	clientOps := options.Client().ApplyURI(uri).SetMaxPoolSize(MAX_POOL_SIZE)
 	if client, err := mongo.Connect(ctx, clientOps); err != nil {
 		return err
 	} else {
