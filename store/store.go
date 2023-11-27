@@ -164,7 +164,7 @@ func (s *Store) initializeCache(ctx context.Context) error {
 	}
 	coll := db.Collection("traffic_accounts")
 	opts := options.Find().SetLimit(CACHE_ENTRIES_SIZE) //TODO: check me!
-	findCtx, cancel := context.WithTimeout(ctx, time.Second*1)
+	findCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 	cursor, err := coll.Find(findCtx, bson.D{}, opts)
 	if err != nil {
@@ -211,7 +211,7 @@ func (s *Store) RemoveSubscribedPort(ctx context.Context, addr string, port uint
 		return NilError
 	}
 	tag := fmt.Sprint(port)
-	updateCtx, cancel := context.WithTimeout(ctx, time.Second*1)
+	updateCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 	coll := s.database.Collection("traffic_accounts")
 	filter := bson.D{{
@@ -322,7 +322,7 @@ func (s *Store) onEvicted(key string, value TrafficAccount) {
 		return
 	}
 	coll := s.database.Collection("traffic_accounts")
-	putCtx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	putCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	opts := options.Replace().SetUpsert(true)
 	filter := bson.D{{
@@ -348,7 +348,7 @@ func (s *Store) getByIP(ctx context.Context, ip string, ta *TrafficAccount) (boo
 		*ta = _ta
 		found = true
 	} else {
-		getCtx, cancel := context.WithTimeout(ctx, time.Second*1)
+		getCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
 		coll := db.Collection("traffic_accounts")
 		filter := bson.D{
@@ -376,7 +376,7 @@ func (s *Store) delByIP(ctx context.Context, ip string) error {
 		return fmt.Errorf("the database shouldn't be nil")
 	}
 	coll := db.Collection("traffic_accounts")
-	delCtx, cancel := context.WithTimeout(ctx, time.Second*3)
+	delCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 	filter := bson.D{{
 		Key:   "ip",
