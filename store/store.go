@@ -16,7 +16,7 @@ import (
 
 const (
 	CACHE_ENTRIES_SIZE = 256
-	MAX_POOL_SIZE      = 32
+	MAX_POOL_SIZE      = 100
 )
 
 var (
