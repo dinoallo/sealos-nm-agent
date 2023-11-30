@@ -322,7 +322,7 @@ func (s *Store) onEvicted(key string, value TrafficAccount) {
 		return
 	}
 	coll := s.database.Collection("traffic_accounts")
-	putCtx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	putCtx, cancel := context.WithTimeout(context.TODO(), time.Second*5)
 	defer cancel()
 	opts := options.Replace().SetUpsert(true)
 	filter := bson.D{{
