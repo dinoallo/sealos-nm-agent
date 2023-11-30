@@ -193,17 +193,12 @@ func (s *Store) processTrafficReport(ctx context.Context, report *TrafficReport)
 			return
 		}
 	}
-	if ok, err := s.isFromTheSubscribedPorts(ctx, report); err != nil {
-		log.Errorf("failed to check if the port is exposed: %v", err)
+
+	log.Debugf("proto: %v; ident: %v; %v:%v => %v:%v, %v bytes sent;", report.Protocol, report.Identity, report.SrcIP, report.SrcPort, report.DstIP, report.DstPort, report.DataBytes)
+	if err := s.add(ctx, report, ""); err != nil {
+		log.Errorf("failed to update the value: %v", err)
 		return
-	} else if ok {
-		log.Debugf("proto: %v; ident: %v; %v:%v => %v:%v, %v bytes sent;", report.Protocol, report.Identity, report.SrcIP, report.SrcPort, report.DstIP, report.DstPort, report.DataBytes)
-		if err := s.add(ctx, report, ""); err != nil {
-			log.Errorf("failed to update the value: %v", err)
-			return
-		}
-	}
-	// log.Infof("the data of ip %v, port %v has been updated", report.LocalIP, report.LocalPort)
+	} // log.Infof("the data of ip %v, port %v has been updated", report.LocalIP, report.LocalPort)
 }
 
 func (s *Store) RemoveSubscribedPort(ctx context.Context, addr string, port uint32) error {
