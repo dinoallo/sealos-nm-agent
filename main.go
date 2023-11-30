@@ -76,7 +76,7 @@ func main() {
 		return
 	}
 
-	if err := store.Launch(ctx, 32); err != nil {
+	if err := store.Launch(ctx, 1); err != nil {
 		log.Fatalf("unable to launch the store: %v", err)
 		return
 	}

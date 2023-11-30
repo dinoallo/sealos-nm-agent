@@ -72,7 +72,7 @@ func (s *Factory) Launch(ctx context.Context) error {
 	}
 	IPv4Ingress.ClsProgram = s.objs.IngressBytecountCustomHook
 	IPv4Egress.ClsProgram = s.objs.EgressBytecountCustomHook
-	go s.processTraffic(ctx, IPv4Egress.TypeInt, 32)
+	go s.processTraffic(ctx, IPv4Egress.TypeInt, 1)
 	go func(ctx context.Context) {
 		defer s.objs.Close()
 		<-ctx.Done()
