@@ -135,23 +135,24 @@ func (s *Store) AddSubscribedPort(ctx context.Context, addr string, port uint32)
 
 func (s *Store) DumpTraffic(ctx context.Context, addr string, tag string, reset bool) (Property, error) {
 	var ta TrafficAccount
-	if ok, err := s.getByIP(ctx, addr, &ta); err != nil {
-		return Property{}, err
-	} else if ok {
-		if _, ok := ta.Properties[tag]; !ok {
-			return Property{}, fmt.Errorf("this tag is not subscribed")
-		}
-		p := ta.Properties[tag]
-		if reset {
-			ta.Properties[tag] = Property{
-				SentBytes: 0,
-				RecvBytes: 0,
+	p := Property{
+		SentBytes: 0,
+		RecvBytes: 0,
+	}
+	if found, err := s.getByIP(ctx, addr, &ta); err != nil {
+		return p, err
+	} else if found {
+		if _, ok := ta.Properties[tag]; ok {
+			p = ta.Properties[tag]
+			if reset {
+				ta.Properties[tag] = Property{
+					SentBytes: 0,
+					RecvBytes: 0,
+				}
 			}
 		}
-		return p, nil
-	} else {
-		return Property{}, nil
 	}
+	return p, nil
 }
 
 func (s *Store) initializeCache(ctx context.Context) error {
