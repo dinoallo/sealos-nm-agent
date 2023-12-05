@@ -125,7 +125,7 @@ func (bf *Factory) processTraffic(ctx context.Context, t uint32, consumerCount i
 					log.Infof("Failed to submit the traffic report: %+v", err)
 					continue
 				}
-				log.Debugf("family used: %v; protocol: %v; identity: %v; %v => %v, %v bytes sent;", event.Family, event.Protocol, event.Identity, event.SrcPort, event.DstPort, event.Len)
+				// log.Debugf("family used: %v; protocol: %v; identity: %v; %v => %v, %v bytes sent;", event.Family, event.Protocol, event.Identity, event.SrcPort, event.DstPort, event.Len)
 			}
 			// log.Debugf("family used: %v; %v bytes sent", event.Protocol, event.Len)
 		}()
