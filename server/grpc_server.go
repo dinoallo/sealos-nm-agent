@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/bpf/bytecount"
-	counterpb "github.com/dinoallo/sealos-networkmanager-agent/proto"
+	counterpb "github.com/dinoallo/sealos-networkmanager-agent/proto/agent"
 	"github.com/dinoallo/sealos-networkmanager-agent/util"
 	"go.uber.org/zap"
 )

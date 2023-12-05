@@ -1,6 +1,6 @@
 package main
 
-//go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative proto/counter.proto
+//go:generate protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative proto/agent/counter.proto
 import (
 	"context"
 	"os"
@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap"
 	"net"
 
-	counterpb "github.com/dinoallo/sealos-networkmanager-agent/proto"
+	counterpb "github.com/dinoallo/sealos-networkmanager-agent/proto/agent"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
