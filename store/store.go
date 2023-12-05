@@ -187,7 +187,6 @@ func (s *Store) processTrafficReport(ctx context.Context, report *TrafficReport)
 	log := s.logger
 	// duplicate the data for output usage
 	if report.Identity == identity.ReservedIdentityWorld {
-		log.Debugf("proto: %v; ident: %v; %v:%v => %v:%v, %v bytes sent;", report.Protocol, report.Identity, report.SrcIP, report.SrcPort, report.DstIP, report.DstPort, report.DataBytes)
 		tag := "world"
 		if err := s.add(ctx, report, tag); err != nil {
 			log.Errorf("failed to update the value: %v", err)
@@ -195,11 +194,11 @@ func (s *Store) processTrafficReport(ctx context.Context, report *TrafficReport)
 		}
 	}
 
-	log.Debugf("proto: %v; ident: %v; %v:%v => %v:%v, %v bytes sent;", report.Protocol, report.Identity, report.SrcIP, report.SrcPort, report.DstIP, report.DstPort, report.DataBytes)
 	if err := s.add(ctx, report, ""); err != nil {
 		log.Errorf("failed to update the value: %v", err)
 		return
 	} // log.Infof("the data of ip %v, port %v has been updated", report.LocalIP, report.LocalPort)
+	log.Debugf("proto: %v; ident: %v; %v:%v => %v:%v, %v bytes sent;", report.Protocol, report.Identity, report.SrcIP, report.SrcPort, report.DstIP, report.DstPort, report.DataBytes)
 }
 
 func (s *Store) RemoveSubscribedPort(ctx context.Context, addr string, port uint32) error {
