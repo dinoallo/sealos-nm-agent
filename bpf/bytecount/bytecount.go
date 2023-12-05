@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	// "time"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
@@ -72,7 +71,7 @@ func (s *Factory) Launch(ctx context.Context) error {
 	}
 	IPv4Ingress.ClsProgram = s.objs.IngressBytecountCustomHook
 	IPv4Egress.ClsProgram = s.objs.EgressBytecountCustomHook
-	go s.processTraffic(ctx, IPv4Egress.TypeInt, 1)
+	go s.processTraffic(ctx, IPv4Egress.TypeInt)
 	go func(ctx context.Context) {
 		defer s.objs.Close()
 		<-ctx.Done()
@@ -81,7 +80,7 @@ func (s *Factory) Launch(ctx context.Context) error {
 	return nil
 }
 
-func (bf *Factory) processTraffic(ctx context.Context, t uint32, consumerCount int) {
+func (bf *Factory) processTraffic(ctx context.Context, t uint32) {
 	log := bf.Logger
 	objs := bf.objs
 	var eventArray *ebpf.Map
@@ -98,43 +97,37 @@ func (bf *Factory) processTraffic(ctx context.Context, t uint32, consumerCount i
 		log.Errorf("failed to create a new reader")
 		return
 	}
-	for i := 0; i < consumerCount; i++ {
-		log.Infof("perf event buffer consumer %v launched", i)
-		go func() {
-			for {
-				rec, err := er.Read()
-				if err != nil {
-					if errors.Is(err, perf.ErrClosed) {
-						log.Infof("the perf event channel is closed")
-						return
-					} else {
-						log.Infof("reading from perf event reader: %v", err)
-						continue
-					}
-				}
-				if rec.LostSamples != 0 {
-					log.Infof("perf event ring buffer full, dropped %d samples", rec.LostSamples)
-					continue
-				}
-				var event bytecountTrafficEventT
-				if err := binary.Read(bytes.NewBuffer(rec.RawSample), binary.LittleEndian, &event); err != nil {
-					log.Infof("Failed to decode received data: %+v", err)
-					continue
-				}
-				if err := bf.submit(ctx, &event, t); err != nil {
-					log.Infof("Failed to submit the traffic report: %+v", err)
-					continue
-				}
-				// log.Debugf("family used: %v; protocol: %v; identity: %v; %v => %v, %v bytes sent;", event.Family, event.Protocol, event.Identity, event.SrcPort, event.DstPort, event.Len)
-			}
-			// log.Debugf("family used: %v; %v bytes sent", event.Protocol, event.Len)
-		}()
-	}
 	go func(ctx context.Context) {
 		defer er.Close()
 		<-ctx.Done()
 	}(ctx)
-	return
+
+	log.Infof("perf event buffer consumer launched")
+	for {
+		rec, err := er.Read()
+		if err != nil {
+			if errors.Is(err, perf.ErrClosed) {
+				log.Infof("the perf event channel is closed")
+				return
+			} else {
+				log.Infof("reading from perf event reader: %v", err)
+				continue
+			}
+		}
+		if rec.LostSamples != 0 {
+			log.Infof("perf event ring buffer full, dropped %d samples", rec.LostSamples)
+			continue
+		}
+		var event bytecountTrafficEventT
+		if err := binary.Read(bytes.NewBuffer(rec.RawSample), binary.LittleEndian, &event); err != nil {
+			log.Infof("Failed to decode received data: %+v", err)
+			continue
+		}
+		if err := bf.submit(ctx, &event, t); err != nil {
+			log.Infof("Failed to submit the traffic report: %+v", err)
+			continue
+		}
+	}
 }
 
 func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t uint32) error {
