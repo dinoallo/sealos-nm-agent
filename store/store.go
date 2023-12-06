@@ -16,6 +16,7 @@ import (
 
 const (
 	CACHE_ENTRIES_SIZE = 256
+	CACHE_EXPIRED_TIME = time.Second * 3
 	MAX_POOL_SIZE      = 100
 )
 
@@ -78,7 +79,7 @@ func (s *Store) Launch(ctx context.Context, workerCount int) error {
 	}
 
 	log.Info("successfully connecting to the database")
-	cache := lru_expirable.NewLRU[string, TrafficAccount](CACHE_ENTRIES_SIZE, s.onEvicted, time.Millisecond*100)
+	cache := lru_expirable.NewLRU[string, TrafficAccount](CACHE_ENTRIES_SIZE, s.onEvicted, CACHE_EXPIRED_TIME)
 	s.cache = cache
 	if err := s.initializeCache(ctx); err != nil {
 		return err
