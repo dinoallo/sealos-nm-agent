@@ -27,6 +27,7 @@ const (
 	BPF_FS_ROOT            = "/sys/fs/bpf"
 	CILIUM_TC_ROOT         = BPF_FS_ROOT + "/tc/globals"
 	TRAFFIC_CONSUMER_COUNT = 5
+	PERF_BUFFER_SIZE       = (32 << 10) // 32KB
 )
 
 type Factory struct {
@@ -114,7 +115,7 @@ func (bf *Factory) readTraffic(ctx context.Context, t uint32) {
 	default:
 		return
 	}
-	er, err := perf.NewReader(eventArray, 32*1024)
+	er, err := perf.NewReader(eventArray, PERF_BUFFER_SIZE)
 	if err != nil {
 		log.Errorf("failed to create a new reader")
 		return
