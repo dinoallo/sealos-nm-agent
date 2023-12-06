@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"unsafe"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
@@ -23,14 +24,22 @@ import (
 )
 
 const (
-	BPF_FS_ROOT    = "/sys/fs/bpf"
-	CILIUM_TC_ROOT = BPF_FS_ROOT + "/tc/globals"
+	BPF_FS_ROOT            = "/sys/fs/bpf"
+	CILIUM_TC_ROOT         = BPF_FS_ROOT + "/tc/globals"
+	TRAFFIC_CONSUMER_COUNT = 5
 )
 
 type Factory struct {
-	objs   bytecountObjects
-	Logger *zap.SugaredLogger
-	Store  *store.Store
+	objs         bytecountObjects
+	Logger       *zap.SugaredLogger
+	Store        *store.Store
+	workQueue    chan Traffic
+	nativeEndian binary.ByteOrder
+}
+
+type Traffic struct {
+	trafficRecord *perf.Record
+	trafficType   uint32
 }
 
 type Counter struct {
@@ -61,26 +70,39 @@ var (
 	}
 )
 
-func (s *Factory) Launch(ctx context.Context) error {
+func (bf *Factory) Launch(ctx context.Context) error {
 
-	log := s.Logger
-	s.objs = bytecountObjects{}
-	if err := loadBytecountObjects(&s.objs, nil); err != nil {
+	log := bf.Logger
+	bf.objs = bytecountObjects{}
+	bf.workQueue = make(chan Traffic)
+	if nativeEndian, err := getHostEndian(); err != nil {
+		return err
+	} else {
+		bf.nativeEndian = nativeEndian
+	}
+	log.Infof("loading bpf program objects...")
+	if err := loadBytecountObjects(&bf.objs, nil); err != nil {
 		log.Infof("unable to load the counter program to the kernel and assign it.")
 		return util.ErrBPFProgramNotLoaded
 	}
-	IPv4Ingress.ClsProgram = s.objs.IngressBytecountCustomHook
-	IPv4Egress.ClsProgram = s.objs.EgressBytecountCustomHook
-	go s.processTraffic(ctx, IPv4Egress.TypeInt)
 	go func(ctx context.Context) {
-		defer s.objs.Close()
+		defer bf.objs.Close()
 		<-ctx.Done()
 	}(ctx)
-	log.Infof("counting server launched")
+	IPv4Ingress.ClsProgram = bf.objs.IngressBytecountCustomHook
+	IPv4Egress.ClsProgram = bf.objs.EgressBytecountCustomHook
+
+	log.Infof("launching traffic event reader...")
+	go bf.readTraffic(ctx, IPv4Egress.TypeInt)
+	for i := 0; i < TRAFFIC_CONSUMER_COUNT; i++ {
+		log.Infof("launching traffic event consumer...")
+		go bf.processTraffic(ctx)
+	}
+	log.Infof("traffic counting factory launched")
 	return nil
 }
 
-func (bf *Factory) processTraffic(ctx context.Context, t uint32) {
+func (bf *Factory) readTraffic(ctx context.Context, t uint32) {
 	log := bf.Logger
 	objs := bf.objs
 	var eventArray *ebpf.Map
@@ -102,7 +124,6 @@ func (bf *Factory) processTraffic(ctx context.Context, t uint32) {
 		<-ctx.Done()
 	}(ctx)
 
-	log.Infof("perf event buffer consumer launched")
 	for {
 		rec, err := er.Read()
 		if err != nil {
@@ -118,14 +139,39 @@ func (bf *Factory) processTraffic(ctx context.Context, t uint32) {
 			log.Infof("perf event ring buffer full, dropped %d samples", rec.LostSamples)
 			continue
 		}
-		var event bytecountTrafficEventT
-		if err := binary.Read(bytes.NewBuffer(rec.RawSample), binary.LittleEndian, &event); err != nil {
-			log.Infof("Failed to decode received data: %+v", err)
-			continue
+		tr := Traffic{
+			trafficRecord: &rec,
+			trafficType:   t,
 		}
-		if err := bf.submit(ctx, &event, t); err != nil {
-			log.Infof("Failed to submit the traffic report: %+v", err)
-			continue
+		bf.workQueue <- tr
+	}
+}
+
+func (bf *Factory) processTraffic(ctx context.Context) {
+	log := bf.Logger
+
+	if bf.workQueue == nil {
+		log.Errorf("please initialize the work queue")
+		return
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			break
+		case traffic := <-bf.workQueue:
+			var event bytecountTrafficEventT
+			if traffic.trafficRecord != nil {
+				if err := binary.Read(bytes.NewBuffer(traffic.trafficRecord.RawSample), bf.nativeEndian, &event); err != nil {
+					log.Infof("Failed to decode received data: %+v", err)
+					continue
+				}
+				t := traffic.trafficType
+				if err := bf.submit(ctx, &event, t); err != nil {
+					log.Infof("Failed to submit the traffic report: %+v", err)
+					continue
+				}
+			}
 		}
 	}
 }
@@ -289,4 +335,18 @@ func toIPv6(nn []uint32) net.IP {
 		return ip*/
 	//TODO: implement me
 	return nil
+}
+
+func getHostEndian() (binary.ByteOrder, error) {
+	buf := [2]byte{}
+	*(*uint16)(unsafe.Pointer(&buf[0])) = uint16(0xABCD)
+
+	switch buf {
+	case [2]byte{0xCD, 0xAB}:
+		return binary.LittleEndian, nil
+	case [2]byte{0xAB, 0xCD}:
+		return binary.BigEndian, nil
+	default:
+		return nil, fmt.Errorf("could not determine native endianness")
+	}
 }
