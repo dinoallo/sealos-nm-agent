@@ -10,11 +10,13 @@ import (
 
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/dinoallo/sealos-networkmanager-agent/bpf/bytecount"
+	"github.com/dinoallo/sealos-networkmanager-agent/exporter"
 	"github.com/dinoallo/sealos-networkmanager-agent/server"
 	"github.com/dinoallo/sealos-networkmanager-agent/store"
 
-	"go.uber.org/zap"
 	"net"
+
+	"go.uber.org/zap"
 
 	counterpb "github.com/dinoallo/sealos-networkmanager-agent/proto/agent"
 	"google.golang.org/grpc"
@@ -88,6 +90,14 @@ func main() {
 	if err := bytecountFactory.Launch(ctx); err != nil {
 		log.Fatal(err)
 		return
+	}
+
+	// Init Prom server
+	if promExporter, err := exporter.NewExporter(devLogger); err != nil {
+		log.Fatal(err)
+		return
+	} else {
+		promExporter.Launch(ctx)
 	}
 
 	// Init GRPC Server
