@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	namespace = "sealos-networkmanager-agent" // For Prometheus metrics.
+	namespace = "sealos_networkmanager_agent" // For Prometheus metrics.
 )
 
 var (
@@ -102,8 +102,8 @@ func (m metrics) String() string {
 
 // TODO: total tcp/udp requests, total ipv4/ipv6 requests...
 var (
-	bytecountBytesRecv metricInfo = newBytecountMetric("bytes_recv", "The bytes sent to an IP", prometheus.CounterValue, nil)
-	bytecountBytesSent metricInfo = newBytecountMetric("bytes_sent", "The bytes sent from an IP", prometheus.CounterValue, nil)
+	bytecountBytesRecv metricInfo = newBytecountMetric("recv_bytes", "The bytes sent to an IP", prometheus.CounterValue, nil)
+	bytecountBytesSent metricInfo = newBytecountMetric("sent_bytes", "The bytes sent from an IP", prometheus.CounterValue, nil)
 	// bytecountSampleLost metricInfo = newBytecountMetric("sample_lost", "The samples lost", prometheus.CounterValue, nil)
 	// agentInfo    = prometheus.NewDesc(prometheus.BuildFQName(namespace, "version", "info"), "Sealos networkmanager agent version info.", []string{"release_date", "version"}, nil)
 	// agentUp      = prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "up"), "Was the last scrape of agent successful.", nil, nil)
