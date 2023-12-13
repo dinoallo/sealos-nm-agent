@@ -36,6 +36,9 @@ type Factory struct {
 	store        *store.Store
 	workQueue    chan Traffic
 	nativeEndian binary.ByteOrder
+	// the following are not safe to use, please check if it's nil
+	// before accessing it
+	bytecountExportChannel chan *store.TrafficReport
 }
 
 type Traffic struct {
@@ -123,6 +126,15 @@ func (bf *Factory) Launch(ctx context.Context) error {
 	}
 	log.Infof("traffic counting factory launched")
 	return nil
+}
+
+func (bf *Factory) AddExportChannel(ctx context.Context, ec chan *store.TrafficReport) {
+	log := bf.logger
+	if ec == nil {
+		log.Info("nil export channel added. is this correct?")
+		return
+	}
+	bf.bytecountExportChannel = ec
 }
 
 func (bf *Factory) readTraffic(ctx context.Context, t uint32) {
@@ -230,6 +242,9 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 		}
 		// log.Debugf("protocol: %v; %v bytes sent", event.Protocol, event.Len)
 		bf.store.AddTrafficReport(ctx, report)
+		if bf.bytecountExportChannel != nil {
+			bf.bytecountExportChannel <- report
+		}
 	}
 	return nil
 }

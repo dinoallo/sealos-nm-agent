@@ -85,6 +85,7 @@ func main() {
 	}
 
 	bytecountExportChannel := make(chan *store.TrafficReport)
+	bf.AddExportChannel(ctx, bytecountExportChannel)
 
 	// Init Prom server
 	if promExporter, err := exporter.NewExporter(devLogger, bytecountExportChannel); err != nil {
