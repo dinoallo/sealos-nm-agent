@@ -1,6 +1,9 @@
 # Image URL to use all building/pushing image targets
-IMG ?= dinoallo/sealos-networkmanager-agent:latest
-DEBUG_IMG ?= dinoallo/sealos-networkmanager-agent:dev
+REV=$(shell git rev-parse --short HEAD)
+IMG ?= dinoallo/sealos-networkmanager-agent
+DEBUG_IMG ?= dinoallo/sealos-networkmanager-agent
+TAG ?= $(IMG):$(REV)
+DEBUG_TAG ?= $(DEBUG_IMG):$(REV)
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
@@ -40,24 +43,24 @@ generate:
 
 .PHONY: docker-build
 docker-build: generate## Build docker image with the agent.
-	docker build -t ${IMG} .
+	docker build -t ${TAG} .
 
 .PHONY: docker-build-debug
 docker-build-debug: generate
-	docker build -t ${DEBUG_IMG} -f ./Dockerfile.debug .
+	docker build -t ${DEBUG_TAG} -f ./Dockerfile.debug .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the agent.
-	docker push ${IMG}
+	docker push ${TAG}
 	
 .PHONY: docker-push-debug
 docker-push-debug: ## Push docker image with the agent.
-	docker push ${DEBUG_IMG}
+	docker push ${DEBUG_TAG}
 
 .PHONY: oci-build-debug
 oci-build-debug: generate
-	nerdctl build -t ${DEBUG_IMG} -f ./Dockerfile.debug --output=type=image,oci-mediatypes=true .
+	nerdctl build -t ${DEBUG_TAG} -f ./Dockerfile.debug --output=type=image,oci-mediatypes=true .
 	
 .PHONY: oci-push-debug
 oci-push-debug: ## Push docker image with the agent.
-	nerdctl push ${DEBUG_IMG}
+	nerdctl push ${DEBUG_TAG}
