@@ -75,12 +75,13 @@ func main() {
 	}
 
 	// Init Factories
+	bf, err := bytecount.NewFactory(devLogger, st)
+	if err != nil {
+		log.Fatalf("unable to create the factory: %v", err)
+	}
 
-	bytecountFactory := &bytecount.Factory{Logger: devLogger, Store: st}
-
-	if err := bytecountFactory.Launch(ctx); err != nil {
-		log.Fatal(err)
-		return
+	if err := bf.Launch(ctx); err != nil {
+		log.Fatalf("unable to launch the factory: %v", err)
 	}
 
 	bytecountExportChannel := make(chan *store.TrafficReport)
@@ -109,7 +110,7 @@ func main() {
 		}),
 	)
 
-	grpcServer, err := server.NewServer(devLogger, bytecountFactory)
+	grpcServer, err := server.NewServer(devLogger, bf)
 	if err != nil {
 		log.Fatalf("failed to create a new GRPC server: %v", err)
 		return

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
@@ -31,9 +30,10 @@ const (
 )
 
 type Factory struct {
-	objs         bytecountObjects
-	Logger       *zap.SugaredLogger
-	Store        *store.Store
+	objs bytecountObjects
+	// after calling New(), the following are safe to use
+	logger       *zap.SugaredLogger
+	store        *store.Store
 	workQueue    chan Traffic
 	nativeEndian binary.ByteOrder
 }
@@ -71,16 +71,38 @@ var (
 	}
 )
 
-func (bf *Factory) Launch(ctx context.Context) error {
-
-	log := bf.Logger
-	bf.objs = bytecountObjects{}
-	bf.workQueue = make(chan Traffic)
-	if nativeEndian, err := getHostEndian(); err != nil {
-		return err
-	} else {
-		bf.nativeEndian = nativeEndian
+func NewFactory(parentLogger *zap.SugaredLogger, st *store.Store) (*Factory, error) {
+	// init logger
+	if parentLogger == nil {
+		return nil, util.ErrParentLoggerNotInited
 	}
+	logger := parentLogger.With("component", "bytecount_factory")
+	// init workqueue
+	workQueue := make(chan Traffic)
+	// get host endian
+	var nativeEndian binary.ByteOrder
+	if e, err := getHostEndian(); err != nil {
+		return nil, err
+	} else {
+		nativeEndian = e
+	}
+
+	if st == nil {
+		return nil, util.ErrStoreNotInited
+	}
+
+	return &Factory{
+		logger:       logger,
+		workQueue:    workQueue,
+		nativeEndian: nativeEndian,
+		store:        st,
+	}, nil
+}
+
+func (bf *Factory) Launch(ctx context.Context) error {
+	log := bf.logger
+	bf.objs = bytecountObjects{}
+
 	log.Infof("loading bpf program objects...")
 	if err := loadBytecountObjects(&bf.objs, nil); err != nil {
 		log.Infof("unable to load the counter program to the kernel and assign it.")
@@ -104,7 +126,7 @@ func (bf *Factory) Launch(ctx context.Context) error {
 }
 
 func (bf *Factory) readTraffic(ctx context.Context, t uint32) {
-	log := bf.Logger
+	log := bf.logger
 	objs := bf.objs
 	var eventArray *ebpf.Map
 	switch t {
@@ -149,12 +171,7 @@ func (bf *Factory) readTraffic(ctx context.Context, t uint32) {
 }
 
 func (bf *Factory) processTraffic(ctx context.Context) {
-	log := bf.Logger
-
-	if bf.workQueue == nil {
-		log.Errorf("please initialize the work queue")
-		return
-	}
+	log := bf.logger
 
 	for {
 		select {
@@ -204,22 +221,22 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 		report := &store.TrafficReport{
 			Dir:       dir,
 			Protocol:  event.Protocol,
-			SrcIP:     toIP(__srcIP[0], nil, 4),
-			DstIP:     toIP(__dstIP[0], nil, 4),
+			SrcIP:     util.ToIP(__srcIP[0], nil, 4),
+			DstIP:     util.ToIP(__dstIP[0], nil, 4),
 			SrcPort:   srcPort,
 			DstPort:   dstPort,
 			DataBytes: event.Len,
 			Identity:  identity.NumericIdentity(event.Identity),
 		}
 		// log.Debugf("protocol: %v; %v bytes sent", event.Protocol, event.Len)
-		bf.Store.AddTrafficReport(ctx, report)
+		bf.store.AddTrafficReport(ctx, report)
 	}
 	return nil
 }
 
 func (bf *Factory) CreateCounter(ctx context.Context, eid int64, c Counter) error {
 
-	log := bf.Logger.With(zap.Int64("endpoint", eid), zap.String("direction", c.TypeStr))
+	log := bf.logger.With(zap.Int64("endpoint", eid), zap.String("direction", c.TypeStr))
 	// check and load the custom call map for this endpoint. if the ccm doesn't exist, (may due to the migration for cilium configuration, which leads to new endpoints have ccm while others don't)
 	// we inform the caller by returning a special error
 	ccmPath := fmt.Sprintf(c.CustomCallPathTemplate, eid)
@@ -246,32 +263,19 @@ func (bf *Factory) CreateCounter(ctx context.Context, eid int64, c Counter) erro
 }
 
 func (bf *Factory) CleanUp(ctx context.Context, ipAddr string) error {
-	if bf.Store == nil {
-		// the store is not initialized
-		return nil
-	}
-	return bf.Store.DeleteTrafficAccount(ctx, ipAddr)
+	return bf.store.DeleteTrafficAccount(ctx, ipAddr)
 }
 
 func (bf *Factory) Subscribe(ctx context.Context, addr string, port uint32) error {
-	if bf.Store == nil {
-		return nil
-	}
-	return bf.Store.AddSubscribedPort(ctx, addr, port)
+	return bf.store.AddSubscribedPort(ctx, addr, port)
 }
 
 func (bf *Factory) Unsubscribe(ctx context.Context, addr string, port uint32) error {
-	if bf.Store == nil {
-		return nil
-	}
-	return bf.Store.RemoveSubscribedPort(ctx, addr, port)
+	return bf.store.RemoveSubscribedPort(ctx, addr, port)
 }
 
 func (bf *Factory) DumpTraffic(ctx context.Context, addr string, tag string, reset bool) (uint64, uint64, error) {
-	if bf.Store == nil {
-		return 0, 0, nil
-	}
-	if p, err := bf.Store.DumpTraffic(ctx, addr, tag, reset); err != nil {
+	if p, err := bf.store.DumpTraffic(ctx, addr, tag, reset); err != nil {
 		return 0, 0, err
 	} else {
 		return p.SentBytes, p.RecvBytes, nil
@@ -281,7 +285,7 @@ func (bf *Factory) DumpTraffic(ctx context.Context, addr string, tag string, res
 
 func (bf *Factory) RemoveCounter(ctx context.Context, eid int64, c Counter) error {
 	pinPath := fmt.Sprintf(c.PinPathTemplate, eid)
-	log := bf.Logger.With(zap.Int64("endpoint", eid), zap.String("direction", c.TypeStr))
+	log := bf.logger.With(zap.Int64("endpoint", eid), zap.String("direction", c.TypeStr))
 	if flag, err := checkCounterExists(pinPath); err == nil && flag == true {
 		if counterRemoveError := removeCounterMap(pinPath); counterRemoveError != nil {
 			log.Errorf("unable to remove counter program for the endpoint: %v", err)
@@ -309,33 +313,6 @@ func checkCounterExists(pinPath string) (bool, error) {
 func removeCounterMap(pinPath string) error {
 	err := os.Remove(pinPath)
 	return err
-}
-
-// TODO: implemented ipv6
-func toIP(_v4Addr uint32, _v6Addr []uint32, t int) net.IP {
-	if t == 4 {
-		return toIPv4(_v4Addr)
-	} else if t == 6 {
-		return toIPv6(_v6Addr)
-	}
-	return nil
-}
-
-func toIPv4(nn uint32) net.IP {
-	ip := make(net.IP, 4)
-	binary.LittleEndian.PutUint32(ip, nn)
-	return ip
-}
-
-func toIPv6(nn []uint32) net.IP {
-	/*
-		ip := make(net.IP, 16)
-		for i := 0; i < 8; i++ {
-			binary.BigEndian.PutUint16(ip[i*2:i*2+2], nn[i])
-		}
-		return ip*/
-	//TODO: implement me
-	return nil
 }
 
 func getHostEndian() (binary.ByteOrder, error) {

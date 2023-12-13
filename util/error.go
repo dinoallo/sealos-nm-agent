@@ -18,4 +18,7 @@ var (
 	ErrBPFCustomCallMapNotExist = errors.New("the bpf map for custom call does not exist")
 
 	ErrUnknownDirection = errors.New("this direction type is not known")
+
+	ErrParentLoggerNotInited = errors.New("the parent logger is not passed or not initialized")
+	ErrStoreNotInited        = errors.New("the store is not passed or not initalized")
 )
