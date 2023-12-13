@@ -53,3 +53,11 @@ docker-push: ## Push docker image with the agent.
 .PHONY: docker-push-debug
 docker-push-debug: ## Push docker image with the agent.
 	docker push ${DEBUG_IMG}
+
+.PHONY: oci-build-debug
+oci-build-debug: generate
+	nerdctl build -t ${DEBUG_IMG} -f ./Dockerfile.debug --output=type=image,oci-mediatypes=true .
+	
+.PHONY: oci-push-debug
+oci-push-debug: ## Push docker image with the agent.
+	nerdctl push ${DEBUG_IMG}
