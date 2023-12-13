@@ -37,34 +37,16 @@ spec:
             cpu: 250m
             memory: 64Mi
         env:
-        - name: DB_PASS
-          valueFrom:
-            secretKeyRef:
-              key: db_pass
-              name: nm-db-conn-credential
-              optional: false
         - name: DB_NAME
           valueFrom:
             secretKeyRef:
               key: db_name
               name: nm-db-conn-credential
               optional: false          
-        - name: DB_USER
+        - name: DB_URI
           valueFrom:
             secretKeyRef:
-              key: db_user
-              name: nm-db-conn-credential
-              optional: false
-        - name: DB_HOST
-          valueFrom:
-            secretKeyRef:
-              key: db_host
-              name: nm-db-conn-credential
-              optional: false
-        - name: DB_PORT
-          valueFrom:
-            secretKeyRef:
-              key: db_port
+              key: db_uri
               name: nm-db-conn-credential
               optional: false    
         securityContext:

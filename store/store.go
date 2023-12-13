@@ -34,11 +34,8 @@ type Store struct {
 }
 
 type DBCred struct {
-	DBHost string
-	DBPort string
-	DBUser string
-	DB     string
-	DBPass string
+	DBURI string
+	DB    string
 }
 
 func NewStore(cred *DBCred, baseLogger *zap.SugaredLogger) (*Store, error) {
@@ -65,8 +62,7 @@ func (s *Store) Launch(ctx context.Context, workerCount int) error {
 	}
 	log.Infof("launch the store...")
 	// initialize the database
-	uri := fmt.Sprintf("mongodb://%s:%s@%s:%s/?maxPoolSize=20&w=majority", cred.DBUser, cred.DBPass, cred.DBHost, cred.DBPort)
-	clientOps := options.Client().ApplyURI(uri).SetMaxPoolSize(MAX_POOL_SIZE)
+	clientOps := options.Client().ApplyURI(cred.DBURI).SetMaxPoolSize(MAX_POOL_SIZE)
 	if client, err := mongo.Connect(ctx, clientOps); err != nil {
 		return err
 	} else {
