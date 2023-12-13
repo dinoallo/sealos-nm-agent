@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/store"
 	"github.com/prometheus/client_golang/prometheus"
@@ -117,14 +118,15 @@ type Exporter struct {
 }
 
 // NewExporter returns an initialized Exporter.
-func NewExporter(parentLogger *zap.SugaredLogger) (*Exporter, error) {
+func NewExporter(parentLogger *zap.SugaredLogger, reports chan *store.TrafficReport) (*Exporter, error) {
 	if parentLogger == nil {
 		return nil, loggerNotInitErr
 	}
 	logger := parentLogger.With("component", "exporter")
 
 	return &Exporter{
-		logger: logger,
+		logger:  logger,
+		reports: reports,
 	}, nil
 }
 
@@ -178,15 +180,22 @@ func (e *Exporter) Launch(ctx context.Context) error {
              </body>
              </html>`))
 	})
-	srv := &http.Server{}
-	addrs := []string{":9101"}
-	webConfig := web.FlagConfig{
-		WebListenAddresses: &addrs,
+	srv := &http.Server{
+		Addr: ":9101",
 	}
+	webConfig := web.FlagConfig{}
 	promlogConfig := &promlog.Config{}
 	promLogger := promlog.New(promlogConfig)
+	go func() {
+		if err := web.ListenAndServe(srv, &webConfig, promLogger); err != nil && err != http.ErrServerClosed {
+			logger.Info(err)
+		}
+	}()
 	go func(ctx context.Context) {
-		if err := web.ListenAndServe(srv, &webConfig, promLogger); err != nil {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
 			logger.Info(err)
 		}
 	}(ctx)

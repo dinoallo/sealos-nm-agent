@@ -63,28 +63,30 @@ func main() {
 		DBURI: dbUri,
 		DB:    dbName,
 	}
-	store, err := store.NewStore(cred, devLogger)
+	st, err := store.NewStore(cred, devLogger)
 	if err != nil {
 		log.Fatalf("unable to start the store: %v", err)
 		return
 	}
 
-	if err := store.Launch(ctx, 1); err != nil {
+	if err := st.Launch(ctx, 1); err != nil {
 		log.Fatalf("unable to launch the store: %v", err)
 		return
 	}
 
 	// Init Factories
 
-	bytecountFactory := &bytecount.Factory{Logger: devLogger, Store: store}
+	bytecountFactory := &bytecount.Factory{Logger: devLogger, Store: st}
 
 	if err := bytecountFactory.Launch(ctx); err != nil {
 		log.Fatal(err)
 		return
 	}
 
+	bytecountExportChannel := make(chan *store.TrafficReport)
+
 	// Init Prom server
-	if promExporter, err := exporter.NewExporter(devLogger); err != nil {
+	if promExporter, err := exporter.NewExporter(devLogger, bytecountExportChannel); err != nil {
 		log.Fatal(err)
 		return
 	} else {
