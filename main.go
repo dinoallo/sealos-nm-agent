@@ -25,20 +25,14 @@ import (
 const (
 	// Port for gRPC server to listen to
 	GRPC_SERVER_PORT = "0.0.0.0:50051"
-	DB_HOST_ENV      = "DB_HOST"
-	DB_PORT_ENV      = "DB_PORT"
-	DB_USER_ENV      = "DB_USER"
 	DB_NAME_ENV      = "DB_NAME"
-	DB_PASS_ENV      = "DB_PASS"
+	DB_URI_ENV       = "DB_URI"
 )
 
 func main() {
 
-	var dbHost string = os.Getenv(DB_HOST_ENV)
-	var dbPort string = os.Getenv(DB_PORT_ENV)
 	var dbName string = os.Getenv(DB_NAME_ENV)
-	var dbUser string = os.Getenv(DB_USER_ENV)
-	var dbPass string = os.Getenv(DB_PASS_ENV)
+	var dbUri string = os.Getenv(DB_URI_ENV)
 
 	// Initialize the logger
 	logger, _ := zap.NewDevelopment()
@@ -64,11 +58,8 @@ func main() {
 
 	// Init Store
 	cred := &store.DBCred{
-		DBHost: dbHost,
-		DBPort: dbPort,
-		DBUser: dbUser,
-		DBPass: dbPass,
-		DB:     dbName,
+		DBURI: dbUri,
+		DB:    dbName,
 	}
 	store, err := store.NewStore(cred, devLogger)
 	if err != nil {
