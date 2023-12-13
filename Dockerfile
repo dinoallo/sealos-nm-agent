@@ -15,6 +15,7 @@ COPY bpf/ bpf/
 COPY server/ server/
 COPY proto/ proto/
 COPY util/ util/
+COPY exporter/ exporter/
 COPY main.go main.go
 
 # Build
