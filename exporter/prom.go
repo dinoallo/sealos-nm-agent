@@ -23,12 +23,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alecthomas/kingpin/v2"
 	"github.com/dinoallo/sealos-networkmanager-agent/store"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/promlog"
-	"github.com/prometheus/common/version"
 	"github.com/prometheus/exporter-toolkit/web"
+	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 	"go.uber.org/zap"
 )
 
@@ -166,7 +167,6 @@ func (e *Exporter) Launch(ctx context.Context) error {
 	logger.Info("prometheus exporter for agent has started")
 
 	prometheus.MustRegister(e)
-	prometheus.MustRegister(version.NewCollector("sealos_networkmanager_agent_exporter"))
 
 	metricsPath := "/metrics"
 
@@ -181,14 +181,13 @@ func (e *Exporter) Launch(ctx context.Context) error {
              </html>`))
 	})
 	srv := &http.Server{}
-	addrs := []string{":19101"}
-	webConfig := web.FlagConfig{
-		WebListenAddresses: &addrs,
-	}
+	webConfig := webflag.AddFlags(kingpin.CommandLine, ":19101")
+	kingpin.Parse()
+
 	promlogConfig := &promlog.Config{}
 	promLogger := promlog.New(promlogConfig)
 	go func() {
-		if err := web.ListenAndServe(srv, &webConfig, promLogger); err != nil && err != http.ErrServerClosed {
+		if err := web.ListenAndServe(srv, webConfig, promLogger); err != nil && err != http.ErrServerClosed {
 			logger.Info(err)
 		}
 	}()

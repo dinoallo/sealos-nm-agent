@@ -3,6 +3,7 @@ module github.com/dinoallo/sealos-networkmanager-agent
 go 1.21
 
 require (
+	github.com/alecthomas/kingpin/v2 v2.3.2
 	github.com/cilium/cilium v1.14.3
 	github.com/cilium/ebpf v0.11.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
@@ -17,6 +18,7 @@ require (
 )
 
 require (
+	github.com/alecthomas/units v0.0.0-20211218093645-b94a6e3cc137 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
@@ -74,6 +76,7 @@ require (
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.1 // indirect
 	github.com/xdg-go/stringprep v1.0.3 // indirect
+	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20181117223130-1be2e3e5546d // indirect
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
