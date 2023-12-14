@@ -180,10 +180,11 @@ func (e *Exporter) Launch(ctx context.Context) error {
              </body>
              </html>`))
 	})
-	srv := &http.Server{
-		Addr: ":9101",
+	srv := &http.Server{}
+	addrs := []string{":19101"}
+	webConfig := web.FlagConfig{
+		WebListenAddresses: &addrs,
 	}
-	webConfig := web.FlagConfig{}
 	promlogConfig := &promlog.Config{}
 	promLogger := promlog.New(promlogConfig)
 	go func() {
