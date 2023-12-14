@@ -1,5 +1,5 @@
 # Image URL to use all building/pushing image targets
-REV=$(shell git rev-parse --short HEAD)
+REV ?= $(shell git rev-parse --short HEAD)
 IMG ?= dinoallo/sealos-networkmanager-agent
 DEBUG_IMG ?= dinoallo/sealos-networkmanager-agent
 TAG ?= $(IMG):$(REV)
