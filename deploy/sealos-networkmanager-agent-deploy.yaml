@@ -29,6 +29,15 @@ spec:
       - image: docker.io/dinoallo/sealos-networkmanager-agent:dev
         imagePullPolicy: Always
         name: sealos-nm-agent
+        ports:
+        - containerPort: 50051
+          hostPort: 50051
+          name: agent-grpc
+          protocol: TCP        
+        - containerPort: 19101
+          hostPort: 19101
+          name: agent-metrics
+          protocol: TCP
         resources:
           limits:
             cpu: 500m
