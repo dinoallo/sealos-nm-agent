@@ -66,9 +66,15 @@ spec:
               name: nm-db-conn-credential
               optional: false    
         securityContext:
-          privileged: true
-          runAsUser: 0
-          runAsGroup: 0
+          capabilities:
+            add:
+            - IPC_LOCK
+            - SYS_ADMIN
+            - SYS_RESOURCE
+            - DAC_OVERRIDE
+            - FOWNER
+            drop:
+            - ALL
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: FallbackToLogsOnError
         volumeMounts:
