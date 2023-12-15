@@ -18,6 +18,13 @@ spec:
         app.kubernetes.io/part-of: sealos-nm
         k8s-app: sealos-nm-agent
     spec:
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        opreator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
