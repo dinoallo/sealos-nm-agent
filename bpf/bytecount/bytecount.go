@@ -273,7 +273,7 @@ func (bf *Factory) CreateCounter(ctx context.Context, eid int64, c Counter) erro
 		return util.ErrBPFMapNotUpdated
 	}
 
-	// log.Debugf("counter created")
+	log.Debugf("counter created")
 	return nil
 }
 
