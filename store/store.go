@@ -18,6 +18,8 @@ const (
 	CACHE_ENTRIES_SIZE = 256
 	CACHE_EXPIRED_TIME = time.Second * 3
 	MAX_POOL_SIZE      = 100
+
+	COLLECTION_PREFIX = "traffic_accounts"
 )
 
 var (
@@ -156,27 +158,25 @@ func (s *Store) initializeCache(ctx context.Context) error {
 	if s.dbClient == nil || s.cache == nil {
 		return fmt.Errorf("the database client and the cache store cannot be nil!")
 	}
-	db := s.database
-	if db == nil {
-		return fmt.Errorf("the database shouldn't be nil")
-	}
-	coll := db.Collection("traffic_accounts")
-	opts := options.Find().SetLimit(CACHE_ENTRIES_SIZE) //TODO: check me!
-	findCtx, cancel := context.WithTimeout(ctx, time.Second*5)
-	defer cancel()
-	cursor, err := coll.Find(findCtx, bson.D{}, opts)
-	if err != nil {
+	if coll, err := s.getCurrentCollection(); err != nil {
 		return err
+	} else {
+		opts := options.Find().SetLimit(CACHE_ENTRIES_SIZE) //TODO: check me!
+		findCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+		defer cancel()
+		if cursor, err := coll.Find(findCtx, bson.D{}, opts); err != nil {
+			return err
+		} else {
+			var results []TrafficAccount //TODO: is this marshalling correct?
+			if err = cursor.All(ctx, &results); err != nil {
+				return err
+			}
+			for _, result := range results {
+				key := result.IP
+				s.cache.Add(key, result)
+			}
+		}
 	}
-	var results []TrafficAccount //TODO: is this marshalling correct?
-	if err = cursor.All(ctx, &results); err != nil {
-		return err
-	}
-	for _, result := range results {
-		key := result.IP
-		s.cache.Add(key, result)
-	}
-
 	return nil
 }
 
@@ -199,28 +199,33 @@ func (s *Store) processTrafficReport(ctx context.Context, report *TrafficReport)
 }
 
 func (s *Store) RemoveSubscribedPort(ctx context.Context, addr string, port uint32) error {
-	if s.cache == nil || s.database == nil {
+	if s.cache == nil {
 		return NilError
 	}
-	tag := fmt.Sprint(port)
-	updateCtx, cancel := context.WithTimeout(ctx, time.Second*5)
-	defer cancel()
-	coll := s.database.Collection("traffic_accounts")
-	filter := bson.D{{
-		Key:   "ip",
-		Value: addr,
-	}}
-	key := fmt.Sprintf("properties.%s", tag)
-	update := bson.D{{
-		Key: "$unset",
-		Value: bson.D{{
-			Key:   key,
-			Value: 1,
-		}},
-	}}
-	if _, err := coll.UpdateOne(updateCtx, filter, update); err != nil {
+
+	if coll, err := s.getCurrentCollection(); err != nil {
 		return err
+	} else {
+		tag := fmt.Sprint(port)
+		updateCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+		defer cancel()
+		filter := bson.D{{
+			Key:   "ip",
+			Value: addr,
+		}}
+		key := fmt.Sprintf("properties.%s", tag)
+		update := bson.D{{
+			Key: "$unset",
+			Value: bson.D{{
+				Key:   key,
+				Value: 1,
+			}},
+		}}
+		if _, err := coll.UpdateOne(updateCtx, filter, update); err != nil {
+			return err
+		}
 	}
+
 	if _, found := s.cache.Get(addr); found {
 		s.cache.Remove(addr)
 	}
@@ -310,30 +315,33 @@ func (s *Store) add(ctx context.Context, report *TrafficReport, altTag string) e
 }
 
 func (s *Store) onEvicted(key string, value TrafficAccount) {
-	if s.database == nil {
+	logger := s.logger
+	if s.logger == nil {
+		//!?
 		return
 	}
-	coll := s.database.Collection("traffic_accounts")
-	putCtx, cancel := context.WithTimeout(context.TODO(), time.Second*5)
-	defer cancel()
-	opts := options.Replace().SetUpsert(true)
-	filter := bson.D{{
-		Key:   "ip",
-		Value: key,
-	}}
-	replacement := value
-	if _, err := coll.ReplaceOne(putCtx, filter, replacement, opts); err != nil {
+	if coll, err := s.getCurrentCollection(); err != nil {
+		logger.Errorf("unable to evict the cache entry: %v", err)
 		return
+	} else {
+		putCtx, cancel := context.WithTimeout(context.TODO(), time.Second*5)
+		defer cancel()
+		opts := options.Replace().SetUpsert(true)
+		filter := bson.D{{
+			Key:   "ip",
+			Value: key,
+		}}
+		replacement := value
+		if _, err := coll.ReplaceOne(putCtx, filter, replacement, opts); err != nil {
+			logger.Errorf("unable to evict the cache entry: %v", err)
+			return
+		}
 	}
 }
 
 func (s *Store) getByIP(ctx context.Context, ip string, ta *TrafficAccount) (bool, error) {
 	if ta == nil {
 		return false, fmt.Errorf("a TrafficAccount should be created")
-	}
-	db := s.database
-	if db == nil {
-		return false, fmt.Errorf("the database shouldn't be nil")
 	}
 	found := false
 	if _ta, ok := s.cache.Get(ip); ok {
@@ -342,20 +350,23 @@ func (s *Store) getByIP(ctx context.Context, ip string, ta *TrafficAccount) (boo
 	} else {
 		getCtx, cancel := context.WithTimeout(ctx, time.Second*5)
 		defer cancel()
-		coll := db.Collection("traffic_accounts")
-		filter := bson.D{
-			{
-				Key:   "ip",
-				Value: ip,
-			},
-		}
-		if err := coll.FindOne(getCtx, filter).Decode(ta); err != nil {
-			if err != mongo.ErrNoDocuments {
-				return false, err
-			}
+		if coll, err := s.getCurrentCollection(); err != nil {
+			return false, err
 		} else {
-			found = true
-			s.cache.Add(ip, *ta)
+			filter := bson.D{
+				{
+					Key:   "ip",
+					Value: ip,
+				},
+			}
+			if err := coll.FindOne(getCtx, filter).Decode(ta); err != nil {
+				if err != mongo.ErrNoDocuments {
+					return false, err
+				}
+			} else {
+				found = true
+				s.cache.Add(ip, *ta)
+			}
 		}
 	}
 	return found, nil
@@ -363,19 +374,29 @@ func (s *Store) getByIP(ctx context.Context, ip string, ta *TrafficAccount) (boo
 
 func (s *Store) delByIP(ctx context.Context, ip string) error {
 	s.cache.Remove(ip)
-	db := s.database
-	if s.database == nil {
-		return fmt.Errorf("the database shouldn't be nil")
-	}
-	coll := db.Collection("traffic_accounts")
-	delCtx, cancel := context.WithTimeout(ctx, time.Second*5)
-	defer cancel()
-	filter := bson.D{{
-		Key:   "ip",
-		Value: ip,
-	}}
-	if _, err := coll.DeleteOne(delCtx, filter); err != nil {
+	if coll, err := s.getCurrentCollection(); err != nil {
 		return err
+	} else {
+		delCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+		defer cancel()
+		filter := bson.D{{
+			Key:   "ip",
+			Value: ip,
+		}}
+		if _, err := coll.DeleteOne(delCtx, filter); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func (s *Store) getCurrentCollection() (*mongo.Collection, error) {
+	db := s.database
+	if db == nil {
+		return nil, fmt.Errorf("the database shouldn't be nil")
+	}
+	timeSuffix := time.Now().Format(time.DateOnly)
+	collName := fmt.Sprintf("%s_%s", COLLECTION_PREFIX, timeSuffix)
+	coll := db.Collection(collName)
+	return coll, nil
 }
