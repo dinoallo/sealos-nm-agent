@@ -395,7 +395,8 @@ func (s *Store) getCurrentCollection() (*mongo.Collection, error) {
 	if db == nil {
 		return nil, fmt.Errorf("the database shouldn't be nil")
 	}
-	timeSuffix := time.Now().Format(time.DateOnly)
+	now := time.Now()
+	timeSuffix := fmt.Sprintf("%v%v%v", now.Year(), now.Month(), now.Day())
 	collName := fmt.Sprintf("%s_%s", COLLECTION_PREFIX, timeSuffix)
 	coll := db.Collection(collName)
 	return coll, nil
