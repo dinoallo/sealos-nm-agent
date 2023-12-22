@@ -19,7 +19,8 @@ const (
 	CACHE_EXPIRED_TIME = time.Second * 3
 	MAX_POOL_SIZE      = 100
 
-	COLLECTION_PREFIX = "traffic_accounts"
+	COLLECTION_PREFIX     = "traffic_accounts"
+	DB_CONNECTION_TIMEOUT = time.Second * 5
 )
 
 var (
@@ -162,7 +163,7 @@ func (s *Store) initializeCache(ctx context.Context) error {
 		return err
 	} else {
 		opts := options.Find().SetLimit(CACHE_ENTRIES_SIZE) //TODO: check me!
-		findCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+		findCtx, cancel := context.WithTimeout(ctx, DB_CONNECTION_TIMEOUT)
 		defer cancel()
 		if cursor, err := coll.Find(findCtx, bson.D{}, opts); err != nil {
 			return err
@@ -207,7 +208,7 @@ func (s *Store) RemoveSubscribedPort(ctx context.Context, addr string, port uint
 		return err
 	} else {
 		tag := fmt.Sprint(port)
-		updateCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+		updateCtx, cancel := context.WithTimeout(ctx, DB_CONNECTION_TIMEOUT)
 		defer cancel()
 		filter := bson.D{{
 			Key:   "ip",
@@ -324,7 +325,7 @@ func (s *Store) onEvicted(key string, value TrafficAccount) {
 		logger.Errorf("unable to evict the cache entry: %v", err)
 		return
 	} else {
-		putCtx, cancel := context.WithTimeout(context.TODO(), time.Second*5)
+		putCtx, cancel := context.WithTimeout(context.TODO(), DB_CONNECTION_TIMEOUT)
 		defer cancel()
 		opts := options.Replace().SetUpsert(true)
 		filter := bson.D{{
@@ -348,7 +349,7 @@ func (s *Store) getByIP(ctx context.Context, ip string, ta *TrafficAccount) (boo
 		*ta = _ta
 		found = true
 	} else {
-		getCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+		getCtx, cancel := context.WithTimeout(ctx, DB_CONNECTION_TIMEOUT)
 		defer cancel()
 		if coll, err := s.getCurrentCollection(); err != nil {
 			return false, err
@@ -377,7 +378,7 @@ func (s *Store) delByIP(ctx context.Context, ip string) error {
 	if coll, err := s.getCurrentCollection(); err != nil {
 		return err
 	} else {
-		delCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+		delCtx, cancel := context.WithTimeout(ctx, DB_CONNECTION_TIMEOUT)
 		defer cancel()
 		filter := bson.D{{
 			Key:   "ip",
