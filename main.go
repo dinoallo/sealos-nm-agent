@@ -10,7 +10,7 @@ import (
 
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/dinoallo/sealos-networkmanager-agent/bpf/bytecount"
-	"github.com/dinoallo/sealos-networkmanager-agent/exporter"
+	// 	"github.com/dinoallo/sealos-networkmanager-agent/exporter"
 	"github.com/dinoallo/sealos-networkmanager-agent/server"
 	"github.com/dinoallo/sealos-networkmanager-agent/store"
 
@@ -84,16 +84,17 @@ func main() {
 		log.Fatalf("unable to launch the factory: %v", err)
 	}
 
-	bytecountExportChannel := make(chan *store.TrafficReport)
-	bf.AddExportChannel(ctx, bytecountExportChannel)
+	/*
+		bytecountExportChannel := make(chan *store.TrafficReport)
+		bf.AddExportChannel(ctx, bytecountExportChannel)
 
-	// Init Prom server
-	if promExporter, err := exporter.NewExporter(devLogger, bytecountExportChannel); err != nil {
-		log.Fatal(err)
-		return
-	} else {
-		promExporter.Launch(ctx)
-	}
+		// Init Prom server
+		if promExporter, err := exporter.NewExporter(devLogger, bytecountExportChannel); err != nil {
+			log.Fatal(err)
+			return
+		} else {
+			promExporter.Launch(ctx)
+		} */
 
 	// Init GRPC Server
 
