@@ -53,17 +53,11 @@ func (s *GRPCServer) CreateCounter(ctx context.Context, in *counterpb.CreateCoun
 }
 
 func (s *GRPCServer) Subscribe(ctx context.Context, in *counterpb.SubscribeRequest) (*counterpb.Empty, error) {
-	addr := in.GetAddress()
-	port := in.GetPort()
-	bf := s.bytecountFactory
-	return new(counterpb.Empty), bf.Subscribe(ctx, addr, port)
+	return new(counterpb.Empty), nil
 }
 
 func (s *GRPCServer) Unsubscribe(ctx context.Context, in *counterpb.UnsubscribeRequest) (*counterpb.Empty, error) {
-	addr := in.GetAddress()
-	port := in.GetPort()
-	bf := s.bytecountFactory
-	return new(counterpb.Empty), bf.Unsubscribe(ctx, addr, port)
+	return new(counterpb.Empty), nil
 }
 
 func (s *GRPCServer) DumpTraffic(ctx context.Context, in *counterpb.DumpTrafficRequest) (*counterpb.DumpTrafficResponse, error) {
