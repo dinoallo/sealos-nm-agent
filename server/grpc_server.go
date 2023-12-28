@@ -6,14 +6,16 @@ import (
 
 	"github.com/dinoallo/sealos-networkmanager-agent/bpf/bytecount"
 	counterpb "github.com/dinoallo/sealos-networkmanager-agent/proto/agent"
+	"github.com/dinoallo/sealos-networkmanager-agent/store"
 	"github.com/dinoallo/sealos-networkmanager-agent/util"
 	"go.uber.org/zap"
 )
 
 type GRPCServer struct {
 	counterpb.UnimplementedCountingServiceServer
-	logger           *zap.SugaredLogger
-	bytecountFactory *bytecount.Factory
+	logger              *zap.SugaredLogger
+	bytecountFactory    *bytecount.Factory
+	trafficAccountStore *store.TrafficAccountStore
 }
 
 func NewServer(baseLogger *zap.SugaredLogger, bf *bytecount.Factory) (*GRPCServer, error) {
@@ -64,13 +66,13 @@ func (s *GRPCServer) DumpTraffic(ctx context.Context, in *counterpb.DumpTrafficR
 	addr := in.GetAddress()
 	tag := in.GetTag()
 	reset := in.GetReset_()
-	bf := s.bytecountFactory
-	if sentBytes, recvBytes, err := bf.DumpTraffic(ctx, addr, tag, reset); err != nil {
+	taStore := s.trafficAccountStore
+	if p, err := taStore.DumpTraffic(ctx, addr, tag, reset); err != nil {
 		return nil, err
 	} else {
 		dtr := counterpb.DumpTrafficResponse{
-			SentBytes: sentBytes,
-			RecvBytes: recvBytes,
+			SentBytes: p.SentBytes,
+			RecvBytes: p.RecvBytes,
 		}
 		return &dtr, nil
 	}

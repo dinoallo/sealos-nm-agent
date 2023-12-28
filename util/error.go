@@ -20,5 +20,11 @@ var (
 	ErrUnknownDirection = errors.New("this direction type is not known")
 
 	ErrParentLoggerNotInited = errors.New("the parent logger is not passed or not initialized")
-	ErrStoreNotInited        = errors.New("the store is not passed or not initalized")
+	ErrLoggerNotInited       = errors.New("the logger is not initialized")
+
+	// store
+	ErrStoreNotInited             = errors.New("the store is not passed or not initialized")
+	ErrPersistentStorageNotInited = errors.New("the persistent storage is not passed or not initialized")
+	ErrCacheNotInited             = errors.New("the cache is not passed or not initialized")
+	ErrStoreManagerNotInited      = errors.New("the store manager is not passed or not initialized")
 )

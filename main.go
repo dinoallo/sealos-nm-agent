@@ -59,23 +59,28 @@ func main() {
 	defer cancel()
 
 	// Init Store
-	cred := &store.DBCred{
+	cred := store.DBCred{
 		DBURI: dbUri,
 		DB:    dbName,
 	}
-	st, err := store.NewStore(cred, devLogger)
+	stm, err := store.NewStoreManager(cred, devLogger)
 	if err != nil {
 		log.Fatalf("unable to start the store: %v", err)
 		return
 	}
-
-	if err := st.Launch(ctx, 1); err != nil {
-		log.Fatalf("unable to launch the store: %v", err)
+	taStore, err := store.NewTrafficAccountStore(devLogger)
+	if err != nil {
+		log.Fatalf("unable to create the store for traffic account")
+		return
+	} else {
+		stm.RegisterStore(taStore)
+	}
+	if err := stm.Launch(ctx, 1); err != nil {
+		log.Fatalf("unable to launch the store manager: %v", err)
 		return
 	}
-
 	// Init Factories
-	bf, err := bytecount.NewFactory(devLogger, st)
+	bf, err := bytecount.NewFactory(devLogger, taStore)
 	if err != nil {
 		log.Fatalf("unable to create the factory: %v", err)
 	}

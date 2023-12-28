@@ -6,15 +6,6 @@ import (
 	"github.com/cilium/cilium/pkg/identity"
 )
 
-type TrafficDirection uint32
-
-const (
-	V4Ingress TrafficDirection = iota
-	V4Egress
-	V6Ingress
-	V6Egress
-)
-
 type Property struct {
 	SentBytes uint64 `bson:"sent_bytes"`
 	RecvBytes uint64 `bson:"recv_bytes"`
@@ -34,4 +25,9 @@ type TrafficReport struct {
 	DstPort   uint32
 	DataBytes uint32
 	Identity  identity.NumericIdentity
+}
+
+type CiliumEndpoint struct {
+	CiliumID int64  `bson:"cilium_id"`
+	NodeIP   string `bson:"node_ip"`
 }
