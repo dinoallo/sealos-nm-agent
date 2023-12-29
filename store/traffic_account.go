@@ -46,12 +46,14 @@ func (s *TrafficAccountStore) DumpTraffic(ctx context.Context, addr string, tag 
 	if found, err := s.getByIP(ctx, addr, &ta); err != nil {
 		return p, err
 	} else if found {
-		if _, ok := ta.Properties[tag]; ok {
-			p = ta.Properties[tag]
-			if reset {
-				ta.Properties[tag] = Property{
-					SentBytes: 0,
-					RecvBytes: 0,
+		if ta.Properties != nil {
+			if _, ok := ta.Properties[tag]; ok {
+				p = ta.Properties[tag]
+				if reset {
+					ta.Properties[tag] = Property{
+						SentBytes: 0,
+						RecvBytes: 0,
+					}
 				}
 			}
 		}

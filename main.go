@@ -117,7 +117,7 @@ func main() {
 		}),
 	)
 
-	grpcServer, err := server.NewServer(devLogger, bf)
+	grpcServer, err := server.NewServer(devLogger, bf, taStore)
 	if err != nil {
 		log.Fatalf("failed to create a new GRPC server: %v", err)
 		return

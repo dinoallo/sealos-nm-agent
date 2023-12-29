@@ -18,13 +18,14 @@ type GRPCServer struct {
 	trafficAccountStore *store.TrafficAccountStore
 }
 
-func NewServer(baseLogger *zap.SugaredLogger, bf *bytecount.Factory) (*GRPCServer, error) {
+func NewServer(baseLogger *zap.SugaredLogger, bf *bytecount.Factory, taStore *store.TrafficAccountStore) (*GRPCServer, error) {
 	if baseLogger == nil || bf == nil {
 		return nil, fmt.Errorf("both the base logger and the factory shouldn't be nil")
 	}
 	return &GRPCServer{
-		logger:           baseLogger,
-		bytecountFactory: bf,
+		logger:              baseLogger,
+		bytecountFactory:    bf,
+		trafficAccountStore: taStore,
 	}, nil
 }
 
