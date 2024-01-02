@@ -120,6 +120,8 @@ func (s *CiliumEndpointStore) launch(ctx context.Context, eg *errgroup.Group, wo
 					return nil
 				default:
 					if currentNode, err := os.Hostname(); err != nil {
+						return err
+					} else {
 						if s.GetCurrentNode() != currentNode {
 							s.nodeMutex.Lock()
 							defer s.nodeMutex.Unlock()
