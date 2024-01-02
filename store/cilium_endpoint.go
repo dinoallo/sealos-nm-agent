@@ -123,9 +123,10 @@ func (s *CiliumEndpointStore) launch(ctx context.Context, eg *errgroup.Group, wo
 						return err
 					} else {
 						if s.GetCurrentNode() != currentNode {
+							s.logger.Infof("updateing the current node to %v", currentNode)
 							s.nodeMutex.Lock()
-							defer s.nodeMutex.Unlock()
 							s.currentNode = currentNode
+							s.nodeMutex.Unlock()
 						}
 					}
 				}
