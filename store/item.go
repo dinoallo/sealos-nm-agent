@@ -28,6 +28,7 @@ type TrafficReport struct {
 }
 
 type CiliumEndpoint struct {
-	CiliumID int64  `bson:"cilium_id"`
-	NodeIP   string `bson:"node_ip"`
+	EndpointID  int64  `bson:"endpoint_id"`
+	Node        string `bson:"node"`
+	CreatedTime int64  `bson:"created_time"`
 }

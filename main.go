@@ -52,7 +52,6 @@ func main() {
 	// requires CAP_SYS_RESOURCE on kernel < 5.11
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatal(err)
-		return
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -66,21 +65,24 @@ func main() {
 	stm, err := store.NewStoreManager(cred, devLogger)
 	if err != nil {
 		log.Fatalf("unable to start the store: %v", err)
-		return
 	}
 	taStore, err := store.NewTrafficAccountStore(devLogger)
 	if err != nil {
-		log.Fatalf("unable to create the store for traffic account")
-		return
+		log.Fatalf("unable to create the store for traffic accounts")
 	} else {
 		stm.RegisterStore(taStore)
 	}
+	cepStore, err := store.NewCiliumEndpointStore(devLogger)
+	if err != nil {
+		log.Fatalf("unable to crate the store for cilium endpoints")
+	} else {
+		stm.RegisterStore(cepStore)
+	}
 	if err := stm.Launch(ctx, 1); err != nil {
 		log.Fatalf("unable to launch the store manager: %v", err)
-		return
 	}
 	// Init Factories
-	bf, err := bytecount.NewFactory(devLogger, taStore)
+	bf, err := bytecount.NewFactory(devLogger, taStore, cepStore)
 	if err != nil {
 		log.Fatalf("unable to create the factory: %v", err)
 	}
@@ -107,7 +109,6 @@ func main() {
 
 	if err != nil {
 		log.Fatalf("failed connection: %v", err)
-		return
 	}
 
 	log.Infof("server listening at %v", lis.Addr())
@@ -117,10 +118,9 @@ func main() {
 		}),
 	)
 
-	grpcServer, err := server.NewServer(devLogger, bf, taStore)
+	grpcServer, err := server.NewServer(devLogger, bf, taStore, cepStore)
 	if err != nil {
 		log.Fatalf("failed to create a new GRPC server: %v", err)
-		return
 	}
 
 	counterpb.RegisterCountingServiceServer(s, grpcServer)

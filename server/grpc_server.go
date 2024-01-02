@@ -16,9 +16,10 @@ type GRPCServer struct {
 	logger              *zap.SugaredLogger
 	bytecountFactory    *bytecount.Factory
 	trafficAccountStore *store.TrafficAccountStore
+	ciliumEndpointStore *store.CiliumEndpointStore
 }
 
-func NewServer(baseLogger *zap.SugaredLogger, bf *bytecount.Factory, taStore *store.TrafficAccountStore) (*GRPCServer, error) {
+func NewServer(baseLogger *zap.SugaredLogger, bf *bytecount.Factory, taStore *store.TrafficAccountStore, cepStore *store.CiliumEndpointStore) (*GRPCServer, error) {
 	if baseLogger == nil || bf == nil {
 		return nil, fmt.Errorf("both the base logger and the factory shouldn't be nil")
 	}
@@ -26,19 +27,37 @@ func NewServer(baseLogger *zap.SugaredLogger, bf *bytecount.Factory, taStore *st
 		logger:              baseLogger,
 		bytecountFactory:    bf,
 		trafficAccountStore: taStore,
+		ciliumEndpointStore: cepStore,
 	}, nil
 }
 
 func (s *GRPCServer) CreateCounter(ctx context.Context, in *counterpb.CreateCounterRequest) (*counterpb.Empty, error) {
+	if in == nil {
+		return new(counterpb.Empty), util.ErrRequestNotPassed
+	}
+	bf := s.bytecountFactory
+	if bf == nil {
+		return new(counterpb.Empty), util.ErrFactoryNotInited
+	}
+	cepStore := s.ciliumEndpointStore
+	if cepStore == nil {
+		return new(counterpb.Empty), util.ErrStoreNotInited
+	}
+	taStore := s.trafficAccountStore
+	if taStore == nil {
+		return new(counterpb.Empty), util.ErrStoreNotInited
+	}
 	counter := in.GetCounter()
 	eid := counter.GetEndpointId()
 	dir := counter.GetDirection()
 	ipAddrs := counter.GetIpAddrs()
 	cleanUp := in.GetCleanUp()
-	bf := s.bytecountFactory
 	if cleanUp {
+		if err := cepStore.Remove(ctx, eid); err != nil {
+			return new(counterpb.Empty), err
+		}
 		for _, ipAddr := range ipAddrs {
-			if err := bf.CleanUp(ctx, ipAddr); err != nil {
+			if err := taStore.DeleteTrafficAccount(ctx, ipAddr); err != nil {
 				return new(counterpb.Empty), err
 			}
 		}
@@ -52,6 +71,10 @@ func (s *GRPCServer) CreateCounter(ctx context.Context, in *counterpb.CreateCoun
 	default:
 		return new(counterpb.Empty), util.ErrUnknownDirection
 	}
+	if err := cepStore.Create(ctx, eid); err != nil {
+		return nil, err
+	}
+
 	return new(counterpb.Empty), bf.CreateCounter(ctx, eid, t)
 }
 
@@ -64,10 +87,16 @@ func (s *GRPCServer) Unsubscribe(ctx context.Context, in *counterpb.UnsubscribeR
 }
 
 func (s *GRPCServer) DumpTraffic(ctx context.Context, in *counterpb.DumpTrafficRequest) (*counterpb.DumpTrafficResponse, error) {
+	if in == nil {
+		return nil, util.ErrRequestNotPassed
+	}
+	taStore := s.trafficAccountStore
+	if taStore == nil {
+		return nil, util.ErrStoreNotInited
+	}
 	addr := in.GetAddress()
 	tag := in.GetTag()
 	reset := in.GetReset_()
-	taStore := s.trafficAccountStore
 	if p, err := taStore.DumpTraffic(ctx, addr, tag, reset); err != nil {
 		return nil, err
 	} else {

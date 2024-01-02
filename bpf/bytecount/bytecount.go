@@ -18,6 +18,7 @@ type Factory struct {
 	// after calling New(), the following are safe to use
 	logger       *zap.SugaredLogger
 	taStore      *store.TrafficAccountStore
+	cepStore     *store.CiliumEndpointStore
 	workQueue    chan Traffic
 	nativeEndian binary.ByteOrder
 	// the following are not safe to use, please check if it's nil
@@ -58,7 +59,7 @@ var (
 	}
 )
 
-func NewFactory(parentLogger *zap.SugaredLogger, taStore *store.TrafficAccountStore) (*Factory, error) {
+func NewFactory(parentLogger *zap.SugaredLogger, taStore *store.TrafficAccountStore, cepStore *store.CiliumEndpointStore) (*Factory, error) {
 	// init logger
 	if parentLogger == nil {
 		return nil, util.ErrParentLoggerNotInited
@@ -74,7 +75,7 @@ func NewFactory(parentLogger *zap.SugaredLogger, taStore *store.TrafficAccountSt
 		nativeEndian = e
 	}
 
-	if taStore == nil {
+	if taStore == nil || cepStore == nil {
 		return nil, util.ErrStoreNotInited
 	}
 
@@ -83,6 +84,7 @@ func NewFactory(parentLogger *zap.SugaredLogger, taStore *store.TrafficAccountSt
 		workQueue:    workQueue,
 		nativeEndian: nativeEndian,
 		taStore:      taStore,
+		cepStore:     cepStore,
 	}, nil
 }
 

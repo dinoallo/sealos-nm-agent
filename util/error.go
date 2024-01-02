@@ -27,4 +27,10 @@ var (
 	ErrPersistentStorageNotInited = errors.New("the persistent storage is not passed or not initialized")
 	ErrCacheNotInited             = errors.New("the cache is not passed or not initialized")
 	ErrStoreManagerNotInited      = errors.New("the store manager is not passed or not initialized")
+
+	// grpc
+	ErrRequestNotPassed = errors.New("the requests have not been passed")
+
+	// factory
+	ErrFactoryNotInited = errors.New("the factory is not passed or not initialized")
 )

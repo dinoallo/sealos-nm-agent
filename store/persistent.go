@@ -90,7 +90,10 @@ func (p *persistent) findAll(ctx context.Context, collMeta Coll, size int64, obj
 	if coll, err := p.getCurrentCollection(collMeta); err != nil {
 		return err
 	} else {
-		opts := options.Find().SetLimit(size)
+		var opts *options.FindOptions
+		if size > 0 {
+			opts = options.Find().SetLimit(size)
+		}
 		findCtx, cancel := context.WithTimeout(ctx, DB_CONNECTION_TIMEOUT)
 		defer cancel()
 		if cursor, err := coll.Find(findCtx, bson.D{}, opts); err != nil {
@@ -164,14 +167,25 @@ func (p *persistent) unsetOne(ctx context.Context, collMeta Coll, k string, v st
 
 }
 
+/*
+The collections for TrafficAccounts are complied with the name format 'traffic_accounts_yyyymmdd'.
+There will be a new collection every day and the old one will get deprecated and cleaned up.
+Currently, there is only one collection used for CiliumEndpoints. Hence it's never cleaned up.
+*/
 func (p *persistent) getCurrentCollection(collMeta Coll) (*mongo.Collection, error) {
 	db := p.database
 	if db == nil {
 		return nil, fmt.Errorf("the database shouldn't be nil")
 	}
-	now := time.Now()
-	timeSuffix := fmt.Sprintf("%s%s%s", fmt.Sprint(now.Year()), fmt.Sprint(int(now.Month())), fmt.Sprint(now.Day()))
-	collName := fmt.Sprintf("%s_%s", collMeta.Prefix, timeSuffix)
+	var collName string
+	switch collMeta.T {
+	case COLL_TYPE_TA:
+		now := time.Now()
+		timeSuffix := fmt.Sprintf("%s%s%s", fmt.Sprint(now.Year()), fmt.Sprint(int(now.Month())), fmt.Sprint(now.Day()))
+		collName = fmt.Sprintf("%s_%s", collMeta.Prefix, timeSuffix)
+	case COLL_TYPE_CEP:
+		collName = fmt.Sprintf("%s", collMeta.Prefix)
+	}
 	coll := db.Collection(collName)
 	return coll, nil
 }
