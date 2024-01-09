@@ -65,7 +65,7 @@ func (s *TrafficAccountStore) processTrafficReport(ctx context.Context, report *
 	log := s.logger
 	// duplicate the data for output usage
 	if report.Identity == identity.ReservedIdentityWorld {
-		tag := "world"
+		tag := "identity:world"
 		if err := s.add(ctx, report, tag); err != nil {
 			return err
 		}
@@ -99,11 +99,11 @@ func (s *TrafficAccountStore) add(ctx context.Context, report *TrafficReport, al
 	if dir == V4Egress {
 		pp.SentBytes += value
 		ip = report.SrcIP.String()
-		tag = fmt.Sprint(report.SrcPort)
+		tag = fmt.Sprintf("port:%s", fmt.Sprint(report.SrcPort))
 	} else if dir == V4Ingress {
 		pp.RecvBytes += value
 		ip = report.DstIP.String()
-		tag = fmt.Sprint(report.DstPort)
+		tag = fmt.Sprintf("port:%s", fmt.Sprint(report.DstPort))
 	} else {
 		return nil
 	}
