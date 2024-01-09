@@ -1,7 +1,7 @@
 # Image URL to use all building/pushing image targets
 REV ?= $(shell git rev-parse --short HEAD)
 IMG ?= dinoallo/sealos-networkmanager-agent
-DEBUG_IMG ?= dinoallo/sealos-networkmanager-agent
+DEBUG_IMG ?= 192.168.3.2:5000/dinoallo/sealos-networkmanager-agent
 TAG ?= $(IMG):$(REV)
 DEBUG_TAG ?= $(DEBUG_IMG):$(REV)
 # Setting SHELL to bash allows bash commands to be executed by recipes.
