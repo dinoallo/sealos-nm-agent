@@ -66,11 +66,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("unable to start the store: %v", err)
 	}
-	taStore, err := store.NewTrafficAccountStore(devLogger)
+	trStore, err := store.NewTrafficReportStore(devLogger)
+	if err != nil {
+		log.Fatalf("unable to create the store for traffic reports")
+	} else {
+		stm.RegisterStore(trStore)
+	}
 	if err != nil {
 		log.Fatalf("unable to create the store for traffic accounts")
 	} else {
-		stm.RegisterStore(taStore)
+		stm.RegisterStore(trStore)
 	}
 	cepStore, err := store.NewCiliumEndpointStore(devLogger)
 	if err != nil {
@@ -82,7 +87,7 @@ func main() {
 		log.Fatalf("unable to launch the store manager: %v", err)
 	}
 	// Init Factories
-	bf, err := bytecount.NewFactory(devLogger, taStore, cepStore)
+	bf, err := bytecount.NewFactory(devLogger, trStore, cepStore)
 	if err != nil {
 		log.Fatalf("unable to create the factory: %v", err)
 	}
@@ -118,7 +123,7 @@ func main() {
 		}),
 	)
 
-	grpcServer, err := server.NewServer(devLogger, bf, taStore, cepStore)
+	grpcServer, err := server.NewServer(devLogger, bf, cepStore)
 	if err != nil {
 		log.Fatalf("failed to create a new GRPC server: %v", err)
 	}

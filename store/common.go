@@ -25,11 +25,11 @@ type Coll struct {
 }
 
 const (
-	COLL_TYPE_TA CollType = iota
+	COLL_TYPE_TR CollType = iota
 	COLL_TYPE_CEP
 )
 
 var (
-	TACollection  Coll = Coll{T: COLL_TYPE_TA, Prefix: "traffic_accounts"}
+	TRCollection  Coll = Coll{T: COLL_TYPE_TR, Prefix: "traffic_reports"}
 	CEPCollection Coll = Coll{T: COLL_TYPE_CEP, Prefix: "cilium_endpoints"}
 )

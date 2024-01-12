@@ -33,4 +33,7 @@ var (
 
 	// factory
 	ErrFactoryNotInited = errors.New("the factory is not passed or not initialized")
+
+	// trafficreport
+	ErrTrafficReportNotInited = errors.New("the traffic report is nil or not initialized")
 )

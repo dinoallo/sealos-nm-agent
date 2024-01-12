@@ -15,6 +15,8 @@ import (
 const (
 	DB_CONNECTION_TIMEOUT = time.Second * 5
 	MAX_POOL_SIZE         = 100
+
+	DEFAULT_EXPIRE_AFTER_SECONDS = 3600
 )
 
 type DBCred struct {
@@ -167,11 +169,61 @@ func (p *persistent) unsetOne(ctx context.Context, collMeta Coll, k string, v st
 
 }
 
-/*
-The collections for TrafficAccounts are complied with the name format 'traffic_accounts_yyyymmdd'.
-There will be a new collection every day and the old one will get deprecated and cleaned up.
-Currently, there is only one collection used for CiliumEndpoints. Hence it's never cleaned up.
-*/
+func (p *persistent) insertOne(ctx context.Context, collMeta Coll, item interface{}) error {
+	if coll, err := p.getCurrentCollection(collMeta); err != nil {
+		return err
+	} else {
+		insertCtx, cancel := context.WithTimeout(ctx, DB_CONNECTION_TIMEOUT)
+		defer cancel()
+		if _, err := coll.InsertOne(insertCtx, item); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *persistent) findCollection(ctx context.Context, collMeta Coll) (bool, error) {
+	if p.database == nil {
+		return false, util.ErrPersistentStorageNotInited
+	}
+	nameOnly := true
+	opts := options.ListCollectionsOptions{
+		NameOnly: &nameOnly,
+	}
+	collName := collMeta.Prefix
+	var exists bool = false
+	if names, err := p.database.ListCollectionNames(ctx, bson.D{}, &opts); err != nil {
+		return false, err
+	} else {
+		for _, name := range names {
+			if name == collName {
+				exists = true
+				break
+			}
+		}
+	}
+	return exists, nil
+}
+
+func (p *persistent) createTSDB(ctx context.Context, collMeta Coll, tf string, mf *string) error {
+	if p.database == nil {
+		return util.ErrPersistentStorageNotInited
+	}
+	var eas int64 = DEFAULT_EXPIRE_AFTER_SECONDS
+	collName := collMeta.Prefix
+	opts := options.CreateCollectionOptions{
+		TimeSeriesOptions: &options.TimeSeriesOptions{
+			TimeField: tf,
+			MetaField: mf,
+		},
+		ExpireAfterSeconds: &eas,
+	}
+	if err := p.database.CreateCollection(ctx, collName, &opts); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (p *persistent) getCurrentCollection(collMeta Coll) (*mongo.Collection, error) {
 	db := p.database
 	if db == nil {
@@ -179,10 +231,8 @@ func (p *persistent) getCurrentCollection(collMeta Coll) (*mongo.Collection, err
 	}
 	var collName string
 	switch collMeta.T {
-	case COLL_TYPE_TA:
-		now := time.Now()
-		timeSuffix := fmt.Sprintf("%s%s%s", fmt.Sprint(now.Year()), fmt.Sprint(int(now.Month())), fmt.Sprint(now.Day()))
-		collName = fmt.Sprintf("%s_%s", collMeta.Prefix, timeSuffix)
+	case COLL_TYPE_TR:
+		collName = fmt.Sprintf("%s", collMeta.Prefix)
 	case COLL_TYPE_CEP:
 		collName = fmt.Sprintf("%s", collMeta.Prefix)
 	}

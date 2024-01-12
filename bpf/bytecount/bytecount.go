@@ -17,8 +17,8 @@ type Factory struct {
 	objs bytecountObjects
 	// after calling New(), the following are safe to use
 	logger       *zap.SugaredLogger
-	taStore      *store.TrafficAccountStore
 	cepStore     *store.CiliumEndpointStore
+	trStore      *store.TrafficReportStore
 	workQueue    chan Traffic
 	nativeEndian binary.ByteOrder
 	// the following are not safe to use, please check if it's nil
@@ -59,7 +59,7 @@ var (
 	}
 )
 
-func NewFactory(parentLogger *zap.SugaredLogger, taStore *store.TrafficAccountStore, cepStore *store.CiliumEndpointStore) (*Factory, error) {
+func NewFactory(parentLogger *zap.SugaredLogger, trStore *store.TrafficReportStore, cepStore *store.CiliumEndpointStore) (*Factory, error) {
 	// init logger
 	if parentLogger == nil {
 		return nil, util.ErrParentLoggerNotInited
@@ -75,7 +75,7 @@ func NewFactory(parentLogger *zap.SugaredLogger, taStore *store.TrafficAccountSt
 		nativeEndian = e
 	}
 
-	if taStore == nil || cepStore == nil {
+	if trStore == nil || cepStore == nil {
 		return nil, util.ErrStoreNotInited
 	}
 
@@ -83,7 +83,7 @@ func NewFactory(parentLogger *zap.SugaredLogger, taStore *store.TrafficAccountSt
 		logger:       logger,
 		workQueue:    workQueue,
 		nativeEndian: nativeEndian,
-		taStore:      taStore,
+		trStore:      trStore,
 		cepStore:     cepStore,
 	}, nil
 }
@@ -95,8 +95,4 @@ func (bf *Factory) AddExportChannel(ctx context.Context, ec chan *store.TrafficR
 		return
 	}
 	bf.bytecountExportChannel = ec
-}
-
-func (bf *Factory) CleanUp(ctx context.Context, ipAddr string) error {
-	return bf.taStore.DeleteTrafficAccount(ctx, ipAddr)
 }

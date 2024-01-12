@@ -2,6 +2,7 @@ package store
 
 import (
 	"net"
+	"time"
 
 	"github.com/cilium/cilium/pkg/identity"
 )
@@ -16,15 +17,26 @@ type TrafficAccount struct {
 	Properties map[string]Property `bson:"properties"`
 }
 
+const (
+	TRAFFIC_REPORT_TIME_FIELD = "timestamp"
+	TRAFFIC_REPORT_META_FIELD = "traffic_report_meta"
+)
+
+type TrafficReportMetaData struct {
+	SrcIP   net.IP `bson:"src_ip"`
+	SrcPort uint32 `bson:"src_port"`
+	DstIP   net.IP `bson:"dst_ip"`
+	DstPort uint32 `bson:"dst_port"`
+}
+
 type TrafficReport struct {
-	Dir       TrafficDirection
-	Protocol  uint32
-	SrcIP     net.IP
-	SrcPort   uint32
-	DstIP     net.IP
-	DstPort   uint32
-	DataBytes uint32
-	Identity  identity.NumericIdentity
+	TrafficReportMeta TrafficReportMetaData    `bson:"traffic_report_meta"`
+	Dir               TrafficDirection         `bson:"direction"`
+	Protocol          uint32                   `bson:"protocol"`
+	Family            uint32                   `bson:"family"`
+	DataBytes         uint32                   `bson:"data_bytes"`
+	Identity          identity.NumericIdentity `bson:"identity"`
+	Timestamp         time.Time                `bson:"timestamp"`
 }
 
 type CiliumEndpoint struct {

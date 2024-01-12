@@ -11,7 +11,6 @@ import (
 	"github.com/cilium/ebpf/perf"
 	"github.com/dinoallo/sealos-networkmanager-agent/store"
 	"github.com/dinoallo/sealos-networkmanager-agent/util"
-	"golang.org/x/sys/unix"
 )
 
 func (bf *Factory) readTraffic(ctx context.Context, t uint32) {
@@ -92,36 +91,29 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 	switch t {
 	case IPv4Ingress.TypeInt:
 		dir = store.V4Ingress
-		__srcIP[0] = event.DstIp4
-		__dstIP[0] = event.SrcIp4
-		srcPort = uint32(event.DstPort)
-		dstPort = event.SrcPort
 	case IPv4Egress.TypeInt:
 		dir = store.V4Egress
-		__srcIP[0] = event.SrcIp4
-		__dstIP[0] = event.DstIp4
-		srcPort = event.SrcPort
-		dstPort = uint32(event.DstPort)
 	default:
 		return nil
 	}
-
-	if event.Family == unix.AF_INET || event.Family == unix.AF_INET6 {
-		report := &store.TrafficReport{
-			Dir:       dir,
-			Protocol:  event.Protocol,
-			SrcIP:     util.ToIP(__srcIP[0], nil, 4),
-			DstIP:     util.ToIP(__dstIP[0], nil, 4),
-			SrcPort:   srcPort,
-			DstPort:   dstPort,
-			DataBytes: event.Len,
-			Identity:  identity.NumericIdentity(event.Identity),
-		}
-		// log.Debugf("protocol: %v; %v bytes sent", event.Protocol, event.Len)
-		bf.taStore.AddTrafficReport(ctx, report)
-		if bf.bytecountExportChannel != nil {
-			bf.bytecountExportChannel <- report
-		}
+	__srcIP[0] = event.SrcIp4
+	__dstIP[0] = event.DstIp4
+	srcPort = event.SrcPort
+	dstPort = uint32(event.DstPort)
+	report := &store.TrafficReport{
+		TrafficReportMeta: store.TrafficReportMetaData{
+			SrcIP:   util.ToIP(__srcIP[0], nil, 4),
+			DstIP:   util.ToIP(__dstIP[0], nil, 4),
+			SrcPort: srcPort,
+			DstPort: dstPort,
+		},
+		Dir:       dir,
+		Protocol:  event.Protocol,
+		Family:    event.Family,
+		DataBytes: event.Len,
+		Identity:  identity.NumericIdentity(event.Identity),
 	}
+	// log.Debugf("protocol: %v; %v bytes sent", event.Protocol, event.Len)
+	bf.trStore.AddTrafficReport(ctx, report)
 	return nil
 }
