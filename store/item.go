@@ -1,7 +1,6 @@
 package store
 
 import (
-	"net"
 	"time"
 
 	"github.com/cilium/cilium/pkg/identity"
@@ -23,9 +22,9 @@ const (
 )
 
 type TrafficReportMetaData struct {
-	SrcIP   net.IP `bson:"src_ip"`
+	SrcIP   string `bson:"src_ip"`
 	SrcPort uint32 `bson:"src_port"`
-	DstIP   net.IP `bson:"dst_ip"`
+	DstIP   string `bson:"dst_ip"`
 	DstPort uint32 `bson:"dst_port"`
 }
 

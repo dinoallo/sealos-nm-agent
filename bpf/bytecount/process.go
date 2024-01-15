@@ -100,10 +100,12 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 	__dstIP[0] = event.DstIp4
 	srcPort = event.SrcPort
 	dstPort = uint32(event.DstPort)
+	srcIP := util.ToIP(__srcIP[0], nil, 4)
+	dstIP := util.ToIP(__dstIP[0], nil, 4)
 	report := &store.TrafficReport{
 		TrafficReportMeta: store.TrafficReportMetaData{
-			SrcIP:   util.ToIP(__srcIP[0], nil, 4),
-			DstIP:   util.ToIP(__dstIP[0], nil, 4),
+			SrcIP:   srcIP.String(),
+			DstIP:   dstIP.String(),
 			SrcPort: srcPort,
 			DstPort: dstPort,
 		},
