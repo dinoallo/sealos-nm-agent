@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"time"
 
 	"github.com/cilium/cilium/pkg/identity"
 	"github.com/cilium/ebpf"
@@ -114,6 +115,7 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 		Family:    event.Family,
 		DataBytes: event.Len,
 		Identity:  identity.NumericIdentity(event.Identity),
+		Timestamp: time.Now(),
 	}
 	// log.Debugf("protocol: %v; %v bytes sent", event.Protocol, event.Len)
 	bf.trStore.AddTrafficReport(ctx, report)
