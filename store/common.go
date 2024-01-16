@@ -11,10 +11,11 @@ const (
 	CACHE_EXPIRED_TIME = time.Second * 3
 )
 const (
-	V4Ingress TrafficDirection = iota
-	V4Egress
-	V6Ingress
-	V6Egress
+	TRAFFIC_DIR_UNKNOWN TrafficDirection = iota
+	TRAFFIC_DIR_V4_INGRESS
+	TRAFFIC_DIR_V4_EGRESS
+	TRAFFIC_DIR_V6_INGRESS
+	TRAFFIC_DIR_V6_EGRESS
 )
 
 type CollType int

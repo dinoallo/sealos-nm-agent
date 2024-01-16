@@ -91,9 +91,9 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 	var dstPort uint32
 	switch t {
 	case IPv4Ingress.TypeInt:
-		dir = store.V4Ingress
+		dir = store.TRAFFIC_DIR_V4_INGRESS
 	case IPv4Egress.TypeInt:
-		dir = store.V4Egress
+		dir = store.TRAFFIC_DIR_V4_EGRESS
 	default:
 		return nil
 	}
