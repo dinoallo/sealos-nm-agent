@@ -1,7 +1,10 @@
 # Image URL to use all building/pushing image targets
+PROJECT_NAME ?= sealos-nm-agent
 REV ?= $(shell git rev-parse --short HEAD)
-IMG ?= dinoallo/sealos-networkmanager-agent
-DEBUG_IMG ?= 192.168.3.2:5000/dinoallo/sealos-networkmanager-agent
+PUBLIC_REPO ?= docker.io/dinoallo
+DEBUG_REPO ?= 192.168.3.2:5000/dinoallo
+IMG ?= $(PUBLIC_REPO)/$(PROJECT_NAME)
+DEBUG_IMG ?= $(DEBUG_REPO)/$(PROJECT_NAME)
 TAG ?= $(IMG):$(REV)
 DEBUG_TAG ?= $(DEBUG_IMG):$(REV)
 # Setting SHELL to bash allows bash commands to be executed by recipes.
@@ -64,3 +67,8 @@ oci-build-debug: generate
 .PHONY: oci-push-debug
 oci-push-debug: ## Push docker image with the agent.
 	nerdctl push ${DEBUG_TAG}
+
+.PHONY: oci-publish-debug
+oci-publish-debug: oci-build-debug
+	nerdctl tag ${DEBUG_TAG} ${TAG}
+	nerdctl push ${TAG}
