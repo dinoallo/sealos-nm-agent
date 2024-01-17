@@ -83,7 +83,7 @@ func main() {
 	} else {
 		stm.RegisterStore(cepStore)
 	}
-	if err := stm.Launch(ctx, 1); err != nil {
+	if err := stm.Launch(ctx, 5); err != nil {
 		log.Fatalf("unable to launch the store manager: %v", err)
 	}
 	// Init Factories
