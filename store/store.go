@@ -13,7 +13,7 @@ type Store interface {
 	getName() string
 	initCache(ctx context.Context) error
 	setManager(manager *StoreManager) error
-	launch(ctx context.Context, eg *errgroup.Group, workerCount int) error
+	launch(ctx context.Context, eg *errgroup.Group) error
 }
 
 type StoreManager struct {
@@ -61,7 +61,7 @@ func (s *StoreManager) RegisterStore(store Store) error {
 	return nil
 }
 
-func (s *StoreManager) Launch(ctx context.Context, workerCount int) error {
+func (s *StoreManager) Launch(ctx context.Context) error {
 	log := s.logger
 	if log == nil {
 		return util.ErrLoggerNotInited
@@ -97,7 +97,7 @@ func (s *StoreManager) Launch(ctx context.Context, workerCount int) error {
 			return err
 		}
 		log.Infof("cache for store %v successfully initialized", name)
-		if err := store.launch(egCtx, eg, workerCount); err != nil {
+		if err := store.launch(egCtx, eg); err != nil {
 			return err
 		}
 		log.Infof("store %v successfully launched", name)

@@ -12,6 +12,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	CILIUM_ENDPOINT_WORKER_COUNT = 5
+)
+
 type CiliumEndpointStore struct {
 	name    string
 	logger  *zap.SugaredLogger
@@ -111,8 +115,8 @@ func (s *CiliumEndpointStore) getName() string {
 	return s.name
 }
 
-func (s *CiliumEndpointStore) launch(ctx context.Context, eg *errgroup.Group, workerCount int) error {
-	for i := 0; i < workerCount; i++ {
+func (s *CiliumEndpointStore) launch(ctx context.Context, eg *errgroup.Group) error {
+	for i := 0; i < CILIUM_ENDPOINT_WORKER_COUNT; i++ {
 		eg.Go(func() error {
 			for {
 				select {

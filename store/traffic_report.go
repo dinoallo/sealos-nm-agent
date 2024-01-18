@@ -8,6 +8,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	TRAFFIC_REPORT_WORKER_COUNT = 20
+)
+
 type TrafficReportStore struct {
 	name           string
 	logger         *zap.SugaredLogger
@@ -66,7 +70,7 @@ func (s *TrafficReportStore) getName() string {
 	return s.name
 }
 
-func (s *TrafficReportStore) launch(ctx context.Context, eg *errgroup.Group, workerCount int) error {
+func (s *TrafficReportStore) launch(ctx context.Context, eg *errgroup.Group) error {
 	if s.manager == nil {
 		return util.ErrStoreManagerNotInited
 	}
@@ -81,7 +85,7 @@ func (s *TrafficReportStore) launch(ctx context.Context, eg *errgroup.Group, wor
 			return err
 		}
 	}
-	for i := 0; i < workerCount; i++ {
+	for i := 0; i < TRAFFIC_REPORT_WORKER_COUNT; i++ {
 		eg.Go(func() error {
 			for {
 				select {
