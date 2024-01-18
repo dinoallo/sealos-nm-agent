@@ -9,7 +9,7 @@ import (
 const (
 	BPF_FS_ROOT            = "/sys/fs/bpf"
 	CILIUM_TC_ROOT         = BPF_FS_ROOT + "/tc/globals"
-	TRAFFIC_CONSUMER_COUNT = 5
+	TRAFFIC_CONSUMER_COUNT = 50
 	PERF_BUFFER_SIZE       = (32 << 10) // 32KB
 )
 

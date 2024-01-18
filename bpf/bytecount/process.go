@@ -117,7 +117,11 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 		Identity:  identity.NumericIdentity(event.Identity),
 		Timestamp: time.Now(),
 	}
+	log := bf.logger
+	log.Debugf("report stored. proto: %v; family: %v,  ident: %v; %v:%v => %v:%v, %v bytes sent;", report.Protocol, report.Family, report.Identity, report.TrafficReportMeta.SrcIP, report.TrafficReportMeta.SrcPort, report.TrafficReportMeta.DstIP, report.TrafficReportMeta.DstPort, report.DataBytes)
 	// log.Debugf("protocol: %v; %v bytes sent", event.Protocol, event.Len)
-	bf.trStore.AddTrafficReport(ctx, report)
+	go func() {
+		bf.trStore.AddTrafficReport(ctx, report)
+	}()
 	return nil
 }

@@ -33,7 +33,6 @@ func (s *TrafficReportStore) AddTrafficReport(ctx context.Context, report *Traff
 }
 
 func (s *TrafficReportStore) processTrafficReport(ctx context.Context, report *TrafficReport) error {
-	log := s.logger
 	if report == nil {
 		return util.ErrTrafficReportNotInited
 	}
@@ -48,7 +47,6 @@ func (s *TrafficReportStore) processTrafficReport(ctx context.Context, report *T
 		return err
 
 	}
-	log.Debugf("report stored. proto: %v; ident: %v; %v:%v => %v:%v, %v bytes sent;", report.Protocol, report.Identity, report.TrafficReportMeta.SrcIP, report.TrafficReportMeta.SrcPort, report.TrafficReportMeta.DstIP, report.TrafficReportMeta.DstPort, report.DataBytes)
 	return nil
 }
 
