@@ -117,8 +117,6 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 		Identity:  identity.NumericIdentity(event.Identity),
 		Timestamp: time.Now(),
 	}
-	go func() {
-		bf.trStore.AddTrafficReport(ctx, report)
-	}()
+	bf.trStore.AddTrafficReport(ctx, report)
 	return nil
 }

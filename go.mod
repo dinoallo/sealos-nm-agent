@@ -5,6 +5,8 @@ go 1.21
 require (
 	github.com/cilium/cilium v1.14.3
 	github.com/cilium/ebpf v0.11.0
+	github.com/hashicorp/golang-lru/v2 v2.0.7
+	github.com/matoous/go-nanoid/v2 v2.0.0
 	go.mongodb.org/mongo-driver v1.13.1
 	go.uber.org/zap v1.26.0
 	golang.org/x/sync v0.5.0

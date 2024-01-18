@@ -7,8 +7,8 @@ import (
 type TrafficDirection uint32
 
 const (
-	CACHE_ENTRIES_SIZE = 256
-	CACHE_EXPIRED_TIME = time.Second * 3
+	CACHE_ENTRIES_SIZE = 8192
+	CACHE_EXPIRED_TIME = time.Millisecond * 10
 )
 const (
 	TRAFFIC_DIR_UNKNOWN TrafficDirection = iota

@@ -2,14 +2,17 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/util"
+	lru_expirable "github.com/hashicorp/golang-lru/v2/expirable"
+	nanoid "github.com/matoous/go-nanoid/v2"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
-	TRAFFIC_REPORT_WORKER_COUNT = 20
+	TRAFFIC_REPORT_WORKER_COUNT = (2 << 10)
 )
 
 type TrafficReportStore struct {
@@ -17,6 +20,7 @@ type TrafficReportStore struct {
 	logger         *zap.SugaredLogger
 	manager        *StoreManager
 	trafficReports chan *TrafficReport
+	cache          *lru_expirable.LRU[string, TrafficReport]
 }
 
 func NewTrafficReportStore(baseLogger *zap.SugaredLogger) (*TrafficReportStore, error) {
@@ -40,22 +44,44 @@ func (s *TrafficReportStore) processTrafficReport(ctx context.Context, report *T
 	if report == nil {
 		return util.ErrTrafficReportNotInited
 	}
-	if s.manager == nil {
-		return util.ErrStoreManagerNotInited
+	if s.cache == nil {
+		return util.ErrCacheNotInited
 	}
-	ps := s.manager.ps
-	if ps == nil {
-		return util.ErrPersistentStorageNotInited
-	}
-	if err := ps.insertOne(ctx, TRCollection, *report); err != nil {
+	if id, err := nanoid.New(); err != nil {
 		return err
-
+	} else {
+		s.cache.Add(id, *report)
 	}
 	return nil
 }
 
 func (s *TrafficReportStore) initCache(ctx context.Context) error {
+	p := s.manager.ps
+	if p == nil {
+		return util.ErrPersistentStorageNotInited
+	}
+	cache := lru_expirable.NewLRU[string, TrafficReport](CACHE_ENTRIES_SIZE, s.onEvicted, CACHE_EXPIRED_TIME)
+	s.cache = cache
 	return nil
+}
+
+func (s *TrafficReportStore) onEvicted(key string, value TrafficReport) {
+	if s.manager == nil || s.logger == nil {
+		return
+	}
+	logger := s.logger
+	ps := s.manager.ps
+	if ps != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+		defer cancel()
+		if err := ps.insertOne(ctx, TRCollection, value); err != nil {
+			logger.Errorf("unable to evicted the traffic account: %v", err)
+		}
+	} else {
+		logger.Errorf("eviction failed: %v", util.ErrPersistentStorageNotInited)
+		return
+	}
+
 }
 
 func (s *TrafficReportStore) setManager(manager *StoreManager) error {

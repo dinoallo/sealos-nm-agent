@@ -33,7 +33,6 @@ func (bf *Factory) Launch(ctx context.Context) error {
 	log.Infof("launching traffic event reader...")
 	go bf.readTraffic(ctx, IPv4Egress.TypeInt)
 	for i := 0; i < TRAFFIC_CONSUMER_COUNT; i++ {
-		log.Infof("launching traffic event consumer...")
 		go bf.processTraffic(ctx)
 	}
 	log.Infof("traffic counting factory launched")
@@ -43,6 +42,10 @@ func (bf *Factory) Launch(ctx context.Context) error {
 func (bf *Factory) initCounter(ctx context.Context) error {
 	var ceps []store.CiliumEndpoint
 	s := bf.cepStore
+	logger := bf.logger
+	if logger == nil {
+		return util.ErrLoggerNotInited
+	}
 	if s == nil {
 		return util.ErrStoreNotInited
 	}
@@ -63,6 +66,8 @@ func (bf *Factory) initCounter(ctx context.Context) error {
 				} else {
 					return err
 				}
+			} else {
+				logger.Infof("counter %v recovered", cep.EndpointID)
 			}
 		}
 	}
