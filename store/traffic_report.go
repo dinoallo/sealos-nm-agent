@@ -94,14 +94,16 @@ func (s *TrafficReportStore) flushTrafficReport(trafficReportBuffer chan *Traffi
 	ps := s.manager.ps
 	if ps != nil {
 		trafficReportBufferSize := len(trafficReportBuffer)
-		var trafficReports []interface{}
-		for i := 0; i < trafficReportBufferSize; i++ {
-			trafficReport := <-trafficReportBuffer
-			trafficReports = append(trafficReports, *trafficReport)
-		}
-		if err := ps.insertMany(context.Background(), TRCollection, trafficReports); err != nil {
-			logger.Errorf("unable to flush traffic reports to the database: %v", err)
-			return err
+		if trafficReportBufferSize > 0 {
+			var trafficReports []interface{}
+			for i := 0; i < trafficReportBufferSize; i++ {
+				trafficReport := <-trafficReportBuffer
+				trafficReports = append(trafficReports, *trafficReport)
+			}
+			if err := ps.insertMany(context.Background(), TRCollection, trafficReports); err != nil {
+				logger.Errorf("unable to flush traffic reports to the database: %v", err)
+				return err
+			}
 		}
 	} else {
 		return util.ErrPersistentStorageNotInited
