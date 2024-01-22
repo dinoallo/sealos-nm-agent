@@ -35,5 +35,6 @@ var (
 	ErrFactoryNotInited = errors.New("the factory is not passed or not initialized")
 
 	// trafficreport
-	ErrTrafficReportNotInited = errors.New("the traffic report is nil or not initialized")
+	ErrTrafficReportNotInited         = errors.New("the traffic report is nil or not initialized")
+	ErrTimeoutWaitingForTrafficReport = errors.New("timeout waiting for any traffic reports")
 )

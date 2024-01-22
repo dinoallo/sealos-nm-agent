@@ -65,10 +65,12 @@ func (bf *Factory) processTraffic(ctx context.Context, traffic Traffic) {
 	if traffic.trafficRecord != nil {
 		if err := binary.Read(bytes.NewBuffer(traffic.trafficRecord.RawSample), bf.nativeEndian, &event); err != nil {
 			log.Infof("Failed to decode received data: %+v", err)
+			return
 		}
 		t := traffic.trafficType
 		if err := bf.submit(ctx, &event, t); err != nil {
 			log.Infof("Failed to submit the traffic report: %+v", err)
+			return
 		}
 	}
 }

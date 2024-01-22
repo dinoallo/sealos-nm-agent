@@ -11,6 +11,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	TRAFFIC_REPORT_MAX_BUFFER_SIZE = 100
+	TRAFFIC_REPORT_WORKER_COUNT    = 10
+)
+
 type TrafficReportStore struct {
 	name           string
 	logger         *zap.SugaredLogger
@@ -46,49 +51,73 @@ func (s *TrafficReportStore) AddTrafficReport(ctx context.Context, report *Traff
 	return nil
 }
 
-func (s *TrafficReportStore) flushTrafficReport(ctx context.Context) error {
-	if s.manager == nil || s.logger == nil {
-		return
-	}
-	logger := s.logger
-	ps := s.manager.ps
-	trafficReportBuffer := make(chan *TrafficReport, 100)
+func (s *TrafficReportStore) processTrafficReport(ctx context.Context) error {
+	curTrafficReportBuffer := make(chan *TrafficReport, TRAFFIC_REPORT_MAX_BUFFER_SIZE)
 	trafficReportBufferSize := 0
 	for {
-		getCtx, cancel := context.WithTimeout(context.Background(), time.Second*1)
-		defer cancel()
-		if tr, err := s.getTrafficReport(getCtx); err != nil {
-			// if err == timeoutError...
-
-		} else {
-			trafficReportBuffer <- tr
-			trafficReportBufferSize = trafficReportBufferSize + 1
-			if trafficReportBufferSize == 100 {
-				if ps != nil {
-					ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
-					defer cancel()
-					var trafficReports []interface{}
-					for i := 0; i < trafficReportBufferSize; i = i + 1 {
-						trafficReport := <-trafficReportBuffer
-						trafficReports = append(trafficReports, *trafficReport)
-					}
-					if err := ps.insertMany(ctx, TRCollection, trafficReports); err != nil {
-						logger.Errorf("unable to evicted the traffic account: %v", err)
-					}
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			if tr, err := s.getTrafficReport(); err != nil {
+				if err == util.ErrTimeoutWaitingForTrafficReport {
+					trafficReportBuffer := curTrafficReportBuffer
+					go s.flushTrafficReport(trafficReportBuffer)
+					curTrafficReportBuffer = make(chan *TrafficReport, TRAFFIC_REPORT_MAX_BUFFER_SIZE)
+					trafficReportBufferSize = 0
 				} else {
-					logger.Errorf("eviction failed: %v", util.ErrPersistentStorageNotInited)
-					return
+					return err
+				}
+			} else {
+				if trafficReportBufferSize < TRAFFIC_REPORT_MAX_BUFFER_SIZE {
+					curTrafficReportBuffer <- tr
+					trafficReportBufferSize++
+				} else {
+					trafficReportBuffer := curTrafficReportBuffer
+					go s.flushTrafficReport(trafficReportBuffer)
+					curTrafficReportBuffer = make(chan *TrafficReport, TRAFFIC_REPORT_MAX_BUFFER_SIZE)
+					trafficReportBufferSize = 0
 				}
 			}
 		}
-
 	}
+}
 
+func (s *TrafficReportStore) flushTrafficReport(trafficReportBuffer chan *TrafficReport) error {
+	if s.manager == nil {
+		return util.ErrStoreManagerNotInited
+	}
+	if s.logger == nil {
+		return util.ErrLoggerNotInited
+	}
+	logger := s.logger
+	ps := s.manager.ps
+	if ps != nil {
+		trafficReportBufferSize := len(trafficReportBuffer)
+		var trafficReports []interface{}
+		for i := 0; i < trafficReportBufferSize; i++ {
+			trafficReport := <-trafficReportBuffer
+			trafficReports = append(trafficReports, *trafficReport)
+		}
+		if err := ps.insertMany(context.Background(), TRCollection, trafficReports); err != nil {
+			logger.Errorf("unable to flush traffic reports to the database: %v", err)
+			return err
+		}
+	} else {
+		return util.ErrPersistentStorageNotInited
+	}
 	return nil
 }
 
-func (s *TrafficReportStore) getTrafficReport(ctx context.Context) (*TrafficReport, error) {
-
+func (s *TrafficReportStore) getTrafficReport() (*TrafficReport, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	defer cancel()
+	select {
+	case <-ctx.Done():
+		return nil, util.ErrTimeoutWaitingForTrafficReport
+	case tr := <-s.trafficReports:
+		return tr, nil
+	}
 }
 
 func (s *TrafficReportStore) initCache(ctx context.Context) error {
@@ -132,14 +161,10 @@ func (s *TrafficReportStore) launch(ctx context.Context, eg *errgroup.Group) err
 			return err
 		}
 	}
-	eg.Go(func() error {
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			}
-		}
-	})
+	for i := 0; i < TRAFFIC_REPORT_WORKER_COUNT; i++ {
+		eg.Go(func() error {
+			return s.processTrafficReport(ctx)
+		})
+	}
 	return nil
-
 }

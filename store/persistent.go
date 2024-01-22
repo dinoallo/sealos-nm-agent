@@ -188,7 +188,8 @@ func (p *persistent) insertMany(ctx context.Context, collMeta Coll, items []inte
 	} else {
 		insertCtx, cancel := context.WithTimeout(ctx, DB_CONNECTION_TIMEOUT)
 		defer cancel()
-		if _, err := coll.InsertMany(insertCtx, items); err != nil {
+		opts := options.InsertMany().SetOrdered(false)
+		if _, err := coll.InsertMany(insertCtx, items, opts); err != nil {
 			return err
 		}
 	}
