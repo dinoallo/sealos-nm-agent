@@ -7,7 +7,7 @@ import (
 type TrafficDirection uint32
 
 const (
-	CACHE_ENTRIES_SIZE = 8192
+	CACHE_ENTRIES_SIZE = 1e6
 	CACHE_EXPIRED_TIME = time.Millisecond * 10
 )
 const (

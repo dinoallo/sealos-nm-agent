@@ -32,9 +32,6 @@ func (bf *Factory) Launch(ctx context.Context) error {
 
 	log.Infof("launching traffic event reader...")
 	go bf.readTraffic(ctx, IPv4Egress.TypeInt)
-	for i := 0; i < TRAFFIC_CONSUMER_COUNT; i++ {
-		go bf.processTraffic(ctx)
-	}
 	log.Infof("traffic counting factory launched")
 	return nil
 }

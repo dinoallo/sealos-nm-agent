@@ -116,26 +116,24 @@ func (s *CiliumEndpointStore) getName() string {
 }
 
 func (s *CiliumEndpointStore) launch(ctx context.Context, eg *errgroup.Group) error {
-	for i := 0; i < CILIUM_ENDPOINT_WORKER_COUNT; i++ {
-		eg.Go(func() error {
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				default:
-					if currentNode, err := os.Hostname(); err != nil {
-						return err
-					} else {
-						if s.GetCurrentNode() != currentNode {
-							s.logger.Infof("updateing the current node to %v", currentNode)
-							s.nodeMutex.Lock()
-							s.currentNode = currentNode
-							s.nodeMutex.Unlock()
-						}
+	eg.Go(func() error {
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
+				if currentNode, err := os.Hostname(); err != nil {
+					return err
+				} else {
+					if s.GetCurrentNode() != currentNode {
+						s.logger.Infof("updateing the current node to %v", currentNode)
+						s.nodeMutex.Lock()
+						s.currentNode = currentNode
+						s.nodeMutex.Unlock()
 					}
 				}
 			}
-		})
-	}
+		}
+	})
 	return nil
 }

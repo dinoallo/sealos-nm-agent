@@ -182,6 +182,19 @@ func (p *persistent) insertOne(ctx context.Context, collMeta Coll, item interfac
 	return nil
 }
 
+func (p *persistent) insertMany(ctx context.Context, collMeta Coll, items []interface{}) error {
+	if coll, err := p.getCurrentCollection(collMeta); err != nil {
+		return err
+	} else {
+		insertCtx, cancel := context.WithTimeout(ctx, DB_CONNECTION_TIMEOUT)
+		defer cancel()
+		if _, err := coll.InsertMany(insertCtx, items); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (p *persistent) findCollection(ctx context.Context, collMeta Coll) (bool, error) {
 	if p.database == nil {
 		return false, util.ErrPersistentStorageNotInited

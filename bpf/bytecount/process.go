@@ -55,30 +55,20 @@ func (bf *Factory) readTraffic(ctx context.Context, t uint32) {
 			trafficRecord: &rec,
 			trafficType:   t,
 		}
-		bf.workQueue <- tr
+		go bf.processTraffic(ctx, tr)
 	}
 }
 
-func (bf *Factory) processTraffic(ctx context.Context) {
+func (bf *Factory) processTraffic(ctx context.Context, traffic Traffic) {
 	log := bf.logger
-
-	for {
-		select {
-		case <-ctx.Done():
-			break
-		case traffic := <-bf.workQueue:
-			var event bytecountTrafficEventT
-			if traffic.trafficRecord != nil {
-				if err := binary.Read(bytes.NewBuffer(traffic.trafficRecord.RawSample), bf.nativeEndian, &event); err != nil {
-					log.Infof("Failed to decode received data: %+v", err)
-					continue
-				}
-				t := traffic.trafficType
-				if err := bf.submit(ctx, &event, t); err != nil {
-					log.Infof("Failed to submit the traffic report: %+v", err)
-					continue
-				}
-			}
+	var event bytecountTrafficEventT
+	if traffic.trafficRecord != nil {
+		if err := binary.Read(bytes.NewBuffer(traffic.trafficRecord.RawSample), bf.nativeEndian, &event); err != nil {
+			log.Infof("Failed to decode received data: %+v", err)
+		}
+		t := traffic.trafficType
+		if err := bf.submit(ctx, &event, t); err != nil {
+			log.Infof("Failed to submit the traffic report: %+v", err)
 		}
 	}
 }
@@ -117,6 +107,7 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 		Identity:  identity.NumericIdentity(event.Identity),
 		Timestamp: time.Now(),
 	}
+	bf.logger.Infof("src_ip: %v => dst_ip: %v; %v bytes sent", srcIP.String(), dstIP.String(), event.Len)
 	bf.trStore.AddTrafficReport(ctx, report)
 	return nil
 }

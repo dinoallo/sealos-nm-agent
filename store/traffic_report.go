@@ -11,16 +11,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const (
-	TRAFFIC_REPORT_WORKER_COUNT = (2 << 10)
-)
-
 type TrafficReportStore struct {
 	name           string
 	logger         *zap.SugaredLogger
 	manager        *StoreManager
 	trafficReports chan *TrafficReport
-	cache          *lru_expirable.LRU[string, TrafficReport]
+	cache          *lru_expirable.LRU[string, *TrafficReport]
 }
 
 func NewTrafficReportStore(baseLogger *zap.SugaredLogger) (*TrafficReportStore, error) {
@@ -36,11 +32,6 @@ func NewTrafficReportStore(baseLogger *zap.SugaredLogger) (*TrafficReportStore, 
 }
 
 func (s *TrafficReportStore) AddTrafficReport(ctx context.Context, report *TrafficReport) error {
-	s.trafficReports <- report
-	return nil
-}
-
-func (s *TrafficReportStore) processTrafficReport(ctx context.Context, report *TrafficReport) error {
 	if report == nil {
 		return util.ErrTrafficReportNotInited
 	}
@@ -50,9 +41,54 @@ func (s *TrafficReportStore) processTrafficReport(ctx context.Context, report *T
 	if id, err := nanoid.New(); err != nil {
 		return err
 	} else {
-		s.cache.Add(id, *report)
+		s.cache.Add(id, report)
 	}
 	return nil
+}
+
+func (s *TrafficReportStore) flushTrafficReport(ctx context.Context) error {
+	if s.manager == nil || s.logger == nil {
+		return
+	}
+	logger := s.logger
+	ps := s.manager.ps
+	trafficReportBuffer := make(chan *TrafficReport, 100)
+	trafficReportBufferSize := 0
+	for {
+		getCtx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+		defer cancel()
+		if tr, err := s.getTrafficReport(getCtx); err != nil {
+			// if err == timeoutError...
+
+		} else {
+			trafficReportBuffer <- tr
+			trafficReportBufferSize = trafficReportBufferSize + 1
+			if trafficReportBufferSize == 100 {
+				if ps != nil {
+					ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+					defer cancel()
+					var trafficReports []interface{}
+					for i := 0; i < trafficReportBufferSize; i = i + 1 {
+						trafficReport := <-trafficReportBuffer
+						trafficReports = append(trafficReports, *trafficReport)
+					}
+					if err := ps.insertMany(ctx, TRCollection, trafficReports); err != nil {
+						logger.Errorf("unable to evicted the traffic account: %v", err)
+					}
+				} else {
+					logger.Errorf("eviction failed: %v", util.ErrPersistentStorageNotInited)
+					return
+				}
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (s *TrafficReportStore) getTrafficReport(ctx context.Context) (*TrafficReport, error) {
+
 }
 
 func (s *TrafficReportStore) initCache(ctx context.Context) error {
@@ -60,28 +96,13 @@ func (s *TrafficReportStore) initCache(ctx context.Context) error {
 	if p == nil {
 		return util.ErrPersistentStorageNotInited
 	}
-	cache := lru_expirable.NewLRU[string, TrafficReport](CACHE_ENTRIES_SIZE, s.onEvicted, CACHE_EXPIRED_TIME)
+	cache := lru_expirable.NewLRU[string, *TrafficReport](CACHE_ENTRIES_SIZE, s.onEvicted, CACHE_EXPIRED_TIME)
 	s.cache = cache
 	return nil
 }
 
-func (s *TrafficReportStore) onEvicted(key string, value TrafficReport) {
-	if s.manager == nil || s.logger == nil {
-		return
-	}
-	logger := s.logger
-	ps := s.manager.ps
-	if ps != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
-		defer cancel()
-		if err := ps.insertOne(ctx, TRCollection, value); err != nil {
-			logger.Errorf("unable to evicted the traffic account: %v", err)
-		}
-	} else {
-		logger.Errorf("eviction failed: %v", util.ErrPersistentStorageNotInited)
-		return
-	}
-
+func (s *TrafficReportStore) onEvicted(key string, value *TrafficReport) {
+	s.trafficReports <- value
 }
 
 func (s *TrafficReportStore) setManager(manager *StoreManager) error {
@@ -111,20 +132,14 @@ func (s *TrafficReportStore) launch(ctx context.Context, eg *errgroup.Group) err
 			return err
 		}
 	}
-	for i := 0; i < TRAFFIC_REPORT_WORKER_COUNT; i++ {
-		eg.Go(func() error {
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case report := <-s.trafficReports:
-					if err := s.processTrafficReport(ctx, report); err != nil {
-						return err
-					}
-				}
+	eg.Go(func() error {
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
 			}
-		})
-	}
+		}
+	})
 	return nil
 
 }
