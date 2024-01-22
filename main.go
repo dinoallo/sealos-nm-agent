@@ -96,18 +96,6 @@ func main() {
 		log.Fatalf("unable to launch the factory: %v", err)
 	}
 
-	/*
-		bytecountExportChannel := make(chan *store.TrafficReport)
-		bf.AddExportChannel(ctx, bytecountExportChannel)
-
-		// Init Prom server
-		if promExporter, err := exporter.NewExporter(devLogger, bytecountExportChannel); err != nil {
-			log.Fatal(err)
-			return
-		} else {
-			promExporter.Launch(ctx)
-		} */
-
 	// Init GRPC Server
 
 	lis, err := net.Listen("tcp", GRPC_SERVER_PORT)

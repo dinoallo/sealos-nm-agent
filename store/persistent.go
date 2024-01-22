@@ -233,7 +233,14 @@ func (p *persistent) createTSDB(ctx context.Context, collMeta Coll, tf string, m
 		ExpireAfterSeconds: &eas,
 	}
 	if err := p.database.CreateCollection(ctx, collName, &opts); err != nil {
-		return err
+		// check if the error is caused by existing collection
+		if exists, findErr := p.findCollection(ctx, TRCollection); findErr != nil {
+			return fmt.Errorf("unable to create the collection: %v, and it's also unable check if the colletion exists: %v", err, findErr)
+		} else if !exists {
+			return err
+		} else {
+			return util.ErrCollectionAlreadyExists
+		}
 	}
 	return nil
 }
