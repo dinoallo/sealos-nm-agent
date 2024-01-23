@@ -126,6 +126,44 @@ func (p *persistent) deleteOne(ctx context.Context, collMeta Coll, k string, v s
 	return nil
 }
 
+func (p *persistent) deleteMany(ctx context.Context, collMeta Coll, items []interface{}) error {
+	if collMeta == CEPCollection {
+		var eids []int64
+		for _, item := range items {
+			if cep, ok := item.(CiliumEndpoint); ok {
+				eids = append(eids, cep.EndpointID)
+			} else {
+				return fmt.Errorf("conversion error; the interface is not a CiliumEndpoint")
+			}
+		}
+		if coll, err := p.getCurrentCollection(collMeta); err != nil {
+			return err
+		} else {
+			deleteCtx, cancel := context.WithTimeout(ctx, DB_CONNECTION_TIMEOUT)
+			defer cancel()
+			opts := options.Delete().SetHint(bson.D{{Key: "endpoint_id", Value: 1}})
+			filter := bson.D{
+				{
+					Key: "endpoint_id",
+					Value: bson.D{
+						{
+							Key:   "$in",
+							Value: eids,
+						},
+					},
+				},
+			}
+			if _, err := coll.DeleteMany(deleteCtx, filter, opts); err != nil {
+				return err
+			}
+		}
+	} else {
+		// not implemented
+		return nil
+	}
+	return nil
+}
+
 func (p *persistent) replaceOne(ctx context.Context, collMeta Coll, k string, v string, replacement interface{}) error {
 	if coll, err := p.getCurrentCollection(collMeta); err != nil {
 		return err
