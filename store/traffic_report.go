@@ -160,7 +160,9 @@ func (s *TrafficReportStore) launch(ctx context.Context, eg *errgroup.Group) err
 	} else if !found {
 		metaField := TRAFFIC_REPORT_META_FIELD
 		if err := s.manager.ps.createTSDB(ctx, TRCollection, TRAFFIC_REPORT_TIME_FIELD, &metaField); err != nil {
-			return err
+			if err != util.ErrCollectionAlreadyExists {
+				return err
+			}
 		}
 	}
 	for i := 0; i < TRAFFIC_REPORT_WORKER_COUNT; i++ {

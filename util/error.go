@@ -27,6 +27,7 @@ var (
 	ErrPersistentStorageNotInited = errors.New("the persistent storage is not passed or not initialized")
 	ErrCacheNotInited             = errors.New("the cache is not passed or not initialized")
 	ErrStoreManagerNotInited      = errors.New("the store manager is not passed or not initialized")
+	ErrCollectionAlreadyExists    = errors.New("the collection already exists")
 
 	// grpc
 	ErrRequestNotPassed = errors.New("the requests have not been passed")
