@@ -129,7 +129,7 @@ func (s *CiliumEndpointStore) initCache(ctx context.Context) error {
 	s.cepCache = lru_expirable.NewLRU[string, *CiliumEndpoint](CACHE_ENTRIES_SIZE, s.onEvicted, CACHE_ENTRIES_SIZE)
 	var ceps []CiliumEndpoint
 	//TODO: maybe try to find all the endpoints that are not stale
-	if err := p.findAll(ctx, CEPCollection, -1, ceps); err != nil {
+	if err := p.findAll(ctx, CEPCollection, -1, &ceps); err != nil {
 		return err
 	} else {
 		for _, cep := range ceps {
