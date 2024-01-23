@@ -283,6 +283,82 @@ func (p *persistent) createTSDB(ctx context.Context, collMeta Coll, tf string, m
 	return nil
 }
 
+func (p *persistent) findPartialTTLIndex(ctx context.Context, collMeta Coll, name string) (bool, error) {
+	var exists bool = false
+	if coll, err := p.getCurrentCollection(collMeta); err != nil {
+		return false, err
+	} else {
+		listCtx, cancel := context.WithTimeout(context.Background(), DB_CONNECTION_TIMEOUT)
+		defer cancel()
+		if cursor, err := coll.Indexes().List(listCtx); err != nil {
+			return false, err
+		} else {
+			var results []bson.M
+			if err := cursor.All(listCtx, &results); err != nil {
+				return false, err
+			} else {
+				for _, result := range results {
+					if _name, ok := result["name"]; ok && _name == name {
+						exists = true
+						break
+					}
+				}
+			}
+		}
+	}
+	return exists, nil
+}
+
+func (p *persistent) setupCiliumEndpointAutoDeletion(ctx context.Context, collMeta Coll, name string) error {
+	if p.database == nil {
+		return util.ErrPersistentStorageNotInited
+	}
+	var eas int32 = DEFAULT_EXPIRE_AFTER_SECONDS
+	if coll, err := p.getCurrentCollection(collMeta); err != nil {
+		return err
+	} else {
+		key := bson.D{
+			{
+				Key:   "created_time",
+				Value: 1,
+			},
+		}
+		pfe := bson.D{
+			{
+				Key: "deleted_time",
+				Value: bson.D{
+					{
+						Key:   "$gt",
+						Value: 0,
+					},
+				},
+			},
+		}
+		indexName := name
+		opts := options.IndexOptions{
+			Name:                    &indexName,
+			ExpireAfterSeconds:      &eas,
+			PartialFilterExpression: pfe,
+		}
+		indexModel := mongo.IndexModel{
+			Keys:    key,
+			Options: &opts,
+		}
+		createIndexCtx, cancel := context.WithTimeout(context.Background(), DB_CONNECTION_TIMEOUT)
+		defer cancel()
+		if _, err := coll.Indexes().CreateOne(createIndexCtx, indexModel); err != nil {
+			if exists, findErr := p.findPartialTTLIndex(createIndexCtx, collMeta, name); findErr != nil {
+				return fmt.Errorf("unable to create the partial ttl index: %v, and it's also unable check if the index exists: %v", err, findErr)
+			} else if !exists {
+				return err
+			} else {
+				return util.ErrPartialTTLIndexAlreadyExists
+			}
+		}
+	}
+	return nil
+}
+
 func (p *persistent) getCurrentCollection(collMeta Coll) (*mongo.Collection, error) {
 	db := p.database
 	if db == nil {

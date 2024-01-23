@@ -15,6 +15,7 @@ import (
 
 const (
 	CILIUM_ENDPOINT_WORKER_COUNT = 5
+	CILIUM_ENDPOINT_PTI_NAME     = "stale"
 )
 
 type CiliumEndpointStore struct {
@@ -205,6 +206,21 @@ func (s *CiliumEndpointStore) getName() string {
 }
 
 func (s *CiliumEndpointStore) launch(ctx context.Context, eg *errgroup.Group) error {
+	if s.manager == nil {
+		return util.ErrStoreManagerNotInited
+	}
+	if s.manager.ps == nil {
+		return util.ErrPersistentStorageNotInited
+	}
+	if found, err := s.manager.ps.findPartialTTLIndex(ctx, CEPCollection, CILIUM_ENDPOINT_PTI_NAME); err != nil {
+		return err
+	} else if !found {
+		if err := s.manager.ps.setupCiliumEndpointAutoDeletion(ctx, CEPCollection, CILIUM_ENDPOINT_PTI_NAME); err != nil {
+			if err != util.ErrPartialTTLIndexAlreadyExists {
+				return err
+			}
+		}
+	}
 	eg.Go(func() error {
 		for {
 			select {

@@ -23,11 +23,12 @@ var (
 	ErrLoggerNotInited       = errors.New("the logger is not initialized")
 
 	// store
-	ErrStoreNotInited             = errors.New("the store is not passed or not initialized")
-	ErrPersistentStorageNotInited = errors.New("the persistent storage is not passed or not initialized")
-	ErrCacheNotInited             = errors.New("the cache is not passed or not initialized")
-	ErrStoreManagerNotInited      = errors.New("the store manager is not passed or not initialized")
-	ErrCollectionAlreadyExists    = errors.New("the collection already exists")
+	ErrStoreNotInited               = errors.New("the store is not passed or not initialized")
+	ErrPersistentStorageNotInited   = errors.New("the persistent storage is not passed or not initialized")
+	ErrCacheNotInited               = errors.New("the cache is not passed or not initialized")
+	ErrStoreManagerNotInited        = errors.New("the store manager is not passed or not initialized")
+	ErrCollectionAlreadyExists      = errors.New("the collection already exists")
+	ErrPartialTTLIndexAlreadyExists = errors.New("the partial ttl index already exists")
 
 	// grpc
 	ErrRequestNotPassed = errors.New("the requests have not been passed")
