@@ -12,7 +12,7 @@ RUN go mod download
 
 # Copy the go source
 COPY bpf/ bpf/
-COPY server/ server/
+COPY service/ service/
 COPY proto/ proto/
 COPY util/ util/
 COPY store/ store/
