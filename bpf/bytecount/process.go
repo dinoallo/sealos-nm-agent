@@ -44,7 +44,7 @@ func (bf *Factory) readTraffic(ctx context.Context, t uint32) error {
 				return nil
 			} else {
 				log.Errorf("unable to read from perf event reader: %v", err)
-				continue
+				return nil
 			}
 		}
 		if rec.LostSamples != 0 {

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	DB_CONNECTION_TIMEOUT = time.Second * 5
+	DB_CONNECTION_TIMEOUT = time.Second * 10
 	MAX_POOL_SIZE         = 100
 
 	DEFAULT_EXPIRE_AFTER_SECONDS = 3600
@@ -54,21 +54,22 @@ func (p *persistent) Launch(ctx context.Context, mainEg *errgroup.Group) error {
 }
 
 func (p *persistent) Stop(ctx context.Context) error {
-	p.disconnect(ctx)
-	return nil
+	return p.disconnect(ctx)
 }
 
 func (p *persistent) connect(ctx context.Context) error {
 	// initialize the database
 	cred := p.cred
 	clientOps := options.Client().ApplyURI(cred.DBURI).SetMaxPoolSize(MAX_POOL_SIZE)
-	if client, err := mongo.Connect(ctx, clientOps); err != nil {
+	connectCtx, cancel := context.WithTimeout(ctx, DB_CONNECTION_TIMEOUT)
+	defer cancel()
+	if client, err := mongo.Connect(connectCtx, clientOps); err != nil {
 		return err
 	} else {
 		p.dbClient = client
 	}
 	//TODO: ping before doing any operations
-	if err := p.dbClient.Ping(ctx, readpref.Primary()); err != nil {
+	if err := p.dbClient.Ping(connectCtx, readpref.Primary()); err != nil {
 		return err
 	} else {
 		p.database = p.dbClient.Database(cred.DB)
@@ -290,9 +291,11 @@ func (p *persistent) createTSDB(ctx context.Context, collMeta Coll, tf string, m
 		},
 		ExpireAfterSeconds: &eas,
 	}
-	if err := p.database.CreateCollection(ctx, collName, &opts); err != nil {
+	createCtx, cancel := context.WithTimeout(ctx, DB_CONNECTION_TIMEOUT)
+	defer cancel()
+	if err := p.database.CreateCollection(createCtx, collName, &opts); err != nil {
 		// check if the error is caused by existing collection
-		if exists, findErr := p.findCollection(ctx, TRCollection); findErr != nil {
+		if exists, findErr := p.findCollection(createCtx, TRCollection); findErr != nil {
 			return fmt.Errorf("unable to create the collection: %v, and it's also unable check if the colletion exists: %v", err, findErr)
 		} else if !exists {
 			return err
@@ -308,7 +311,7 @@ func (p *persistent) findPartialTTLIndex(ctx context.Context, collMeta Coll, nam
 	if coll, err := p.getCurrentCollection(collMeta); err != nil {
 		return false, err
 	} else {
-		listCtx, cancel := context.WithTimeout(context.Background(), DB_CONNECTION_TIMEOUT)
+		listCtx, cancel := context.WithTimeout(ctx, DB_CONNECTION_TIMEOUT)
 		defer cancel()
 		if cursor, err := coll.Indexes().List(listCtx); err != nil {
 			return false, err
@@ -364,7 +367,7 @@ func (p *persistent) setupCiliumEndpointAutoDeletion(ctx context.Context, collMe
 			Keys:    key,
 			Options: &opts,
 		}
-		createIndexCtx, cancel := context.WithTimeout(context.Background(), DB_CONNECTION_TIMEOUT)
+		createIndexCtx, cancel := context.WithTimeout(ctx, DB_CONNECTION_TIMEOUT)
 		defer cancel()
 		if _, err := coll.Indexes().CreateOne(createIndexCtx, indexModel); err != nil {
 			if exists, findErr := p.findPartialTTLIndex(createIndexCtx, collMeta, name); findErr != nil {

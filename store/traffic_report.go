@@ -74,17 +74,14 @@ func (s *TrafficReportStore) startWorker(ctx context.Context) error {
 	}
 	workerEg := errgroup.Group{}
 	workerEg.SetLimit(TRAFFIC_REPORT_WORKER_COUNT)
-	go func() {
-		for {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
 			workerEg.Go(func() error {
 				return s.processTrafficReport(ctx)
 			})
-		}
-	}()
-	//TODO: check me
-	for {
-		if err := workerEg.Wait(); err != nil {
-			logger.Errorf("unable to put worker to work %v", err)
 		}
 	}
 }

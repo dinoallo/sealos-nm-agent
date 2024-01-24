@@ -86,11 +86,16 @@ func (s *TrafficService) serve(ctx context.Context) error {
 	serveEg := errgroup.Group{}
 	serveEg.SetLimit(1)
 	for {
-		serveEg.Go(func() error {
-			return svcRegistrar.Serve(lis)
-		})
-		if err := serveEg.Wait(); err != nil {
-			logger.Errorf("unable to serve: %v", err)
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+			serveEg.Go(func() error {
+				if err := svcRegistrar.Serve(lis); err != nil {
+					logger.Errorf("failed to serve: %v", err)
+				}
+				return nil
+			})
 		}
 	}
 }

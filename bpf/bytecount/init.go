@@ -32,21 +32,21 @@ func (bf *Factory) Launch(ctx context.Context, mainEg *errgroup.Group) error {
 	mainEg.Go(func() error {
 		workerEg := errgroup.Group{}
 		workerEg.SetLimit(1)
-		go func() {
-			for {
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
 				workerEg.Go(
 					func() error {
-						return bf.readTraffic(ctx, IPv4Egress.TypeInt)
+						if err := bf.readTraffic(ctx, IPv4Egress.TypeInt); err != nil {
+							log.Errorf("unable to read traffic: %v", err)
+						}
+						return nil
 					})
-			}
-		}()
-		for {
-			if err := workerEg.Wait(); err != nil {
-				log.Errorf("unable to read traffic: %v", err)
 			}
 		}
 	})
-	go bf.readTraffic(ctx, IPv4Egress.TypeInt)
 	log.Infof("traffic counting factory launched")
 	return nil
 }

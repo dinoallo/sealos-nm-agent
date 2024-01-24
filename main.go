@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/dinoallo/sealos-networkmanager-agent/bpf/bytecount"
@@ -111,13 +112,19 @@ func main() {
 		log.Infof("successfully launched component %v", name)
 	}
 	<-sig
+	cancel()
+	close(sig)
+	if err := eg.Wait(); err != nil {
+		log.Errorf("%v", err)
+	}
+	log.Infof("closing all the components")
+	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	for _, component := range components {
 		name := component.GetName()
-		if err := component.Stop(ctx); err != nil {
+		if err := component.Stop(stopCtx); err != nil {
 			log.Fatalf("failed to stop component %v: %v", name, err)
 			return
 		}
 		log.Infof("successfully stopped component %v", name)
 	}
-	close(sig)
 }
