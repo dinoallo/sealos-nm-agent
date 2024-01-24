@@ -31,7 +31,8 @@ var (
 	ErrPartialTTLIndexAlreadyExists = errors.New("the partial ttl index already exists")
 
 	// grpc
-	ErrRequestNotPassed = errors.New("the requests have not been passed")
+	ErrRequestNotPassed          = errors.New("the requests have not been passed")
+	ErrServiceRegistrarNotInited = errors.New("the service registrar is not initialized or not passed")
 
 	// factory
 	ErrFactoryNotInited = errors.New("the factory is not passed or not initialized")

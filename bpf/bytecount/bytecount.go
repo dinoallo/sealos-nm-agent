@@ -16,6 +16,7 @@ import (
 type Factory struct {
 	objs bytecountObjects
 	// after calling New(), the following are safe to use
+	name         string
 	logger       *zap.SugaredLogger
 	cepStore     *store.CiliumEndpointStore
 	trStore      *store.TrafficReportStore
@@ -64,7 +65,8 @@ func NewFactory(parentLogger *zap.SugaredLogger, trStore *store.TrafficReportSto
 	if parentLogger == nil {
 		return nil, util.ErrParentLoggerNotInited
 	}
-	logger := parentLogger.With("component", "bytecount_factory")
+	name := "traffic_factory"
+	logger := parentLogger.With("component", name)
 	// init workqueue
 	workQueue := make(chan Traffic)
 	// get host endian
@@ -86,6 +88,10 @@ func NewFactory(parentLogger *zap.SugaredLogger, trStore *store.TrafficReportSto
 		trStore:      trStore,
 		cepStore:     cepStore,
 	}, nil
+}
+
+func (bf *Factory) GetName() string {
+	return bf.name
 }
 
 func (bf *Factory) AddExportChannel(ctx context.Context, ec chan *store.TrafficReport) {

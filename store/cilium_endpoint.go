@@ -19,35 +19,70 @@ const (
 )
 
 type CiliumEndpointStore struct {
-	name     string
-	logger   *zap.SugaredLogger
-	manager  *StoreManager
-	cepCache *lru_expirable.LRU[string, *CiliumEndpoint]
-
+	name        string
+	logger      *zap.SugaredLogger
+	p           *persistent
+	cepCache    *lru_expirable.LRU[string, *CiliumEndpoint]
 	nodeMutex   sync.RWMutex
 	currentNode string
 }
 
-func NewCiliumEndpointStore(baseLogger *zap.SugaredLogger) (*CiliumEndpointStore, error) {
+func NewCiliumEndpointStore(baseLogger *zap.SugaredLogger, p *persistent) (*CiliumEndpointStore, error) {
 	if baseLogger == nil {
 		return nil, util.ErrParentLoggerNotInited
 	}
+	name := "cilium_endpoint_store"
 	return &CiliumEndpointStore{
-		name:        "cilium_endpoints",
-		logger:      baseLogger.With(zap.String("component", "cilium_endpoint_store")),
+		name:        name,
+		p:           p,
+		logger:      baseLogger.With(zap.String("component", name)),
 		nodeMutex:   sync.RWMutex{},
 		currentNode: "",
 	}, nil
+}
+
+func (s *CiliumEndpointStore) GetName() string {
+	return s.name
+}
+
+func (s *CiliumEndpointStore) Launch(ctx context.Context, mainEg *errgroup.Group) error {
+	p := s.p
+	if p == nil {
+		return util.ErrPersistentStorageNotInited
+	}
+	if found, err := p.findPartialTTLIndex(ctx, CEPCollection, CILIUM_ENDPOINT_PTI_NAME); err != nil {
+		return err
+	} else if !found {
+		if err := p.setupCiliumEndpointAutoDeletion(ctx, CEPCollection, CILIUM_ENDPOINT_PTI_NAME); err != nil {
+			if err != util.ErrPartialTTLIndexAlreadyExists {
+				return err
+			}
+		}
+	}
+	mainEg.Go(func() error {
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
+				if err := s.setHostName(); err != nil {
+					return err
+				}
+			}
+		}
+	})
+	return nil
+}
+
+func (s *CiliumEndpointStore) Stop(ctx context.Context) error {
+	return nil
 }
 
 func (s *CiliumEndpointStore) GetAll(ctx context.Context, ceps *[]CiliumEndpoint) (bool, error) {
 	if ceps == nil {
 		return false, fmt.Errorf("a slice of CiliumEndpoint should be created")
 	}
-	if s.manager == nil {
-		return false, util.ErrStoreManagerNotInited
-	}
-	p := s.manager.ps
+	p := s.p
 	if p == nil {
 		return false, util.ErrPersistentStorageNotInited
 	}
@@ -123,7 +158,7 @@ func (s *CiliumEndpointStore) initCache(ctx context.Context) error {
 	if err := s.setHostName(); err != nil {
 		return err
 	}
-	p := s.manager.ps
+	p := s.p
 	if p == nil {
 		return util.ErrPersistentStorageNotInited
 	}
@@ -153,11 +188,7 @@ func (s *CiliumEndpointStore) onEvicted(key string, value *CiliumEndpoint) {
 		return
 	}
 	logger := s.logger
-	if s.manager == nil {
-		logger.Errorf("%v", util.ErrStoreManagerNotInited)
-		return
-	}
-	p := s.manager.ps
+	p := s.p
 	if p == nil {
 		logger.Errorf("%v", util.ErrPersistentStorageNotInited)
 		return
@@ -193,6 +224,7 @@ func (s *CiliumEndpointStore) getKey(eid int64, node string) string {
 	return fmt.Sprintf("%s/%s", node, fmt.Sprint(eid))
 }
 
+/*
 func (s *CiliumEndpointStore) setManager(manager *StoreManager) error {
 	if manager == nil {
 		return util.ErrStoreManagerNotInited
@@ -204,6 +236,7 @@ func (s *CiliumEndpointStore) setManager(manager *StoreManager) error {
 func (s *CiliumEndpointStore) getName() string {
 	return s.name
 }
+
 
 func (s *CiliumEndpointStore) launch(ctx context.Context, eg *errgroup.Group) error {
 	if s.manager == nil {
@@ -235,3 +268,4 @@ func (s *CiliumEndpointStore) launch(ctx context.Context, eg *errgroup.Group) er
 	})
 	return nil
 }
+*/

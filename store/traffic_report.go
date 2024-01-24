@@ -19,21 +19,74 @@ const (
 type TrafficReportStore struct {
 	name           string
 	logger         *zap.SugaredLogger
-	manager        *StoreManager
+	p              *persistent
 	trafficReports chan *TrafficReport
 	cache          *lru_expirable.LRU[string, *TrafficReport]
 }
 
-func NewTrafficReportStore(baseLogger *zap.SugaredLogger) (*TrafficReportStore, error) {
+func NewTrafficReportStore(baseLogger *zap.SugaredLogger, p *persistent) (*TrafficReportStore, error) {
 	if baseLogger == nil {
 		return nil, util.ErrParentLoggerNotInited
 	}
 	trafficReports := make(chan *TrafficReport)
+	name := "traffic_report_store"
 	return &TrafficReportStore{
-		name:           "traffic_reports",
-		logger:         baseLogger.With(zap.String("component", "traffic_account_store")),
+		name:           name,
+		p:              p,
+		logger:         baseLogger.With(zap.String("component", name)),
 		trafficReports: trafficReports,
 	}, nil
+}
+
+func (s *TrafficReportStore) GetName() string {
+	return s.name
+}
+
+func (s *TrafficReportStore) Launch(ctx context.Context, mainEg *errgroup.Group) error {
+	p := s.p
+	if p == nil {
+		return util.ErrPersistentStorageNotInited
+	}
+	if found, err := p.findCollection(ctx, TRCollection); err != nil {
+		return err
+	} else if !found {
+		metaField := TRAFFIC_REPORT_META_FIELD
+		if err := p.createTSDB(ctx, TRCollection, TRAFFIC_REPORT_TIME_FIELD, &metaField); err != nil {
+			if err != util.ErrCollectionAlreadyExists {
+				return err
+			}
+		}
+	}
+	mainEg.Go(func() error {
+		return s.startWorker(ctx)
+	})
+	return nil
+}
+
+func (s *TrafficReportStore) Stop(ctx context.Context) error {
+	return nil
+}
+
+func (s *TrafficReportStore) startWorker(ctx context.Context) error {
+	logger := s.logger
+	if logger == nil {
+		return util.ErrLoggerNotInited
+	}
+	workerEg := errgroup.Group{}
+	workerEg.SetLimit(TRAFFIC_REPORT_WORKER_COUNT)
+	go func() {
+		for {
+			workerEg.Go(func() error {
+				return s.processTrafficReport(ctx)
+			})
+		}
+	}()
+	//TODO: check me
+	for {
+		if err := workerEg.Wait(); err != nil {
+			logger.Errorf("unable to put worker to work %v", err)
+		}
+	}
 }
 
 func (s *TrafficReportStore) AddTrafficReport(ctx context.Context, report *TrafficReport) error {
@@ -84,14 +137,11 @@ func (s *TrafficReportStore) processTrafficReport(ctx context.Context) error {
 }
 
 func (s *TrafficReportStore) flushTrafficReport(trafficReportBuffer chan *TrafficReport) error {
-	if s.manager == nil {
-		return util.ErrStoreManagerNotInited
-	}
 	if s.logger == nil {
 		return util.ErrLoggerNotInited
 	}
 	logger := s.logger
-	ps := s.manager.ps
+	ps := s.p
 	if ps != nil {
 		trafficReportBufferSize := len(trafficReportBuffer)
 		if trafficReportBufferSize > 0 {
@@ -123,7 +173,7 @@ func (s *TrafficReportStore) getTrafficReport() (*TrafficReport, error) {
 }
 
 func (s *TrafficReportStore) initCache(ctx context.Context) error {
-	p := s.manager.ps
+	p := s.p
 	if p == nil {
 		return util.ErrPersistentStorageNotInited
 	}
@@ -136,6 +186,7 @@ func (s *TrafficReportStore) onEvicted(key string, value *TrafficReport) {
 	s.trafficReports <- value
 }
 
+/*
 func (s *TrafficReportStore) setManager(manager *StoreManager) error {
 	if manager == nil {
 		return util.ErrStoreManagerNotInited
@@ -172,3 +223,4 @@ func (s *TrafficReportStore) launch(ctx context.Context, eg *errgroup.Group) err
 	}
 	return nil
 }
+*/

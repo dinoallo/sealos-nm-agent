@@ -10,6 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -25,17 +26,36 @@ type DBCred struct {
 }
 
 type persistent struct {
+	name     string
 	dbClient *mongo.Client
 	database *mongo.Database
 	cred     DBCred
 }
 
-func newPersistent(cred DBCred) *persistent {
+func NewPersistent(cred DBCred) *persistent {
+	name := "persistent_store"
 	return &persistent{
+		name:     name,
 		dbClient: nil,
 		database: nil,
 		cred:     cred,
 	}
+}
+
+func (p *persistent) GetName() string {
+	return p.name
+}
+
+func (p *persistent) Launch(ctx context.Context, mainEg *errgroup.Group) error {
+	mainEg.Go(func() error {
+		return p.connect(ctx)
+	})
+	return nil
+}
+
+func (p *persistent) Stop(ctx context.Context) error {
+	p.disconnect(ctx)
+	return nil
 }
 
 func (p *persistent) connect(ctx context.Context) error {

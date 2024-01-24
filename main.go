@@ -6,29 +6,27 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/dinoallo/sealos-networkmanager-agent/bpf/bytecount"
-	// 	"github.com/dinoallo/sealos-networkmanager-agent/exporter"
-	"github.com/dinoallo/sealos-networkmanager-agent/server"
-	"github.com/dinoallo/sealos-networkmanager-agent/store"
+	"github.com/dinoallo/sealos-networkmanager-agent/service"
 
-	"net"
+	"github.com/dinoallo/sealos-networkmanager-agent/store"
 
 	"go.uber.org/zap"
 
-	counterpb "github.com/dinoallo/sealos-networkmanager-agent/proto/agent"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/keepalive"
-	"google.golang.org/grpc/reflection"
+	"golang.org/x/sync/errgroup"
 )
 
+type Component interface {
+	GetName() string
+	Launch(ctx context.Context, mainEg *errgroup.Group) error
+	Stop(ctx context.Context) error
+}
+
 const (
-	// Port for gRPC server to listen to
-	GRPC_SERVER_PORT = "0.0.0.0:50051"
-	DB_NAME_ENV      = "DB_NAME"
-	DB_URI_ENV       = "DB_URI"
+	DB_NAME_ENV = "DB_NAME"
+	DB_URI_ENV  = "DB_URI"
 )
 
 func main() {
@@ -57,77 +55,69 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Init Store
+	// Init Stores
 	cred := store.DBCred{
 		DBURI: dbUri,
 		DB:    dbName,
 	}
-	stm, err := store.NewStoreManager(cred, devLogger)
-	if err != nil {
-		log.Fatalf("unable to start the store: %v", err)
-	}
-	trStore, err := store.NewTrafficReportStore(devLogger)
-	if err != nil {
-		log.Fatalf("unable to create the store for traffic reports")
-	} else {
-		stm.RegisterStore(trStore)
-	}
-	if err != nil {
-		log.Fatalf("unable to create the store for traffic accounts")
-	} else {
-		stm.RegisterStore(trStore)
-	}
-	cepStore, err := store.NewCiliumEndpointStore(devLogger)
+
+	components := make(map[int]Component)
+	var componentCount int = 0
+
+	p := store.NewPersistent(cred)
+	components[componentCount] = p
+	componentCount++
+
+	cepStore, err := store.NewCiliumEndpointStore(devLogger, p)
 	if err != nil {
 		log.Fatalf("unable to crate the store for cilium endpoints")
-	} else {
-		stm.RegisterStore(cepStore)
+		return
 	}
-	if err := stm.Launch(ctx); err != nil {
-		log.Fatalf("unable to launch the store manager: %v", err)
+	components[componentCount] = cepStore
+	componentCount++
+
+	trStore, err := store.NewTrafficReportStore(devLogger, p)
+	if err != nil {
+		log.Fatalf("unable to crate the store for traffic reports")
+		return
 	}
+	components[componentCount] = trStore
+	componentCount++
+
 	// Init Factories
 	bf, err := bytecount.NewFactory(devLogger, trStore, cepStore)
 	if err != nil {
 		log.Fatalf("unable to create the factory: %v", err)
 	}
+	components[componentCount] = bf
+	componentCount++
 
-	if err := bf.Launch(ctx); err != nil {
-		log.Fatalf("unable to launch the factory: %v", err)
-	}
-
-	// Init GRPC Server
-
-	lis, err := net.Listen("tcp", GRPC_SERVER_PORT)
-
+	// Init Services
+	ts, err := service.NewTrafficService(devLogger, bf, cepStore)
 	if err != nil {
-		log.Fatalf("failed connection: %v", err)
-	}
-
-	log.Infof("server listening at %v", lis.Addr())
-	s := grpc.NewServer(
-		grpc.KeepaliveParams(keepalive.ServerParameters{
-			MaxConnectionIdle: 5 * time.Minute,
-		}),
-	)
-
-	grpcServer, err := server.NewServer(devLogger, bf, cepStore)
-	if err != nil {
-		log.Fatalf("failed to create a new GRPC server: %v", err)
-	}
-
-	counterpb.RegisterCountingServiceServer(s, grpcServer)
-	reflection.Register(s)
-	go func() {
-		<-sig
-		cancel()
-		s.GracefulStop()
-		close(sig)
-	}()
-
-	if err := s.Serve(lis); err != nil {
-		log.Infof("failed to serve: %v", err)
+		log.Fatalf("failed to create new traffic service: %v", err)
 		return
 	}
+	components[componentCount] = ts
+	componentCount++
 
+	eg := &errgroup.Group{}
+	for _, component := range components {
+		name := component.GetName()
+		if err := component.Launch(ctx, eg); err != nil {
+			log.Fatalf("failed to launch component %v: %v", name, err)
+			return
+		}
+		log.Infof("successfully launched component %v", name)
+	}
+	<-sig
+	for _, component := range components {
+		name := component.GetName()
+		if err := component.Stop(ctx); err != nil {
+			log.Fatalf("failed to stop component %v: %v", name, err)
+			return
+		}
+		log.Infof("successfully stopped component %v", name)
+	}
+	close(sig)
 }

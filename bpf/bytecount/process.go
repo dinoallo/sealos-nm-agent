@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/cilium/cilium/pkg/identity"
@@ -14,7 +15,7 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/util"
 )
 
-func (bf *Factory) readTraffic(ctx context.Context, t uint32) {
+func (bf *Factory) readTraffic(ctx context.Context, t uint32) error {
 	log := bf.logger
 	objs := bf.objs
 	var eventArray *ebpf.Map
@@ -24,12 +25,11 @@ func (bf *Factory) readTraffic(ctx context.Context, t uint32) {
 	case IPv4Egress.TypeInt:
 		eventArray = objs.EgressTrafficEvents
 	default:
-		return
+		return fmt.Errorf("unknown direction")
 	}
 	er, err := perf.NewReader(eventArray, PERF_BUFFER_SIZE)
 	if err != nil {
-		log.Errorf("failed to create a new reader")
-		return
+		return fmt.Errorf("failed to create a new reader: %v", err)
 	}
 	go func(ctx context.Context) {
 		defer er.Close()
@@ -41,9 +41,9 @@ func (bf *Factory) readTraffic(ctx context.Context, t uint32) {
 		if err != nil {
 			if errors.Is(err, perf.ErrClosed) {
 				log.Infof("the perf event channel is closed")
-				return
+				return nil
 			} else {
-				log.Infof("reading from perf event reader: %v", err)
+				log.Errorf("unable to read from perf event reader: %v", err)
 				continue
 			}
 		}

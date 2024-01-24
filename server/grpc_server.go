@@ -3,12 +3,17 @@ package server
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/bpf/bytecount"
 	counterpb "github.com/dinoallo/sealos-networkmanager-agent/proto/agent"
 	"github.com/dinoallo/sealos-networkmanager-agent/store"
 	"github.com/dinoallo/sealos-networkmanager-agent/util"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/reflection"
 )
 
 type GRPCServer struct {
@@ -27,6 +32,20 @@ func NewServer(baseLogger *zap.SugaredLogger, bf *bytecount.Factory, cepStore *s
 		bytecountFactory:    bf,
 		ciliumEndpointStore: cepStore,
 	}, nil
+}
+
+func (s *GRPCServer) Launch(ctx context.Context, eg *errgroup.Group) error {
+	svcRegistrar := grpc.NewServer(
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionIdle: 10 * time.Second, // TODO: validate me
+		}),
+	)
+	counterpb.RegisterCountingServiceServer(svcRegistrar, svc)
+	return nil
+}
+
+func (s *GRPCServer) GetName() string {
+	return "grpc_server"
 }
 
 func (s *GRPCServer) CreateCounter(ctx context.Context, in *counterpb.CreateCounterRequest) (*counterpb.Empty, error) {
