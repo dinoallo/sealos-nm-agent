@@ -103,9 +103,10 @@ func main() {
 	componentCount++
 
 	eg := &errgroup.Group{}
-	for _, component := range components {
-		name := component.GetName()
-		if err := component.Launch(ctx, eg); err != nil {
+	l := len(components)
+	for i := 0; i < l; i++ {
+		name := components[i].GetName()
+		if err := components[i].Launch(ctx, eg); err != nil {
 			log.Fatalf("failed to launch component %v: %v", name, err)
 			return
 		}
@@ -119,9 +120,9 @@ func main() {
 	}
 	log.Infof("closing all the components")
 	stopCtx, cancel := context.WithTimeout(context.Background(), time.Second*20)
-	for _, component := range components {
-		name := component.GetName()
-		if err := component.Stop(stopCtx); err != nil {
+	for i := 0; i < l; i++ {
+		name := components[i].GetName()
+		if err := components[i].Stop(stopCtx); err != nil {
 			log.Fatalf("failed to stop component %v: %v", name, err)
 			return
 		}

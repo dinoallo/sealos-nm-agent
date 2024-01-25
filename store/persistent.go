@@ -47,8 +47,11 @@ func (p *persistent) GetName() string {
 }
 
 func (p *persistent) Launch(ctx context.Context, mainEg *errgroup.Group) error {
+	if err := p.connect(ctx); err != nil {
+		return err
+	}
 	mainEg.Go(func() error {
-		return p.connect(ctx)
+		return nil
 	})
 	return nil
 }
