@@ -46,6 +46,7 @@ func (s *CiliumEndpointStore) GetName() string {
 }
 
 func (s *CiliumEndpointStore) Launch(ctx context.Context, mainEg *errgroup.Group) error {
+	s.cepCache = lru_expirable.NewLRU[string, *CiliumEndpoint](CACHE_ENTRIES_SIZE, s.onEvicted, CACHE_ENTRIES_SIZE)
 	p := s.p
 	if p == nil {
 		return util.ErrPersistentStorageNotInited

@@ -43,6 +43,7 @@ func (s *TrafficReportStore) GetName() string {
 }
 
 func (s *TrafficReportStore) Launch(ctx context.Context, mainEg *errgroup.Group) error {
+	s.cache = lru_expirable.NewLRU[string, *TrafficReport](CACHE_ENTRIES_SIZE, s.onEvicted, CACHE_EXPIRED_TIME)
 	p := s.p
 	if p == nil {
 		return util.ErrPersistentStorageNotInited
