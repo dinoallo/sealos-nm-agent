@@ -98,6 +98,19 @@ func (s *CiliumEndpointStore) GetAll(ctx context.Context, ceps *[]CiliumEndpoint
 	return found, nil
 }
 
+func (s *CiliumEndpointStore) Find(ctx context.Context, eid int64) (bool, error) {
+	found := false
+	if s.cepCache == nil {
+		return false, util.ErrCacheNotInited
+	}
+	node := s.GetCurrentNode()
+	key := s.getKey(eid, node)
+	if _, ok := s.cepCache.Get(key); ok {
+		found = true
+	}
+	return found, nil
+}
+
 func (s *CiliumEndpointStore) Create(ctx context.Context, eid int64) error {
 	if s.cepCache == nil {
 		return util.ErrCacheNotInited
