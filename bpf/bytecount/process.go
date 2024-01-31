@@ -95,6 +95,12 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 	dstPort = uint32(event.DstPort)
 	srcIP := util.ToIP(__srcIP[0], nil, 4)
 	dstIP := util.ToIP(__dstIP[0], nil, 4)
+	// skip the following addresses
+	for _, ipAddr := range bf.ipAddrs {
+		if srcIP.String() == ipAddr || dstIP.String() == ipAddr {
+			return nil
+		}
+	}
 	report := &store.TrafficReport{
 		TrafficReportMeta: store.TrafficReportMetaData{
 			SrcIP:   srcIP.String(),

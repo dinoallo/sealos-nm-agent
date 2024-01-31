@@ -3,6 +3,7 @@ package bytecount
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"encoding/binary"
 
@@ -22,6 +23,8 @@ type Factory struct {
 	trStore      *store.TrafficReportStore
 	workQueue    chan Traffic
 	nativeEndian binary.ByteOrder
+	ipAddrs      []string
+
 	// the following are not safe to use, please check if it's nil
 	// before accessing it
 	bytecountExportChannel chan *store.TrafficReport
@@ -81,12 +84,26 @@ func NewFactory(parentLogger *zap.SugaredLogger, trStore *store.TrafficReportSto
 		return nil, util.ErrStoreNotInited
 	}
 
+	var ipAddrs []string
+	addr, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, err
+	}
+	for _, addr := range addr {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil || ipnet.IP.To16() != nil {
+				ipAddrs = append(ipAddrs, ipnet.IP.String())
+			}
+		}
+	}
+
 	return &Factory{
 		logger:       logger,
 		workQueue:    workQueue,
 		nativeEndian: nativeEndian,
 		trStore:      trStore,
 		cepStore:     cepStore,
+		ipAddrs:      ipAddrs,
 	}, nil
 }
 
