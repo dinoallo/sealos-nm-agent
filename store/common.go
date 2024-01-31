@@ -8,7 +8,7 @@ type TrafficDirection uint32
 
 const (
 	CACHE_ENTRIES_SIZE = 1e6
-	CACHE_EXPIRED_TIME = time.Millisecond * 100
+	CACHE_EXPIRED_TIME = time.Second * 1
 )
 const (
 	TRAFFIC_DIR_UNKNOWN TrafficDirection = iota
