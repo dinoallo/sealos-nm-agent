@@ -35,7 +35,10 @@ func NewTrafficService(baseLogger *zap.SugaredLogger, bf *bytecount.Factory, cep
 		return nil, fmt.Errorf("both the base logger and the factory shouldn't be nil")
 	}
 	svcRegistrar := grpc.NewServer(
-		grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionIdle: 1 * time.Minute}))
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    15 * time.Second,
+			Timeout: 5 * time.Second,
+		}))
 	name := "traffic_service"
 	return &TrafficService{
 		name:                name,
