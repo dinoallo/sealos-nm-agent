@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	DEFAULT_TRAFFIC_SERVICE_ADDRESS = "0.0.0.0:50051"
+	DEFAULT_TRAFFIC_SERVICE_ADDRESS = "0.0.0.0:5005"
 )
 
 type TrafficService struct {
