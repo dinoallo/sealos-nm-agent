@@ -12,8 +12,10 @@ import (
 )
 
 const (
-	TRAFFIC_REPORT_MAX_BUFFER_SIZE = 1e5
-	TRAFFIC_REPORT_WORKER_COUNT    = 10
+	TRAFFIC_REPORT_MAX_BUFFER_SIZE = (1 << 20)
+	TRAFFIC_REPORT_WORKER_COUNT    = (1 << 5)
+	TRAFFIC_REPORT_MANAGER_COUNT   = (1 << 3)
+	DEFAULT_COUNTER_DEADLINE       = time.Minute
 )
 
 type TrafficReportStore struct {
@@ -58,9 +60,18 @@ func (s *TrafficReportStore) Launch(ctx context.Context, mainEg *errgroup.Group)
 			}
 		}
 	}
-	mainEg.Go(func() error {
-		return s.startWorker(ctx)
-	})
+	managerEg := errgroup.Group{}
+	managerEg.SetLimit(TRAFFIC_REPORT_MANAGER_COUNT)
+	workerEg := errgroup.Group{}
+	workerEg.SetLimit(TRAFFIC_REPORT_WORKER_COUNT)
+	mainEg.Go(
+		func() error {
+			for {
+				managerEg.Go(func() error {
+					return s.startManager(ctx, &workerEg)
+				})
+			}
+		})
 	return nil
 }
 
@@ -68,22 +79,46 @@ func (s *TrafficReportStore) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (s *TrafficReportStore) startWorker(ctx context.Context) error {
-	logger := s.logger
-	if logger == nil {
-		return util.ErrLoggerNotInited
-	}
-	workerEg := errgroup.Group{}
-	workerEg.SetLimit(TRAFFIC_REPORT_WORKER_COUNT)
+func (s *TrafficReportStore) startManager(ctx context.Context, workerEg *errgroup.Group) error {
+	trafficReportBuffer := &[]interface{}{}
+	curTrafficReportBuffer := trafficReportBuffer
+	curCounter := NewDeadlineCounter(TRAFFIC_REPORT_MAX_BUFFER_SIZE, DEFAULT_COUNTER_DEADLINE)
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		default:
-			workerEg.Go(func() error {
-				return s.processTrafficReport(ctx)
-			})
+			select {
+			case <-curCounter.C:
+				s.logger.Infof("counter is done; start flushing")
+				s.startWorker(curTrafficReportBuffer, workerEg)
+				trafficReportBuffer = &[]interface{}{}
+				curTrafficReportBuffer = trafficReportBuffer
+				curCounter = NewDeadlineCounter(TRAFFIC_REPORT_MAX_BUFFER_SIZE, DEFAULT_COUNTER_DEADLINE)
+			default:
+				if tr, err := s.getTrafficReport(); err == nil {
+					*curTrafficReportBuffer = append(*curTrafficReportBuffer, tr)
+					curCounter.Add(1)
+				} else if err == util.ErrTimeoutWaitingForTrafficReport {
+					s.startWorker(curTrafficReportBuffer, workerEg)
+					trafficReportBuffer = &[]interface{}{}
+					curTrafficReportBuffer = trafficReportBuffer
+					curCounter.Stop()
+					curCounter = NewDeadlineCounter(TRAFFIC_REPORT_MAX_BUFFER_SIZE, DEFAULT_COUNTER_DEADLINE)
+				} else {
+					return err
+				}
+			}
 		}
+	}
+}
+
+func (s *TrafficReportStore) startWorker(curTrafficReportBuffer *[]interface{}, eg *errgroup.Group) {
+	trafficReportBuffer := curTrafficReportBuffer
+	if ifWorkerStarted := eg.TryGo(func() error {
+		return s.flushTrafficReport(trafficReportBuffer)
+	}); !ifWorkerStarted {
+		s.logger.Errorf("unable to flush traffic reports since we cannot create more workers")
 	}
 }
 
@@ -94,7 +129,7 @@ func (s *TrafficReportStore) AddTrafficReport(ctx context.Context, report *Traff
 	if s.cache == nil {
 		return util.ErrCacheNotInited
 	}
-	if id, err := nanoid.New(); err != nil {
+	if id, err := nanoid.New(16); err != nil {
 		return err
 	} else {
 		s.cache.Add(id, report)
@@ -102,56 +137,24 @@ func (s *TrafficReportStore) AddTrafficReport(ctx context.Context, report *Traff
 	return nil
 }
 
-func (s *TrafficReportStore) processTrafficReport(ctx context.Context) error {
-	curTrafficReportBuffer := make(chan *TrafficReport, TRAFFIC_REPORT_MAX_BUFFER_SIZE)
-	trafficReportBufferSize := 0
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		default:
-			if tr, err := s.getTrafficReport(); err != nil {
-				if err == util.ErrTimeoutWaitingForTrafficReport {
-					trafficReportBuffer := curTrafficReportBuffer
-					go s.flushTrafficReport(trafficReportBuffer)
-					curTrafficReportBuffer = make(chan *TrafficReport, TRAFFIC_REPORT_MAX_BUFFER_SIZE)
-					trafficReportBufferSize = 0
-				} else {
-					return err
-				}
-			} else {
-				if trafficReportBufferSize < TRAFFIC_REPORT_MAX_BUFFER_SIZE {
-					curTrafficReportBuffer <- tr
-					trafficReportBufferSize++
-				} else {
-					trafficReportBuffer := curTrafficReportBuffer
-					go s.flushTrafficReport(trafficReportBuffer)
-					curTrafficReportBuffer = make(chan *TrafficReport, TRAFFIC_REPORT_MAX_BUFFER_SIZE)
-					trafficReportBufferSize = 0
-				}
-			}
-		}
-	}
-}
-
-func (s *TrafficReportStore) flushTrafficReport(trafficReportBuffer chan *TrafficReport) error {
+func (s *TrafficReportStore) flushTrafficReport(trafficReports *[]interface{}) error {
 	if s.logger == nil {
 		return util.ErrLoggerNotInited
+	}
+	if trafficReports == nil {
+		return nil
 	}
 	logger := s.logger
 	ps := s.p
 	if ps != nil {
-		trafficReportBufferSize := len(trafficReportBuffer)
-		if trafficReportBufferSize > 0 {
-			var trafficReports []interface{}
-			for i := 0; i < trafficReportBufferSize; i++ {
-				trafficReport := <-trafficReportBuffer
-				trafficReports = append(trafficReports, *trafficReport)
-			}
-			if err := ps.insertMany(context.Background(), TRCollection, trafficReports); err != nil {
+		if len(*trafficReports) > 0 {
+			insertCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+			defer cancel()
+			if err := ps.insertMany(insertCtx, TRCollection, *trafficReports); err != nil {
 				logger.Errorf("unable to flush traffic reports to the database: %v", err)
 				return err
 			}
+			logger.Infof("%v traffic reports were flushed", len(*trafficReports))
 		}
 	} else {
 		return util.ErrPersistentStorageNotInited
@@ -160,7 +163,7 @@ func (s *TrafficReportStore) flushTrafficReport(trafficReportBuffer chan *Traffi
 }
 
 func (s *TrafficReportStore) getTrafficReport() (*TrafficReport, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	select {
 	case <-ctx.Done():
@@ -183,42 +186,3 @@ func (s *TrafficReportStore) initCache(ctx context.Context) error {
 func (s *TrafficReportStore) onEvicted(key string, value *TrafficReport) {
 	s.trafficReports <- value
 }
-
-/*
-func (s *TrafficReportStore) setManager(manager *StoreManager) error {
-	if manager == nil {
-		return util.ErrStoreManagerNotInited
-	}
-	s.manager = manager
-	return nil
-}
-
-func (s *TrafficReportStore) getName() string {
-	return s.name
-}
-
-func (s *TrafficReportStore) launch(ctx context.Context, eg *errgroup.Group) error {
-	if s.manager == nil {
-		return util.ErrStoreManagerNotInited
-	}
-	if s.manager.ps == nil {
-		return util.ErrPersistentStorageNotInited
-	}
-	if found, err := s.manager.ps.findCollection(ctx, TRCollection); err != nil {
-		return err
-	} else if !found {
-		metaField := TRAFFIC_REPORT_META_FIELD
-		if err := s.manager.ps.createTSDB(ctx, TRCollection, TRAFFIC_REPORT_TIME_FIELD, &metaField); err != nil {
-			if err != util.ErrCollectionAlreadyExists {
-				return err
-			}
-		}
-	}
-	for i := 0; i < TRAFFIC_REPORT_WORKER_COUNT; i++ {
-		eg.Go(func() error {
-			return s.processTrafficReport(ctx)
-		})
-	}
-	return nil
-}
-*/
