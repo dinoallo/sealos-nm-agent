@@ -35,10 +35,7 @@ func NewTrafficService(baseLogger *zap.SugaredLogger, bf *bytecount.Factory, cep
 		return nil, fmt.Errorf("both the base logger and the factory shouldn't be nil")
 	}
 	svcRegistrar := grpc.NewServer(
-		grpc.KeepaliveParams(keepalive.ServerParameters{
-			Time:    15 * time.Second,
-			Timeout: 5 * time.Second,
-		}))
+		grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionIdle: 15 * time.Second}))
 	name := "traffic_service"
 	return &TrafficService{
 		name:                name,
@@ -133,13 +130,20 @@ func (s *TrafficService) CreateCounter(ctx context.Context, in *counterpb.Create
 	default:
 		return new(counterpb.Empty), util.ErrUnknownDirection
 	}
-	if err := cepStore.Create(ctx, eid); err != nil {
+	if exists, err := cepStore.Find(ctx, eid); err != nil {
 		return nil, err
+	} else if exists {
+		// if the counter is already created, avoid creating the counter again
+		return new(counterpb.Empty), nil
+	} else {
+		if err := bf.CreateCounter(ctx, eid, t); err != nil {
+			return new(counterpb.Empty), err
+		}
+		return new(counterpb.Empty), cepStore.Create(ctx, eid)
 	}
-
-	return new(counterpb.Empty), bf.CreateCounter(ctx, eid, t)
 }
 
+// the following apis have been deprecated
 func (s *TrafficService) Subscribe(ctx context.Context, in *counterpb.SubscribeRequest) (*counterpb.Empty, error) {
 	return new(counterpb.Empty), nil
 }
