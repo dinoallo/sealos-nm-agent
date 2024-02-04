@@ -76,7 +76,7 @@ func (bf *Factory) initCounter(ctx context.Context) error {
 			if err := bf.CreateCounter(ctx, cep.EndpointID, IPv4Egress); err != nil {
 				if err == util.ErrBPFCustomCallMapNotExist {
 					// stale endpoint status
-					if err := s.Remove(ctx, cep.EndpointID); err != nil {
+					if err := s.Remove(ctx, &cep); err != nil {
 						return err
 					}
 				} else {

@@ -116,11 +116,6 @@ func (s *TrafficService) CreateCounter(ctx context.Context, in *counterpb.Create
 	eid := counter.GetEndpointId()
 	dir := counter.GetDirection()
 	cleanUp := in.GetCleanUp()
-	if cleanUp {
-		if err := cepStore.Remove(ctx, eid); err != nil {
-			return new(counterpb.Empty), err
-		}
-	}
 	var t bytecount.Counter
 	switch dir {
 	case counterpb.Direction_V4Ingress:
@@ -132,7 +127,7 @@ func (s *TrafficService) CreateCounter(ctx context.Context, in *counterpb.Create
 	}
 	if exists, err := cepStore.Find(ctx, eid); err != nil {
 		return nil, err
-	} else if exists {
+	} else if exists && !cleanUp {
 		// if the counter is already created, avoid creating the counter again
 		return new(counterpb.Empty), nil
 	} else {

@@ -141,24 +141,24 @@ func (s *CiliumEndpointStore) Create(ctx context.Context, eid int64) error {
 	return nil
 }
 
-func (s *CiliumEndpointStore) Remove(ctx context.Context, eid int64) error {
+func (s *CiliumEndpointStore) Remove(ctx context.Context, cep *CiliumEndpoint) error {
 	if s.cepCache == nil {
 		return util.ErrCacheNotInited
 	}
 	node := s.GetCurrentNode()
-	key := s.getKey(eid, node)
+	key := s.getKey(cep.EndpointID, node)
 	deletedTime := time.Now().Unix()
-	if cep, ok := s.cepCache.Get(key); ok {
-		newCEP := CiliumEndpoint{
-			ID:          cep.ID,
-			EndpointID:  eid,
-			Node:        node,
-			CreatedTime: cep.CreatedTime,
-			DeletedTime: deletedTime,
-		}
-		s.cepCache.Remove(key)
-		s.cepCache.Add(key, &newCEP)
+	newCEP := CiliumEndpoint{
+		ID:          key,
+		EndpointID:  cep.EndpointID,
+		Node:        node,
+		CreatedTime: cep.CreatedTime,
+		DeletedTime: deletedTime,
 	}
+	if _, ok := s.cepCache.Get(key); ok {
+		s.cepCache.Remove(key)
+	}
+	s.cepCache.Add(key, &newCEP)
 	return nil
 }
 
@@ -183,7 +183,7 @@ func (s *CiliumEndpointStore) initCache(ctx context.Context) error {
 		return err
 	} else {
 		for _, cep := range ceps {
-			if cep.DeletedTime != 0 {
+			if cep.DeletedTime > 0 {
 				// stale endpoint
 				continue
 			}
@@ -212,7 +212,9 @@ func (s *CiliumEndpointStore) onEvicted(key string, value *CiliumEndpoint) {
 	}
 	if p != nil {
 		keyField := "cep_id"
-		if err := p.replaceOne(context.Background(), CEPCollection, keyField, key, *value); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), DB_CONNECTION_TIMEOUT)
+		defer cancel()
+		if err := p.replaceOne(ctx, CEPCollection, keyField, key, *value); err != nil {
 			return
 		}
 	} else {
