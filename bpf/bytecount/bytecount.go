@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 
 	"encoding/binary"
 
@@ -85,14 +86,32 @@ func NewFactory(parentLogger *zap.SugaredLogger, trStore *store.TrafficReportSto
 	}
 
 	var ipAddrs []string
-	addr, err := net.InterfaceAddrs()
-	if err != nil {
+	if ifs, err := net.Interfaces(); err != nil {
 		return nil, err
-	}
-	for _, addr := range addr {
-		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil || ipnet.IP.To16() != nil {
-				ipAddrs = append(ipAddrs, ipnet.IP.String())
+	} else {
+		ifsToIgnore := []string{"en"}
+		for _, infa := range ifs {
+			ignoreInfa := false
+			for _, prefix := range ifsToIgnore {
+				if strings.HasPrefix(infa.Name, prefix) {
+					ignoreInfa = true
+					break
+				}
+			}
+			if !ignoreInfa {
+				continue
+			}
+			if addrs, err := infa.Addrs(); err != nil {
+				return nil, err
+			} else {
+				for _, addr := range addrs {
+					if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+						if ipnet.IP.To4() != nil || ipnet.IP.To16() != nil {
+							logger.Infof("address: %v", ipnet.IP.String())
+							ipAddrs = append(ipAddrs, ipnet.IP.String())
+						}
+					}
+				}
 			}
 		}
 	}
