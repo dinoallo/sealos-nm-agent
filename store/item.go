@@ -1,24 +1,42 @@
 package store
 
 import (
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cilium/cilium/pkg/identity"
 )
 
-type Property struct {
-	SentBytes uint64 `bson:"sent_bytes"`
-	RecvBytes uint64 `bson:"recv_bytes"`
+type TrafficMonitorMetrics struct {
+	SentBytes atomic.Uint32
+	RecvBytes atomic.Uint32
 }
 
-type TrafficAccount struct {
-	IP         string              `bson:"ip"`
-	Properties map[string]Property `bson:"properties"`
+type TrafficMonitor struct {
+	IP      string
+	Metrics map[uint32]*TrafficMonitorMetrics // ordered by port number
+	mu      sync.RWMutex
+}
+
+type TrafficRecordMetaData struct {
+	Port uint32           `bson:"port"`
+	Dir  TrafficDirection `bson:"dir"`
+	IP   string           `bson:"ip"`
+}
+type TrafficRecord struct {
+	TrafficRecordMeta TrafficRecordMetaData `bson:"traffic_record_meta"`
+	DataBytes         uint32                `bson:"data_bytes"`
+	ID                string                `bson:"tr_id"`
+	Timestamp         time.Time             `bson:"timestamp"`
 }
 
 const (
 	TRAFFIC_REPORT_TIME_FIELD = "timestamp"
 	TRAFFIC_REPORT_META_FIELD = "traffic_report_meta"
+
+	TRAFFIC_RECORD_TIME_FIELD = "timestamp"
+	TRAFFIC_RECORD_META_FIELD = "traffic_report_meta"
 )
 
 type TrafficReportMetaData struct {

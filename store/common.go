@@ -32,7 +32,7 @@ const (
 )
 
 var (
-	TRCollection  Coll = Coll{T: COLL_TYPE_TR, Prefix: "traffic_reports"}
+	TRCollection  Coll = Coll{T: COLL_TYPE_TR, Prefix: "traffic_records"}
 	CEPCollection Coll = Coll{T: COLL_TYPE_CEP, Prefix: "cilium_endpoints"}
 )
 

@@ -116,6 +116,6 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 		Timestamp: time.Now(),
 	}
 	// bf.logger.Infof("src_ip: %v => dst_ip: %v; %v bytes sent", srcIP.String(), dstIP.String(), event.Len)
-	bf.trStore.AddTrafficReport(ctx, report)
+	bf.trStore.AddSentBytes(ctx, report)
 	return nil
 }

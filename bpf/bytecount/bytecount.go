@@ -21,7 +21,7 @@ type Factory struct {
 	name         string
 	logger       *zap.SugaredLogger
 	cepStore     *store.CiliumEndpointStore
-	trStore      *store.TrafficReportStore
+	trStore      *store.TrafficMonitorStore
 	workQueue    chan Traffic
 	nativeEndian binary.ByteOrder
 	ipAddrs      []string
@@ -64,7 +64,7 @@ var (
 	}
 )
 
-func NewFactory(parentLogger *zap.SugaredLogger, trStore *store.TrafficReportStore, cepStore *store.CiliumEndpointStore) (*Factory, error) {
+func NewFactory(parentLogger *zap.SugaredLogger, trStore *store.TrafficMonitorStore, cepStore *store.CiliumEndpointStore) (*Factory, error) {
 	// init logger
 	if parentLogger == nil {
 		return nil, util.ErrParentLoggerNotInited

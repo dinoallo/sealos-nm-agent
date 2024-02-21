@@ -40,4 +40,7 @@ var (
 	// trafficreport
 	ErrTrafficReportNotInited         = errors.New("the traffic report is nil or not initialized")
 	ErrTimeoutWaitingForTrafficReport = errors.New("timeout waiting for any traffic reports")
+
+	// trafficmonitor
+	ErrTimeoutWaitingForTrafficMonitor = errors.New("timeout waiting for any traffic meters")
 )

@@ -77,9 +77,9 @@ func main() {
 	components[componentCount] = cepStore
 	componentCount++
 
-	trStore, err := store.NewTrafficReportStore(devLogger, p)
+	trStore, err := store.NewTrafficMonitorStore(devLogger, p)
 	if err != nil {
-		log.Fatalf("unable to crate the store for traffic reports")
+		log.Fatalf("unable to create the store for traffic meters and records")
 		return
 	}
 	components[componentCount] = trStore
