@@ -228,6 +228,9 @@ func (s *TrafficMonitorStore) onEvicted(key string, monitor *TrafficMonitor) {
 			continue
 		}
 		dataBytes := m.SentBytes.Swap(0)
+		if dataBytes == 0 {
+			continue
+		}
 		dir := TRAFFIC_DIR_V4_EGRESS
 		tr_id := fmt.Sprintf("%v/%v/%v", ip, port, dir)
 		t := TrafficRecord{
