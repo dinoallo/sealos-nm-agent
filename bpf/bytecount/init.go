@@ -65,17 +65,18 @@ func (bf *Factory) initCounter(ctx context.Context) error {
 	if s == nil {
 		return util.ErrStoreNotInited
 	}
+	// get all the endpoints from the database and recover the counters
 	if found, err := s.GetAll(ctx, &ceps); err != nil {
 		return err
 	} else if found {
 		for _, cep := range ceps {
-			node := s.GetCurrentNode()
-			if cep.Node != node {
+			if cep.DeletedTime > 0 || cep.Node != s.GetCurrentNode() {
+				// this endpoint is stale or not on this node
 				continue
 			}
 			if err := bf.CreateCounter(ctx, cep.EndpointID, IPv4Egress); err != nil {
 				if err == util.ErrBPFCustomCallMapNotExist {
-					// stale endpoint status
+					// this endpoint is already stale, request for removal
 					if err := s.Remove(ctx, &cep); err != nil {
 						return err
 					}

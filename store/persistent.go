@@ -345,7 +345,7 @@ func (p *persistent) setupCiliumEndpointAutoDeletion(ctx context.Context, collMe
 	} else {
 		key := bson.D{
 			{
-				Key:   "created_time",
+				Key:   "deleted_time",
 				Value: 1,
 			},
 		}
