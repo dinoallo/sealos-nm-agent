@@ -76,6 +76,9 @@ func (bf *Factory) processTraffic(ctx context.Context, traffic Traffic) {
 }
 
 func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t uint32) error {
+	if event.Len <= 0 {
+		return nil
+	}
 	var dir store.TrafficDirection
 	__srcIP := make([]uint32, 4)
 	__dstIP := make([]uint32, 4)
