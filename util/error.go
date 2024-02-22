@@ -43,4 +43,7 @@ var (
 
 	// trafficmonitor
 	ErrTimeoutWaitingForTrafficMonitor = errors.New("timeout waiting for any traffic meters")
+
+	// trafficrecord
+	ErrTimeoutWaitingToAddTrafficRecord = errors.New("timeout waiting to add a traffic record")
 )

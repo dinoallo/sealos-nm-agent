@@ -30,14 +30,32 @@ func (bf *Factory) Launch(ctx context.Context, mainEg *errgroup.Group) error {
 
 	log.Infof("launching traffic event reader...")
 	mainEg.Go(func() error {
-		workerEg := errgroup.Group{}
-		workerEg.SetLimit(1)
+		processorEg := errgroup.Group{}
+		processorEg.SetLimit(BYTECOUNT_FACTORY_MAX_PROCESSOR_COUNT)
 		for {
 			select {
 			case <-ctx.Done():
 				return nil
 			default:
-				workerEg.Go(
+				processorEg.Go(
+					func() error {
+						if err := bf.processTraffic(ctx); err != nil {
+							log.Errorf("unable to process traffic: %v", err)
+						}
+						return nil
+					})
+			}
+		}
+	})
+	mainEg.Go(func() error {
+		readerEg := errgroup.Group{}
+		readerEg.SetLimit(BYTECOUNT_FACTORY_MAX_READER_COUNT)
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
+				readerEg.Go(
 					func() error {
 						if err := bf.readTraffic(ctx, IPv4Egress.TypeInt); err != nil {
 							log.Errorf("unable to read traffic: %v", err)

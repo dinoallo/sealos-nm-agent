@@ -19,9 +19,12 @@ import (
 const (
 	TRAFFIC_MONITOR_WORKER_COUNT            = (1 << 4)
 	TRAFFIC_MONITOR_MANAGER_COUNT           = (1 << 3)
+	TRAFFIC_MONITOR_RECVER_COUNT            = (1 << 4)
 	TRAFFIC_MONITOR_SYNC_TIME               = time.Second * 30
 	TRAFFIC_MONITOR_SYNC_MAX_ENTRIES_SIZE   = (1 << 20)
 	TRAFFIC_RECORD_MAX_BUFFER_SIZE          = (1 << 10)
+	TRAFFIC_RECORD_MAX_QUEUE_LEN            = (1 << 20)
+	TRAFFIC_REPORT_MAX_QUEUE_LEN            = (1 << 20)
 	TRAFFIC_RECORD_DEFAULT_COUNTER_DEADLINE = time.Minute
 )
 
@@ -34,22 +37,25 @@ type TrafficMonitorStore struct {
 	tmMu               sync.RWMutex
 	trafficRecords     chan *TrafficRecord
 	trafficMonitorSync *lru_expirable.LRU[string, *TrafficMonitor]
+	trafficReportRecv  chan *TrafficReport
 }
 
 func NewTrafficMonitorStore(baseLogger *zap.SugaredLogger, p *persistent) (*TrafficMonitorStore, error) {
 	if baseLogger == nil {
 		return nil, util.ErrParentLoggerNotInited
 	}
-	trafficRecords := make(chan *TrafficRecord)
 	trafficMonitors := make(map[string]*TrafficMonitor)
-	name := "traffic_meter_store"
+	trafficRecords := make(chan *TrafficRecord, TRAFFIC_RECORD_MAX_QUEUE_LEN)
+	trafficReportRecv := make(chan *TrafficReport, TRAFFIC_REPORT_MAX_QUEUE_LEN)
+	name := "traffic_monitor_store"
 	return &TrafficMonitorStore{
-		name:            name,
-		p:               p,
-		logger:          baseLogger.With(zap.String("component", name)),
-		trafficRecords:  trafficRecords,
-		trafficMonitors: trafficMonitors,
-		tmMu:            sync.RWMutex{},
+		name:              name,
+		p:                 p,
+		logger:            baseLogger.With(zap.String("component", name)),
+		trafficRecords:    trafficRecords,
+		trafficMonitors:   trafficMonitors,
+		trafficReportRecv: trafficReportRecv,
+		tmMu:              sync.RWMutex{},
 	}, nil
 }
 
@@ -70,11 +76,21 @@ func (s *TrafficMonitorStore) Launch(ctx context.Context, mainEg *errgroup.Group
 	managerEg.SetLimit(TRAFFIC_MONITOR_MANAGER_COUNT)
 	workerEg := errgroup.Group{}
 	workerEg.SetLimit(TRAFFIC_MONITOR_WORKER_COUNT)
+	recverEg := errgroup.Group{}
+	recverEg.SetLimit(TRAFFIC_MONITOR_RECVER_COUNT)
 	mainEg.Go(
 		func() error {
 			for {
 				managerEg.Go(func() error {
 					return s.startManager(ctx, &workerEg)
+				})
+			}
+		})
+	mainEg.Go(
+		func() error {
+			for {
+				recverEg.Go(func() error {
+					return s.startRecver(ctx)
 				})
 			}
 		})
@@ -89,7 +105,18 @@ func (s *TrafficMonitorStore) Stop(ctx context.Context) error {
 	return nil
 }
 
-func (s *TrafficMonitorStore) AddSentBytes(ctx context.Context, report *TrafficReport) error {
+func (s *TrafficMonitorStore) AddTrafficReport(ctx context.Context, report *TrafficReport) error {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*1)
+	defer cancel()
+	select {
+	case <-ctx.Done():
+		return nil
+	case s.trafficReportRecv <- report:
+		return nil
+	}
+}
+
+func (s *TrafficMonitorStore) addSentBytes(ctx context.Context, report *TrafficReport) error {
 	// key := fmt.Sprintf("%v/%v/%v", report.TrafficReportMeta.SrcIP, report.TrafficReportMeta.SrcPort, report.Dir)
 	ip := report.TrafficReportMeta.SrcIP
 	// ensure m exists
@@ -187,6 +214,17 @@ func (s *TrafficMonitorStore) startWorker(curBuf *[]interface{}, eg *errgroup.Gr
 	}
 }
 
+func (s *TrafficMonitorStore) startRecver(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case tr := <-s.trafficReportRecv:
+			s.addSentBytes(ctx, tr)
+		}
+	}
+}
+
 func (s *TrafficMonitorStore) flush(buf *[]interface{}) error {
 	logger := s.logger
 	ps := s.p
@@ -217,6 +255,17 @@ func (s *TrafficMonitorStore) get() (*TrafficRecord, error) {
 	}
 }
 
+func (s *TrafficMonitorStore) addTrafficRecord(tr *TrafficRecord) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*100)
+	defer cancel()
+	select {
+	case <-ctx.Done():
+		return util.ErrTimeoutWaitingToAddTrafficRecord
+	case s.trafficRecords <- tr:
+		return nil
+	}
+}
+
 func (s *TrafficMonitorStore) onEvicted(key string, monitor *TrafficMonitor) {
 	if monitor == nil {
 		return
@@ -243,7 +292,10 @@ func (s *TrafficMonitorStore) onEvicted(key string, monitor *TrafficMonitor) {
 			ID:        tr_id,
 			Timestamp: time.Now(),
 		}
-		s.trafficRecords <- &t
+		if err := s.addTrafficRecord(&t); err != nil {
+			s.logger.Errorf("failed to add traffic record: %v", err)
+			continue
+		}
 	}
 	monitor.mu.RUnlock()
 }

@@ -7,10 +7,12 @@ import (
 )
 
 const (
-	BPF_FS_ROOT            = "/sys/fs/bpf"
-	CILIUM_TC_ROOT         = BPF_FS_ROOT + "/tc/globals"
-	TRAFFIC_CONSUMER_COUNT = (2 << 9)
-	PERF_BUFFER_SIZE       = (32 << 10) // 32KB
+	BPF_FS_ROOT      = "/sys/fs/bpf"
+	CILIUM_TC_ROOT   = BPF_FS_ROOT + "/tc/globals"
+	PERF_BUFFER_SIZE = (32 << 10) // 32KB
+
+	BYTECOUNT_FACTORY_MAX_READER_COUNT    = (1 << 0)
+	BYTECOUNT_FACTORY_MAX_PROCESSOR_COUNT = (1 << 3)
 )
 
 func getHostEndian() (binary.ByteOrder, error) {

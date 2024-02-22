@@ -55,10 +55,35 @@ func (bf *Factory) readTraffic(ctx context.Context, t uint32) error {
 			trafficRecord: &rec,
 			trafficType:   t,
 		}
-		go bf.processTraffic(ctx, tr)
+		// go bf.processTraffic(ctx, tr)
+		bf.rawTrafficChannel <- &tr
 	}
 }
 
+func (bf *Factory) processTraffic(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case traffic := <-bf.rawTrafficChannel:
+			log := bf.logger
+			var event bytecountTrafficEventT
+			if traffic.trafficRecord != nil {
+				if err := binary.Read(bytes.NewBuffer(traffic.trafficRecord.RawSample), bf.nativeEndian, &event); err != nil {
+					log.Infof("Failed to decode received data: %+v", err)
+					return nil
+				}
+				t := traffic.trafficType
+				if err := bf.submit(ctx, &event, t); err != nil {
+					log.Infof("Failed to submit the traffic report: %+v", err)
+					return nil
+				}
+			}
+		}
+	}
+}
+
+/*
 func (bf *Factory) processTraffic(ctx context.Context, traffic Traffic) {
 	log := bf.logger
 	var event bytecountTrafficEventT
@@ -73,7 +98,7 @@ func (bf *Factory) processTraffic(ctx context.Context, traffic Traffic) {
 			return
 		}
 	}
-}
+}*/
 
 func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t uint32) error {
 	if event.Len <= 0 {
@@ -119,6 +144,6 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 		Timestamp: time.Now(),
 	}
 	// bf.logger.Infof("src_ip: %v => dst_ip: %v; %v bytes sent", srcIP.String(), dstIP.String(), event.Len)
-	bf.trStore.AddSentBytes(ctx, report)
+	bf.trStore.AddTrafficReport(ctx, report)
 	return nil
 }

@@ -29,6 +29,7 @@ type Factory struct {
 	// the following are not safe to use, please check if it's nil
 	// before accessing it
 	bytecountExportChannel chan *store.TrafficReport
+	rawTrafficChannel      chan *Traffic
 }
 
 type Traffic struct {
@@ -117,12 +118,13 @@ func NewFactory(parentLogger *zap.SugaredLogger, trStore *store.TrafficMonitorSt
 	}
 
 	return &Factory{
-		logger:       logger,
-		workQueue:    workQueue,
-		nativeEndian: nativeEndian,
-		trStore:      trStore,
-		cepStore:     cepStore,
-		ipAddrs:      ipAddrs,
+		logger:            logger,
+		workQueue:         workQueue,
+		nativeEndian:      nativeEndian,
+		trStore:           trStore,
+		cepStore:          cepStore,
+		ipAddrs:           ipAddrs,
+		rawTrafficChannel: make(chan *Traffic),
 	}, nil
 }
 
