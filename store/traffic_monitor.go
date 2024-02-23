@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	TRAFFIC_MONITOR_WORKER_COUNT            = (1 << 4)
-	TRAFFIC_MONITOR_MANAGER_COUNT           = (1 << 3)
-	TRAFFIC_MONITOR_RECVER_COUNT            = (1 << 4)
+	TRAFFIC_MONITOR_WORKER_COUNT            = (1 << 1)
+	TRAFFIC_MONITOR_MANAGER_COUNT           = (1 << 0)
+	TRAFFIC_MONITOR_RECVER_COUNT            = (1 << 3)
 	TRAFFIC_MONITOR_SYNC_TIME               = time.Second * 30
 	TRAFFIC_MONITOR_SYNC_MAX_ENTRIES_SIZE   = (1 << 20)
 	TRAFFIC_RECORD_MAX_BUFFER_SIZE          = (1 << 10)

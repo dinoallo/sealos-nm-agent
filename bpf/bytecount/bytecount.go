@@ -124,7 +124,7 @@ func NewFactory(parentLogger *zap.SugaredLogger, trStore *store.TrafficMonitorSt
 		trStore:           trStore,
 		cepStore:          cepStore,
 		ipAddrs:           ipAddrs,
-		rawTrafficChannel: make(chan *Traffic),
+		rawTrafficChannel: make(chan *Traffic, BYTECOUNT_FACTORY_TRAFFIC_MAX_QUEUE_LEN),
 	}, nil
 }
 
