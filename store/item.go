@@ -14,15 +14,17 @@ type TrafficMonitorMetrics struct {
 }
 
 type TrafficMonitor struct {
-	IP      string
-	Metrics map[uint32]*TrafficMonitorMetrics // ordered by port number
-	mu      sync.RWMutex
+	IP           string
+	PortMetrics  map[uint32]*TrafficMonitorMetrics // ordered by port number
+	WorldMetrics *TrafficMonitorMetrics
+	wmMu         sync.RWMutex
+	pmMu         sync.RWMutex
 }
 
 type TrafficRecordMetaData struct {
-	Port uint32           `bson:"port"`
-	Dir  TrafficDirection `bson:"dir"`
-	IP   string           `bson:"ip"`
+	Dir TrafficDirection `bson:"dir"`
+	IP  string           `bson:"ip"`
+	Tag string           `bson:"tag"`
 }
 type TrafficRecord struct {
 	TrafficRecordMeta TrafficRecordMetaData `bson:"traffic_record_meta"`

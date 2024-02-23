@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cilium/cilium/pkg/identity"
 	"github.com/dinoallo/sealos-networkmanager-agent/util"
 	// "github.com/puzpuzpuz/xsync"
 	"go.uber.org/zap"
@@ -125,9 +126,11 @@ func (s *TrafficMonitorStore) addSentBytes(ctx context.Context, report *TrafficR
 		s.tmMu.RUnlock()
 		s.tmMu.Lock()
 		m = &TrafficMonitor{
-			IP:      ip,
-			Metrics: make(map[uint32]*TrafficMonitorMetrics),
-			mu:      sync.RWMutex{},
+			IP:           ip,
+			PortMetrics:  make(map[uint32]*TrafficMonitorMetrics),
+			WorldMetrics: &TrafficMonitorMetrics{},
+			pmMu:         sync.RWMutex{},
+			wmMu:         sync.RWMutex{},
 		}
 		s.trafficMonitors[ip] = m
 		s.tmMu.Unlock()
@@ -144,29 +147,37 @@ func (s *TrafficMonitorStore) addSentBytes(ctx context.Context, report *TrafficR
 		s.trafficMonitorSync.Add(ip, m)
 	}
 
+	if report.Identity == identity.ReservedIdentityWorld {
+		m.wmMu.RLock()
+		if m.WorldMetrics != nil {
+			m.WorldMetrics.SentBytes.Add(report.DataBytes)
+		}
+		m.wmMu.RUnlock()
+	}
+
 	port := report.TrafficReportMeta.SrcPort
 	// ensure met actually exists
-	m.mu.RLock()
-	if met, exists := m.Metrics[port]; exists {
+	m.pmMu.RLock()
+	if met, exists := m.PortMetrics[port]; exists {
 		met.SentBytes.Add(report.DataBytes)
-		m.mu.RUnlock()
+		m.pmMu.RUnlock()
 		return nil
 	} else {
-		m.mu.RUnlock()
-		m.mu.Lock()
+		m.pmMu.RUnlock()
+		m.pmMu.Lock()
 		met = &TrafficMonitorMetrics{
 			SentBytes: atomic.Uint32{},
 			RecvBytes: atomic.Uint32{},
 		}
-		m.Metrics[port] = met
-		m.mu.Unlock()
+		m.PortMetrics[port] = met
+		m.pmMu.Unlock()
 	}
 
-	m.mu.RLock()
-	if met, exists := m.Metrics[port]; exists {
+	m.pmMu.RLock()
+	if met, exists := m.PortMetrics[port]; exists {
 		met.SentBytes.Add(report.DataBytes)
 	}
-	m.mu.RUnlock()
+	m.pmMu.RUnlock()
 	return nil
 }
 
@@ -271,8 +282,29 @@ func (s *TrafficMonitorStore) onEvicted(key string, monitor *TrafficMonitor) {
 		return
 	}
 	ip := monitor.IP
-	monitor.mu.RLock()
-	for port, m := range monitor.Metrics {
+	dir := TRAFFIC_DIR_V4_EGRESS
+	monitor.wmMu.RLock()
+	dataBytes := monitor.WorldMetrics.SentBytes.Swap(0)
+	if dataBytes != 0 {
+		tag := fmt.Sprintf("identity:%v", identity.ReservedIdentityWorld)
+		tr_id := fmt.Sprintf("%v/%v/%v", ip, tag, dir)
+		t := TrafficRecord{
+			TrafficRecordMeta: TrafficRecordMetaData{
+				Tag: tag,
+				Dir: dir,
+				IP:  ip,
+			},
+			DataBytes: dataBytes,
+			ID:        tr_id,
+			Timestamp: time.Now(),
+		}
+		if err := s.addTrafficRecord(&t); err != nil {
+			s.logger.Errorf("failed to add traffic record: %v", err)
+		}
+	}
+	monitor.wmMu.RUnlock()
+	monitor.pmMu.RLock()
+	for port, m := range monitor.PortMetrics {
 		if m == nil {
 			continue
 		}
@@ -280,13 +312,13 @@ func (s *TrafficMonitorStore) onEvicted(key string, monitor *TrafficMonitor) {
 		if dataBytes == 0 {
 			continue
 		}
-		dir := TRAFFIC_DIR_V4_EGRESS
-		tr_id := fmt.Sprintf("%v/%v/%v", ip, port, dir)
+		tag := fmt.Sprintf("port:%v", port)
+		tr_id := fmt.Sprintf("%v/%v/%v", ip, tag, dir)
 		t := TrafficRecord{
 			TrafficRecordMeta: TrafficRecordMetaData{
-				Port: port,
-				Dir:  dir,
-				IP:   ip,
+				Tag: tag,
+				Dir: dir,
+				IP:  ip,
 			},
 			DataBytes: dataBytes,
 			ID:        tr_id,
@@ -297,5 +329,5 @@ func (s *TrafficMonitorStore) onEvicted(key string, monitor *TrafficMonitor) {
 			continue
 		}
 	}
-	monitor.mu.RUnlock()
+	monitor.pmMu.RUnlock()
 }
