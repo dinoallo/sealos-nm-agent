@@ -26,14 +26,18 @@ type Component interface {
 }
 
 const (
-	DB_NAME_ENV = "DB_NAME"
-	DB_URI_ENV  = "DB_URI"
+	DB_NAME_ENV                        = "DB_NAME"
+	DB_URI_ENV                         = "DB_URI"
+	DB_TRAFFIC_RECORDS_COL_PREFIX_ENV  = "TR_COLL"
+	DB_CILIUM_ENDPOINTS_COL_PREFIX_ENV = "CEP_COLL"
 )
 
 func main() {
 
 	var dbName string = os.Getenv(DB_NAME_ENV)
 	var dbUri string = os.Getenv(DB_URI_ENV)
+	var trCollPrefix string = os.Getenv(DB_TRAFFIC_RECORDS_COL_PREFIX_ENV)
+	var cepCollPrefix string = os.Getenv(DB_CILIUM_ENDPOINTS_COL_PREFIX_ENV)
 
 	// Initialize the logger
 	logger, _ := zap.NewDevelopment()
@@ -60,6 +64,12 @@ func main() {
 	cred := store.DBCred{
 		DBURI: dbUri,
 		DB:    dbName,
+	}
+	if trCollPrefix != "" {
+		store.TRCollection.Prefix = trCollPrefix
+	}
+	if cepCollPrefix != "" {
+		store.CEPCollection.Prefix = cepCollPrefix
 	}
 
 	components := make(map[int]Component)

@@ -120,14 +120,13 @@ func (s *CiliumEndpointStore) Create(ctx context.Context, eid int64) error {
 	}
 	node := s.GetCurrentNode()
 	key := s.getKey(eid, node)
-	createdTime := time.Now().Unix()
+	createdTime := time.Now()
 	if cep, ok := s.cepCache.Get(key); ok {
 		newCEP := CiliumEndpoint{
 			ID:          cep.ID,
 			EndpointID:  eid,
 			Node:        node,
 			CreatedTime: createdTime,
-			DeletedTime: 0,
 		}
 		s.cepCache.Remove(key)
 		s.cepCache.Add(key, &newCEP)
@@ -137,7 +136,6 @@ func (s *CiliumEndpointStore) Create(ctx context.Context, eid int64) error {
 			EndpointID:  eid,
 			Node:        node,
 			CreatedTime: createdTime,
-			DeletedTime: 0,
 		}
 		s.cepCache.Add(key, &cep)
 	}
@@ -150,7 +148,7 @@ func (s *CiliumEndpointStore) Remove(ctx context.Context, cep *CiliumEndpoint) e
 	}
 	node := s.GetCurrentNode()
 	key := s.getKey(cep.EndpointID, node)
-	deletedTime := time.Now().Unix()
+	deletedTime := time.Now()
 	newCEP := CiliumEndpoint{
 		ID:          key,
 		EndpointID:  cep.EndpointID,
@@ -186,7 +184,7 @@ func (s *CiliumEndpointStore) initCache(ctx context.Context) error {
 		return err
 	} else {
 		for _, cep := range ceps {
-			if cep.DeletedTime > 0 {
+			if cep.DeletedTime.IsZero() {
 				// stale endpoint
 				continue
 			}

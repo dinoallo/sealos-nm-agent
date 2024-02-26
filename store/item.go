@@ -59,9 +59,9 @@ type TrafficReport struct {
 }
 
 type CiliumEndpoint struct {
-	EndpointID  int64  `bson:"endpoint_id"`
-	CreatedTime int64  `bson:"created_time"`
-	DeletedTime int64  `bson:"deleted_time"`
-	ID          string `bson:"cep_id"`
-	Node        string `bson:"node"`
+	EndpointID  int64     `bson:"endpoint_id"`
+	CreatedTime time.Time `bson:"created_time"`
+	DeletedTime time.Time `bson:"deleted_time"`
+	ID          string    `bson:"cep_id"`
+	Node        string    `bson:"node"`
 }

@@ -88,7 +88,7 @@ func (bf *Factory) initCounter(ctx context.Context) error {
 		return err
 	} else if found {
 		for _, cep := range ceps {
-			if cep.DeletedTime > 0 || cep.Node != s.GetCurrentNode() {
+			if !cep.DeletedTime.IsZero() || cep.Node != s.GetCurrentNode() {
 				// this endpoint is stale or not on this node
 				continue
 			}

@@ -65,6 +65,18 @@ spec:
               key: db_uri
               name: nm-db-conn-credential
               optional: false    
+        - name: TR_COLL
+          valueFrom:
+            secretKeyRef:
+              key: tr_coll
+              name: nm-db-conn-credential
+              optional: false          
+        - name: CEP_COLL
+          valueFrom:
+            secretKeyRef:
+              key: cep_coll
+              name: nm-db-conn-credential
+              optional: false   
         securityContext:
           capabilities:
             add:

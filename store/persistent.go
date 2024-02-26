@@ -355,7 +355,7 @@ func (p *persistent) setupCiliumEndpointAutoDeletion(ctx context.Context, collMe
 				Value: bson.D{
 					{
 						Key:   "$gt",
-						Value: 0,
+						Value: time.Time{},
 					},
 				},
 			},
