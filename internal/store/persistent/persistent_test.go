@@ -3,12 +3,10 @@ package persistent_test
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"os"
 	"testing"
 	"time"
 
-	consts "github.com/dinoallo/sealos-networkmanager-agent/internal/common/const"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/store"
@@ -93,7 +91,7 @@ func TestInsertItemUtils(t *testing.T) {
 		is := is.New(t)
 		var buf []any
 		for i := 0; i < 5; i++ {
-			tr := generateTrafficRecord()
+			tr := util.GenerateTrafficRecord()
 			buf = append(buf, tr)
 		}
 		err := p.InsertMany(context.Background(), coll, buf)
@@ -112,7 +110,7 @@ func TestFindItemUtils(t *testing.T) {
 		is := is.New(t)
 		var buf []any
 		for i := 0; i < total; i++ {
-			tr := generateTrafficRecord()
+			tr := util.GenerateTrafficRecord()
 			buf = append(buf, tr)
 		}
 		err := p.InsertMany(context.Background(), coll, buf)
@@ -162,34 +160,4 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	log.Infof("the test suite return code: %v", code)
 	os.Exit(0)
-}
-
-func generateTrafficRecord() *structs.TrafficRecord {
-	ip := generateIP()
-	dir := consts.TRAFFIC_DIR_V4_EGRESS
-	port := generatePort()
-	tag := fmt.Sprintf("port:%v", port)
-	return &structs.TrafficRecord{
-		TrafficRecordMeta: structs.TrafficRecordMetaData{
-			IP:  ip,
-			Dir: dir,
-			Tag: fmt.Sprintf("port:%v", tag),
-		},
-		DataBytes: uint32(rand.Int31()),
-		ID:        fmt.Sprintf("%v/%v/%v", ip, tag, dir),
-		Timestamp: time.Now(),
-	}
-}
-
-func generatePort() int32 {
-	return rand.Int31n(65536)
-}
-
-func generateIP() string {
-	a := rand.Int31n(255) + 1
-	b := rand.Int31n(255) + 1
-	c := rand.Int31n(255) + 1
-	d := rand.Int31n(255) + 1
-	ip := fmt.Sprintf("%v.%v.%v.%v", a, b, c, d)
-	return ip
 }
