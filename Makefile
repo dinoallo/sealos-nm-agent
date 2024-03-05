@@ -1,12 +1,15 @@
 # Image URL to use all building/pushing image targets
 PROJECT_NAME ?= sealos-nm-agent
+PROJECT_TEST_NAME ?= sealos-nm-agent-test
 REV ?= $(shell git rev-parse --short HEAD)
 PUBLIC_REPO ?= docker.io/dinoallo
 DEBUG_REPO ?= 192.168.3.2:5000/dinoallo
 IMG ?= $(PUBLIC_REPO)/$(PROJECT_NAME)
 DEBUG_IMG ?= $(DEBUG_REPO)/$(PROJECT_NAME)
+TEST_IMG ?= $(PUBLIC_REPO)/$(PROJECT_TEST_NAME)
 TAG ?= $(IMG):$(REV)
 DEBUG_TAG ?= $(DEBUG_IMG):$(REV)
+TEST_TAG ?= $(TEST_IMG):$(REV)
 # Setting SHELL to bash allows bash commands to be executed by recipes.
 # Options are set to exit when a recipe line exits non-zero or a piped command fails.
 SHELL = /usr/bin/env bash -o pipefail
@@ -44,25 +47,9 @@ generate: export BPF_CFLANGS := $(CFLAGS)
 generate:
 	go generate ./...
 
-.PHONY: docker-build
-docker-build: generate## Build docker image with the agent.
-	docker build -t ${TAG} .
-
-.PHONY: docker-build-debug
-docker-build-debug: generate
-	docker build -t ${DEBUG_TAG} -f ./Dockerfile.debug .
-
-.PHONY: docker-push
-docker-push: ## Push docker image with the agent.
-	docker push ${TAG}
-	
-.PHONY: docker-push-debug
-docker-push-debug: ## Push docker image with the agent.
-	docker push ${DEBUG_TAG}
-
 .PHONY: oci-build-debug
 oci-build-debug: generate
-	nerdctl build -t ${DEBUG_TAG} -f ./Dockerfile.debug --output=type=image,oci-mediatypes=true .
+	nerdctl build -t ${DEBUG_TAG} -f ./build/docker/main/Dockerfile.debug --output=type=image,oci-mediatypes=true .
 	
 .PHONY: oci-push-debug
 oci-push-debug: ## Push docker image with the agent.
@@ -72,3 +59,8 @@ oci-push-debug: ## Push docker image with the agent.
 oci-publish-debug: oci-build-debug
 	nerdctl tag ${DEBUG_TAG} ${TAG}
 	nerdctl push ${TAG}
+
+.PHONY: oci-build-test
+oci-build-test: generate
+	nerdctl build -t ${TEST_TAG} -f ./build/docker/test/Dockerfile --output=type=image,oci-mediatypes=true .
+	nerdctl push ${TEST_TAG}

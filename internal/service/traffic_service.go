@@ -2,14 +2,15 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"time"
 
-	"github.com/dinoallo/sealos-networkmanager-agent/bpf/bytecount"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/bpf/bytecount"
+	consts "github.com/dinoallo/sealos-networkmanager-agent/internal/common/const"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/store/cilium_endpoint"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/util"
 	counterpb "github.com/dinoallo/sealos-networkmanager-agent/proto/agent"
-	"github.com/dinoallo/sealos-networkmanager-agent/store"
-	"github.com/dinoallo/sealos-networkmanager-agent/util"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -21,28 +22,31 @@ const (
 	DEFAULT_TRAFFIC_SERVICE_ADDRESS = "0.0.0.0:5005"
 )
 
-type TrafficService struct {
-	counterpb.UnimplementedCountingServiceServer
-	name                string
-	logger              *zap.SugaredLogger
-	bytecountFactory    *bytecount.Factory
-	ciliumEndpointStore *store.CiliumEndpointStore
-	svcRegistrar        *grpc.Server
+type TrafficServiceParam struct {
+	ParentLogger *zap.SugaredLogger
+	BF           *bytecount.BytecountFactoryInterface
+	CES          *cilium_endpoint.CiliumEndpointStoreInterface
 }
 
-func NewTrafficService(baseLogger *zap.SugaredLogger, bf *bytecount.Factory, cepStore *store.CiliumEndpointStore) (*TrafficService, error) {
-	if baseLogger == nil || bf == nil {
-		return nil, fmt.Errorf("both the base logger and the factory shouldn't be nil")
-	}
+type TrafficService struct {
+	counterpb.UnimplementedCountingServiceServer
+	name         string
+	logger       *zap.SugaredLogger
+	param        TrafficServiceParam
+	cfg          conf.TrafficServiceConfig
+	svcRegistrar *grpc.Server
+}
+
+func NewTrafficService(param TrafficServiceParam, cfg conf.TrafficServiceConfig) (*TrafficService, error) {
 	svcRegistrar := grpc.NewServer(
-		grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionIdle: 15 * time.Second}))
+		grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionIdle: time.Duration(cfg.MaxConnectionIdle) * time.Second}))
 	name := "traffic_service"
 	return &TrafficService{
-		name:                name,
-		logger:              baseLogger.With("component", name),
-		bytecountFactory:    bf,
-		ciliumEndpointStore: cepStore,
-		svcRegistrar:        svcRegistrar,
+		name:         name,
+		logger:       param.ParentLogger.With("component", name),
+		param:        param,
+		cfg:          cfg,
+		svcRegistrar: svcRegistrar,
 	}, nil
 }
 
@@ -104,34 +108,35 @@ func (s *TrafficService) CreateCounter(ctx context.Context, in *counterpb.Create
 	if in == nil {
 		return new(counterpb.Empty), util.ErrRequestNotPassed
 	}
-	bf := s.bytecountFactory
+	bf := s.param.BF
 	if bf == nil {
 		return new(counterpb.Empty), util.ErrFactoryNotInited
 	}
-	cepStore := s.ciliumEndpointStore
+	cepStore := s.param.CES
 	if cepStore == nil {
 		return new(counterpb.Empty), util.ErrStoreNotInited
 	}
 	counter := in.GetCounter()
 	eid := counter.GetEndpointId()
-	dir := counter.GetDirection()
+	_dir := counter.GetDirection()
 	cleanUp := in.GetCleanUp()
-	var t bytecount.Counter
-	switch dir {
+
+	var dir consts.TrafficDirection
+	switch _dir {
 	case counterpb.Direction_V4Ingress:
-		t = bytecount.IPv4Ingress
+		dir = consts.TRAFFIC_DIR_V4_INGRESS
 	case counterpb.Direction_V4Egress:
-		t = bytecount.IPv4Egress
+		dir = consts.TRAFFIC_DIR_V4_EGRESS
 	default:
 		return new(counterpb.Empty), util.ErrUnknownDirection
 	}
-	if exists, err := cepStore.Find(ctx, eid); err != nil {
+	if exists, err := cepStore.FindCEP(ctx, eid); err != nil {
 		return nil, err
 	} else if exists && !cleanUp {
 		// if the counter is already created, avoid creating the counter again
 		return new(counterpb.Empty), nil
 	} else {
-		if err := bf.CreateCounter(ctx, eid, t); err != nil {
+		if err := bf.CreateCounter(ctx, eid, dir); err != nil {
 			return new(counterpb.Empty), err
 		}
 		return new(counterpb.Empty), cepStore.Create(ctx, eid)

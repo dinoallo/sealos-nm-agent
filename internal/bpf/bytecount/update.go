@@ -7,11 +7,16 @@ import (
 	"os"
 
 	"github.com/cilium/ebpf"
-	"github.com/dinoallo/sealos-networkmanager-agent/util"
+	consts "github.com/dinoallo/sealos-networkmanager-agent/internal/common/const"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/util"
 	"go.uber.org/zap"
 )
 
-func (bf *Factory) CreateCounter(ctx context.Context, eid int64, c Counter) error {
+func (bf *BytecountFactory) createCounter(ctx context.Context, eid int64, dir consts.TrafficDirection) error {
+	c := bf.getCounter(dir)
+	if c == nil {
+		return nil
+	}
 	log := bf.logger.With(zap.Int64("endpoint", eid), zap.String("direction", c.TypeStr))
 	// check and load the custom call map for this endpoint. if the ccm doesn't exist, (may due to the migration for cilium configuration, which leads to new endpoints have ccm while others don't)
 	// we inform the caller by returning a special error
@@ -38,7 +43,11 @@ func (bf *Factory) CreateCounter(ctx context.Context, eid int64, c Counter) erro
 	return nil
 }
 
-func (bf *Factory) RemoveCounter(ctx context.Context, eid int64, c Counter) error {
+func (bf *BytecountFactory) removeCounter(ctx context.Context, eid int64, dir consts.TrafficDirection) error {
+	c := bf.getCounter(dir)
+	if c == nil {
+		return nil
+	}
 	pinPath := fmt.Sprintf(c.PinPathTemplate, eid)
 	log := bf.logger.With(zap.Int64("endpoint", eid), zap.String("direction", c.TypeStr))
 	if flag, err := checkCounterExists(pinPath); err == nil && flag == true {
@@ -54,6 +63,19 @@ func (bf *Factory) RemoveCounter(ctx context.Context, eid int64, c Counter) erro
 
 	log.Debugf("counter removed")
 	return nil
+}
+
+func (bf *BytecountFactory) getCounter(dir consts.TrafficDirection) *Counter {
+	var c Counter
+	switch dir {
+	case consts.TRAFFIC_DIR_V4_INGRESS:
+		c = bf.v4IngressCounter
+	case consts.TRAFFIC_DIR_V4_EGRESS:
+		c = bf.v4EgressCounter
+	default:
+		return nil
+	}
+	return &c
 }
 
 func checkCounterExists(pinPath string) (bool, error) {

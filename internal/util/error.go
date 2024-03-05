@@ -24,18 +24,26 @@ var (
 
 	// store
 	ErrStoreNotInited               = errors.New("the store is not passed or not initialized")
-	ErrPersistentStorageNotInited   = errors.New("the persistent storage is not passed or not initialized")
 	ErrCacheNotInited               = errors.New("the cache is not passed or not initialized")
 	ErrStoreManagerNotInited        = errors.New("the store manager is not passed or not initialized")
 	ErrCollectionAlreadyExists      = errors.New("the collection already exists")
 	ErrPartialTTLIndexAlreadyExists = errors.New("the partial ttl index already exists")
+	ErrConfigNotInited              = errors.New("the config is not passed or initialized")
+	ErrParamNotInited               = errors.New("the param is not passed or initialized")
+	ErrTRCollectionNotInited        = errors.New("the collection for traffic records is not initialized")
+	ErrCEPCollectionNotInited       = errors.New("the collection for cilium endpoints is not initialized")
+
+	// persistent
+	ErrPersistentStorageNotInited = errors.New("the persistent storage is not passed or not initialized")
+	ErrPersistentStorageNotReady  = errors.New("the persistent storage is not ready")
 
 	// grpc
 	ErrRequestNotPassed          = errors.New("the requests have not been passed")
 	ErrServiceRegistrarNotInited = errors.New("the service registrar is not initialized or not passed")
 
 	// factory
-	ErrFactoryNotInited = errors.New("the factory is not passed or not initialized")
+	ErrFactoryNotInited         = errors.New("the factory is not passed or not initialized")
+	ErrBytecountFactoryNotReady = errors.New("the bytecount factory is not ready")
 
 	// trafficreport
 	ErrTrafficReportNotInited         = errors.New("the traffic report is nil or not initialized")
@@ -43,7 +51,11 @@ var (
 
 	// trafficmonitor
 	ErrTimeoutWaitingForTrafficMonitor = errors.New("timeout waiting for any traffic meters")
+	ErrTrafficMonitorStoreNotReady     = errors.New("cilium endpoint store is not ready")
 
 	// trafficrecord
 	ErrTimeoutWaitingToAddTrafficRecord = errors.New("timeout waiting to add a traffic record")
+
+	// cilium endpoint
+	ErrCiliumEndpointStoreNotReady = errors.New("cilium endpoint store is not ready")
 )

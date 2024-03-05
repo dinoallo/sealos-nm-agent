@@ -1,30 +1,16 @@
-package store
+package structs
 
 import (
-	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/cilium/cilium/pkg/identity"
+	consts "github.com/dinoallo/sealos-networkmanager-agent/internal/common/const"
 )
 
-type TrafficMonitorMetrics struct {
-	SentBytes atomic.Uint32
-	RecvBytes atomic.Uint32
-}
-
-type TrafficMonitor struct {
-	IP           string
-	PortMetrics  map[uint32]*TrafficMonitorMetrics // ordered by port number
-	WorldMetrics *TrafficMonitorMetrics
-	wmMu         sync.RWMutex
-	pmMu         sync.RWMutex
-}
-
 type TrafficRecordMetaData struct {
-	Dir TrafficDirection `bson:"dir"`
-	IP  string           `bson:"ip"`
-	Tag string           `bson:"tag"`
+	Dir consts.TrafficDirection `bson:"dir"`
+	IP  string                  `bson:"ip"`
+	Tag string                  `bson:"tag"`
 }
 type TrafficRecord struct {
 	TrafficRecordMeta TrafficRecordMetaData `bson:"traffic_record_meta"`
@@ -32,14 +18,6 @@ type TrafficRecord struct {
 	ID                string                `bson:"tr_id"`
 	Timestamp         time.Time             `bson:"timestamp"`
 }
-
-const (
-	TRAFFIC_REPORT_TIME_FIELD = "timestamp"
-	TRAFFIC_REPORT_META_FIELD = "traffic_report_meta"
-
-	TRAFFIC_RECORD_TIME_FIELD = "timestamp"
-	TRAFFIC_RECORD_META_FIELD = "traffic_report_meta"
-)
 
 type TrafficReportMetaData struct {
 	SrcIP   string `bson:"src_ip"`
@@ -50,7 +28,7 @@ type TrafficReportMetaData struct {
 
 type TrafficReport struct {
 	TrafficReportMeta TrafficReportMetaData    `bson:"traffic_report_meta"`
-	Dir               TrafficDirection         `bson:"direction"`
+	Dir               consts.TrafficDirection  `bson:"direction"`
 	Protocol          uint32                   `bson:"protocol"`
 	Family            uint32                   `bson:"family"`
 	DataBytes         uint32                   `bson:"data_bytes"`

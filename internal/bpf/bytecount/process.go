@@ -5,17 +5,40 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/cilium/cilium/pkg/identity"
-	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
-	"github.com/dinoallo/sealos-networkmanager-agent/store"
-	"github.com/dinoallo/sealos-networkmanager-agent/util"
+	consts "github.com/dinoallo/sealos-networkmanager-agent/internal/common/const"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/util"
 )
 
-func (bf *Factory) readTraffic(ctx context.Context, t uint32) error {
+func (bf *BytecountFactory) readTraffic(ctx context.Context, eventReader *perf.Reader, d consts.TrafficDirection) error {
+	log := bf.logger
+	rec, err := eventReader.Read()
+	if err != nil {
+		if errors.Is(err, perf.ErrClosed) {
+			log.Infof("the perf event channel is closed")
+			return nil
+		} else {
+			log.Errorf("unable to read from perf event reader: %v", err)
+			return nil
+		}
+	}
+	if rec.LostSamples != 0 {
+		log.Infof("perf event ring buffer full, dropped %d samples", rec.LostSamples)
+	}
+	tr := Traffic{
+		r: &rec,
+		d: d,
+	}
+	bf.rawTrafficChannel <- &tr
+	return nil
+}
+
+/*
+func (bf *BytecountFactory) readTraffic(ctx context.Context, t uint32) error {
 	log := bf.logger
 	objs := bf.objs
 	var eventArray *ebpf.Map
@@ -58,9 +81,28 @@ func (bf *Factory) readTraffic(ctx context.Context, t uint32) error {
 		// go bf.processTraffic(ctx, tr)
 		bf.rawTrafficChannel <- &tr
 	}
+}*/
+
+func (bf *BytecountFactory) processTraffic(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case traffic := <-bf.rawTrafficChannel:
+		var e bytecountTrafficEventT
+		if traffic.r != nil {
+			if err := binary.Read(bytes.NewBuffer(traffic.r.RawSample), bf.nativeEndian, &e); err != nil {
+				return err
+			}
+			if err := bf.submit(ctx, &e, traffic.d); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
-func (bf *Factory) processTraffic(ctx context.Context) error {
+/*
+func (bf *BytecountFactory) processTraffic(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -81,7 +123,7 @@ func (bf *Factory) processTraffic(ctx context.Context) error {
 			}
 		}
 	}
-}
+}*/
 
 /*
 func (bf *Factory) processTraffic(ctx context.Context, traffic Traffic) {
@@ -100,23 +142,14 @@ func (bf *Factory) processTraffic(ctx context.Context, traffic Traffic) {
 	}
 }*/
 
-func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t uint32) error {
+func (bf *BytecountFactory) submit(ctx context.Context, event *bytecountTrafficEventT, d consts.TrafficDirection) error {
 	if event.Len <= 0 {
 		return nil
 	}
-	var dir store.TrafficDirection
 	__srcIP := make([]uint32, 4)
 	__dstIP := make([]uint32, 4)
 	var srcPort uint32
 	var dstPort uint32
-	switch t {
-	case IPv4Ingress.TypeInt:
-		dir = store.TRAFFIC_DIR_V4_INGRESS
-	case IPv4Egress.TypeInt:
-		dir = store.TRAFFIC_DIR_V4_EGRESS
-	default:
-		return nil
-	}
 	__srcIP[0] = event.SrcIp4
 	__dstIP[0] = event.DstIp4
 	srcPort = event.SrcPort
@@ -129,14 +162,14 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 			return nil
 		}
 	}
-	report := &store.TrafficReport{
-		TrafficReportMeta: store.TrafficReportMetaData{
+	report := &structs.TrafficReport{
+		TrafficReportMeta: structs.TrafficReportMetaData{
 			SrcIP:   srcIP.String(),
 			DstIP:   dstIP.String(),
 			SrcPort: srcPort,
 			DstPort: dstPort,
 		},
-		Dir:       dir,
+		Dir:       d,
 		Protocol:  event.Protocol,
 		Family:    event.Family,
 		DataBytes: event.Len,
@@ -144,6 +177,6 @@ func (bf *Factory) submit(ctx context.Context, event *bytecountTrafficEventT, t 
 		Timestamp: time.Now(),
 	}
 	// bf.logger.Infof("src_ip: %v => dst_ip: %v; %v bytes sent", srcIP.String(), dstIP.String(), event.Len)
-	bf.trStore.AddTrafficReport(ctx, report)
+	bf.param.TRS.AddTrafficReport(ctx, report)
 	return nil
 }

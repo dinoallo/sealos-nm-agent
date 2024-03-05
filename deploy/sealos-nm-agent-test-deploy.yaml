@@ -1,22 +1,23 @@
 apiVersion: apps/v1
-kind: DaemonSet
+kind: Deployment
 metadata:
   labels:
-    app.kubernetes.io/name: sealos-nm-agent
+    app.kubernetes.io/name: sealos-nm-agent-test
     app.kubernetes.io/part-of: sealos-nm
-    k8s-app: sealos-nm-agent
-  name: sealos-nm-agent
+    k8s-app: sealos-nm-agent-test
+  name: sealos-nm-agent-test
   namespace: sealos-nm-system
 spec:
+  replicas: 1
   selector:
     matchLabels:
-      k8s-app: sealos-nm-agent
+      k8s-app: sealos-nm-agent-test
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: sealos-nm-agent
+        app.kubernetes.io/name: sealos-nm-agent-test
         app.kubernetes.io/part-of: sealos-nm
-        k8s-app: sealos-nm-agent
+        k8s-app: sealos-nm-agent-test
     spec:
       tolerations:
       - key: node-role.kubernetes.io/control-plane
@@ -33,9 +34,9 @@ spec:
                 k8s-app: cilium
             topologyKey: kubernetes.io/hostname
       containers:
-      - image: docker.io/dinoallo/sealos-nm-agent:dev
+      - image: docker.io/dinoallo/sealos-nm-agent-test:dev
         imagePullPolicy: IfNotPresent
-        name: sealos-nm-agent
+        name: sealos-nm-agent-test
         ports:
         - containerPort: 5005
           hostPort: 5005
@@ -71,7 +72,7 @@ spec:
         - mountPath: /sys/fs/bpf
           mountPropagation: HostToContainer
           name: bpf-maps
-        - mountPath: ./config
+        - mountPath: /etc/sealos-nm-agent/config
           readOnly: true
           name: config
       dnsPolicy: ClusterFirstWithHostNet
@@ -84,8 +85,3 @@ spec:
       - name: config
         configMap:
             name: config
-  updateStrategy:
-    rollingUpdate:
-      maxSurge: 0
-      maxUnavailable: 50%
-    type: RollingUpdate

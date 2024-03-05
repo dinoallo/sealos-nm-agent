@@ -5,35 +5,17 @@ import (
 	"time"
 )
 
-type TrafficDirection uint32
-
-const (
-	CACHE_ENTRIES_SIZE = (1 << 25)
-	CACHE_EXPIRED_TIME = time.Second * 1
-)
-const (
-	TRAFFIC_DIR_UNKNOWN TrafficDirection = iota
-	TRAFFIC_DIR_V4_INGRESS
-	TRAFFIC_DIR_V4_EGRESS
-	TRAFFIC_DIR_V6_INGRESS
-	TRAFFIC_DIR_V6_EGRESS
-)
-
 type CollType int
 
 type Coll struct {
-	T      CollType
-	Prefix string
+	T    CollType
+	Name string
 }
 
 const (
 	COLL_TYPE_TR CollType = iota
 	COLL_TYPE_CEP
-)
-
-var (
-	TRCollection  Coll = Coll{T: COLL_TYPE_TR, Prefix: "traffic_records"}
-	CEPCollection Coll = Coll{T: COLL_TYPE_CEP, Prefix: "cilium_endpoints"}
+	COLL_TYPE_OTHER
 )
 
 // DeadlineCounter is not intent for concurrently usage
