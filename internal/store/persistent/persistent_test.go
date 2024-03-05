@@ -84,7 +84,7 @@ func TestPartialTTLIndexUtils(t *testing.T) {
 }
 
 func TestInsertItemUtils(t *testing.T) {
-	collName := fmt.Sprintf("insert_test")
+	collName := fmt.Sprintf("insert_test_%v", time.Now().Unix())
 	coll := store.Coll{
 		T:    store.COLL_TYPE_OTHER,
 		Name: collName,
@@ -102,7 +102,7 @@ func TestInsertItemUtils(t *testing.T) {
 }
 
 func TestFindItemUtils(t *testing.T) {
-	collName := fmt.Sprintf("find_test")
+	collName := fmt.Sprintf("find_test_%v", time.Now().Unix())
 	coll := store.Coll{
 		T:    store.COLL_TYPE_OTHER,
 		Name: collName,
@@ -160,7 +160,7 @@ func TestMain(m *testing.M) {
 	// test starts here
 	// fmt.Println(dbUri)
 	code := m.Run()
-	log.Info("the test suite return code: %v", code)
+	log.Infof("the test suite return code: %v", code)
 	os.Exit(0)
 }
 
