@@ -209,6 +209,7 @@ func (s *CiliumEndpointStore) getCEP(ctx context.Context, eid int64) (*structs.C
 	if found, err := s.getCEPFromPersistent(ctx, eid, &cep); err != nil {
 		return nil, err
 	} else if found {
+		s.cepCache.Add(key, &cep)
 		return &cep, nil
 	}
 	return nil, nil
