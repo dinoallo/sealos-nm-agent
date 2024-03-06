@@ -100,7 +100,8 @@ func (s *CiliumEndpointStore) initCache(ctx context.Context) error {
 				continue
 			}
 			key := s.getKey(cep.EndpointID, cep.Node)
-			s.cepCache.Add(key, &cep)
+			_cep := cep
+			s.cepCache.Add(key, &_cep)
 		}
 	}
 	return nil
@@ -115,14 +116,15 @@ func (s *CiliumEndpointStore) getAllCEPs(ctx context.Context, ceps *[]structs.Ci
 		return err
 	} else if found {
 		node := s.getCurrentNode()
-		for _, _cep := range _ceps {
-			if !_cep.DeletedTime.IsZero() || _cep.Node != node {
+		for _, cep := range _ceps {
+			if !cep.DeletedTime.IsZero() || cep.Node != node {
 				continue
 			}
-			key := s.getKey(_cep.EndpointID, _cep.Node)
+			key := s.getKey(cep.EndpointID, cep.Node)
 			if cachedCEP, ok := s.cepCache.Get(key); !ok {
-				s.cepCache.Add(key, &_cep)
-				(*ceps) = append((*ceps), _cep)
+				newCEP := cep
+				s.cepCache.Add(key, &newCEP)
+				(*ceps) = append((*ceps), newCEP)
 			} else {
 				(*ceps) = append((*ceps), *cachedCEP)
 			}
