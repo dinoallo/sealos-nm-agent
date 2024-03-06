@@ -6,7 +6,6 @@ import (
 
 	"github.com/cilium/ebpf/perf"
 	consts "github.com/dinoallo/sealos-networkmanager-agent/internal/common/const"
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/util"
 
 	"golang.org/x/sync/errgroup"
@@ -97,16 +96,15 @@ func (bf *BytecountFactory) initObjs(ctx context.Context) error {
 }
 
 func (bf *BytecountFactory) initCounter(ctx context.Context) error {
-	var ceps []structs.CiliumEndpoint
 	logger := bf.logger
 	s := bf.param.CES
 	logger.Infof("recovering counters...")
 	// get all the endpoints from the database and recover the counters
-	err := s.GetAllCEPs(ctx, &ceps)
+	ceps, err := s.GetAllCEPs(ctx)
 	if err != nil {
 		return err
 	}
-	for _, cep := range ceps {
+	for _, cep := range *ceps {
 		err = bf.createCounter(ctx, cep.EndpointID, consts.TRAFFIC_DIR_V4_EGRESS)
 		if err == util.ErrBPFCustomCallMapNotExist {
 			if err := s.RemoveCEP(ctx, cep.EndpointID); err != nil {

@@ -90,77 +90,49 @@ func (s *CiliumEndpointStore) setUpCache() {
 }
 
 func (s *CiliumEndpointStore) initCache(ctx context.Context) error {
-	var ceps []structs.CiliumEndpoint
-	if found, err := s.getAllCEPsFromPersistent(ctx, &ceps); err != nil {
+	ceps, err := s.getAllCEPsFromPersistent(ctx)
+	if err != nil {
 		return err
-	} else if found {
-		node := s.getCurrentNode()
-		for _, cep := range ceps {
-			if !cep.DeletedTime.IsZero() || cep.Node != node {
-				continue
-			}
-			key := s.getKey(cep.EndpointID, cep.Node)
-			_cep := cep
-			s.cepCache.Add(key, &_cep)
-		}
 	}
-	return nil
-}
-
-func (s *CiliumEndpointStore) getAllCEPs(ctx context.Context, ceps *[]structs.CiliumEndpoint) error {
 	if ceps == nil {
 		return nil
 	}
-	var _ceps []structs.CiliumEndpoint
-	if found, err := s.getAllCEPsFromPersistent(ctx, &_ceps); err != nil {
-		return err
-	} else if found {
-		node := s.getCurrentNode()
-		for _, cep := range _ceps {
-			if !cep.DeletedTime.IsZero() || cep.Node != node {
-				continue
-			}
-			key := s.getKey(cep.EndpointID, cep.Node)
-			if cachedCEP, ok := s.cepCache.Get(key); !ok {
-				newCEP := cep
-				s.cepCache.Add(key, &newCEP)
-				(*ceps) = append((*ceps), newCEP)
-			} else {
-				(*ceps) = append((*ceps), *cachedCEP)
-			}
-		}
+	for _, cep := range *ceps {
+		key := s.getKey(cep.EndpointID, cep.Node)
+		_cep := cep
+		s.cepCache.Add(key, &_cep)
 	}
 	return nil
 }
 
-// TODO: get only the ceps of this node
-func (s *CiliumEndpointStore) getAllCEPsFromPersistent(ctx context.Context, ceps *[]structs.CiliumEndpoint) (bool, error) {
-	if ceps == nil {
-		return false, fmt.Errorf("a slice of CiliumEndpoint should be created")
-	}
+// TODO: get only the ceps of this node with filter maybe?
+func (s *CiliumEndpointStore) getAllCEPsFromPersistent(ctx context.Context) (*[]structs.CiliumEndpoint, error) {
 	p := s.p
-	found := false
-	if err := p.FindAll(ctx, s.cepColl, ceps); err != nil {
-		return false, err
-	} else {
-		if len(*ceps) > 0 {
-			found = true
-		}
+	var _ceps []structs.CiliumEndpoint
+	if err := p.FindAll(ctx, s.cepColl, &_ceps); err != nil {
+		return nil, err
 	}
-	return found, nil
+	node := s.getCurrentNode()
+	var ceps []structs.CiliumEndpoint
+	for _, _cep := range _ceps {
+		if _cep.IsIrrelevant(node) {
+			continue
+		}
+		ceps = append(ceps, _cep)
+	}
+	return &ceps, nil
 }
 
-func (s *CiliumEndpointStore) getCEPFromPersistent(ctx context.Context, eid int64, cep *structs.CiliumEndpoint) (bool, error) {
+func (s *CiliumEndpointStore) getCEPFromPersistent(ctx context.Context, eid int64) (*structs.CiliumEndpoint, error) {
 	p := s.p
 	var _cep structs.CiliumEndpoint
 	filterKey := "endpoint_id"
 	if found, err := p.FindOne(ctx, s.cepColl, filterKey, eid, &_cep); err != nil {
-		return false, err
+		return nil, err
 	} else if found {
-		*cep = _cep
-		return found, nil
+		return &_cep, nil
 	}
-	return false, nil
+	return nil, nil
 }
 
 func (s *CiliumEndpointStore) create(ctx context.Context, eid int64) error {
@@ -207,33 +179,58 @@ func (s *CiliumEndpointStore) removeCEP(ctx context.Context, eid int64) error {
 		s.cepCache.Add(key, &newCEP)
 		return nil
 	}
-	var cep structs.CiliumEndpoint
-	if found, err := s.getCEPFromPersistent(ctx, eid, &cep); err != nil {
+	cep, err := s.getCEPFromPersistent(ctx, eid)
+	if err != nil {
 		return err
-	} else if found {
-		cep.DeletedTime = deletedTime
-		s.cepCache.Add(key, &cep)
 	}
+	if cep == nil {
+		return nil
+	}
+	cep.DeletedTime = deletedTime
+	s.cepCache.Add(key, cep)
 	return nil
 }
 
 func (s *CiliumEndpointStore) getCEP(ctx context.Context, eid int64) (*structs.CiliumEndpoint, error) {
 	node := s.getCurrentNode()
 	key := s.getKey(eid, node)
-	var cep structs.CiliumEndpoint
 	if _cep, ok := s.cepCache.Get(key); ok {
-		cep = *_cep
+		cep := *_cep
 		return &cep, nil
 	}
-	if found, err := s.getCEPFromPersistent(ctx, eid, &cep); err != nil {
+	cep, err := s.getCEPFromPersistent(ctx, eid)
+	if err != nil {
 		return nil, err
-	} else if found {
-		s.cepCache.Add(key, &cep)
-		return &cep, nil
 	}
-	return nil, nil
+	if cep == nil {
+		return nil, nil
+	}
+	s.cepCache.Add(key, cep)
+	cepCopy := *cep
+	return &cepCopy, nil
 }
 
+func (s *CiliumEndpointStore) getAllCEPs(ctx context.Context) (*[]structs.CiliumEndpoint, error) {
+	_ceps, err := s.getAllCEPsFromPersistent(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _ceps == nil {
+		return nil, nil
+	}
+	var ceps []structs.CiliumEndpoint
+	for _, _cep := range *_ceps {
+		key := s.getKey(_cep.EndpointID, _cep.Node)
+		if cachedCEP, ok := s.cepCache.Get(key); !ok {
+			newCEP := _cep
+			ceps = append(ceps, newCEP)
+			s.cepCache.Add(key, &newCEP)
+		} else {
+			ceps = append(ceps, *cachedCEP)
+		}
+	}
+	return &ceps, nil
+}
 func (s *CiliumEndpointStore) getCurrentNode() string {
 	s.nodeMutex.RLock()
 	defer s.nodeMutex.RUnlock()

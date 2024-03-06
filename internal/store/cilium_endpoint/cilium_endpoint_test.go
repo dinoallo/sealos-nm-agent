@@ -9,7 +9,6 @@ import (
 	"context"
 	"os"
 
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/store/persistent"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/util"
@@ -147,11 +146,10 @@ func TestGet(t *testing.T) {
 		time.Sleep(time.Second * time.Duration(d))
 	})
 	t.Run("get all cilium endpoints", func(t *testing.T) {
-		var ceps []structs.CiliumEndpoint
 		is := is.New(t)
-		err := ces.GetAllCEPs(context.Background(), &ceps)
+		ceps, err := ces.GetAllCEPs(context.Background())
 		is.NoErr(err)
-		is.True(len(ceps) >= total) //TODO: find a better way to test this
+		is.True(len(*ceps) >= total) //TODO: find a better way to test this
 	})
 }
 

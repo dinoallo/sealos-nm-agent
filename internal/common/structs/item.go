@@ -43,3 +43,7 @@ type CiliumEndpoint struct {
 	ID          string    `bson:"cep_id"`
 	Node        string    `bson:"node"`
 }
+
+func (cep *CiliumEndpoint) IsIrrelevant(currentNode string) bool {
+	return !cep.DeletedTime.IsZero() || cep.Node != currentNode
+}

@@ -79,13 +79,13 @@ func (s *CiliumEndpointStoreInterface) FindCEP(ctx context.Context, eid int64) (
 	}
 }
 
-func (s *CiliumEndpointStoreInterface) GetAllCEPs(ctx context.Context, ceps *[]structs.CiliumEndpoint) error {
+func (s *CiliumEndpointStoreInterface) GetAllCEPs(ctx context.Context) (*[]structs.CiliumEndpoint, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.notReady() {
-		return util.ErrCiliumEndpointStoreNotReady
+		return nil, util.ErrCiliumEndpointStoreNotReady
 	}
-	return s.h.getAllCEPs(ctx, ceps)
+	return s.h.getAllCEPs(ctx)
 }
 
 func (s *CiliumEndpointStoreInterface) notReady() bool {
