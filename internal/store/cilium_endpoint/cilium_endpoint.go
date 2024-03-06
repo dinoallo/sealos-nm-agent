@@ -110,14 +110,29 @@ func (s *CiliumEndpointStore) getAllCEPs(ctx context.Context, ceps *[]structs.Ci
 	if ceps == nil {
 		return nil
 	}
-	_ceps := s.cepCache.Values()
-	for _, _cep := range _ceps {
-		(*ceps) = append((*ceps), *_cep)
+	var _ceps []structs.CiliumEndpoint
+	if found, err := s.getAllCEPsFromPersistent(ctx, &_ceps); err != nil {
+		return err
+	} else if found {
+		node := s.getCurrentNode()
+		for _, _cep := range _ceps {
+			if !_cep.DeletedTime.IsZero() || _cep.Node != node {
+				continue
+			}
+			key := s.getKey(_cep.EndpointID, _cep.Node)
+			if cachedCEP, ok := s.cepCache.Get(key); !ok {
+				s.cepCache.Add(key, &_cep)
+				(*ceps) = append((*ceps), _cep)
+			} else {
+				(*ceps) = append((*ceps), *cachedCEP)
+			}
+		}
 	}
 	return nil
 }
 
-func (s *CiliumEndpointStore) getAllCEPsFromPersistent(ctx context.Context, ceps *[]any) (bool, error) {
+// TODO: get only the ceps of this node
+func (s *CiliumEndpointStore) getAllCEPsFromPersistent(ctx context.Context, ceps *[]structs.CiliumEndpoint) (bool, error) {
 	if ceps == nil {
 		return false, fmt.Errorf("a slice of CiliumEndpoint should be created")
 	}
