@@ -90,16 +90,17 @@ func (s *CiliumEndpointStore) setUpCache() {
 }
 
 func (s *CiliumEndpointStore) initCache(ctx context.Context) error {
-	var ceps []any
+	var ceps []structs.CiliumEndpoint
 	if found, err := s.getAllCEPsFromPersistent(ctx, &ceps); err != nil {
 		return err
 	} else if found {
 		node := s.getCurrentNode()
-		for _, _cep := range ceps {
-			if cep, ok := _cep.(*structs.CiliumEndpoint); ok {
-				key := s.getKey(cep.EndpointID, node)
-				s.cepCache.Add(key, cep)
+		for _, cep := range ceps {
+			if !cep.DeletedTime.IsZero() || cep.Node != node {
+				continue
 			}
+			key := s.getKey(cep.EndpointID, cep.Node)
+			s.cepCache.Add(key, &cep)
 		}
 	}
 	return nil
