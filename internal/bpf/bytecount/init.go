@@ -16,8 +16,10 @@ func (bf *BytecountFactory) startReader(ctx context.Context) error {
 	readerEg := errgroup.Group{}
 	readerEg.SetLimit(bf.cfg.MaxReaderCount)
 	log := bf.logger
+	log.Infof("start bytecount factory reader...")
 	v4EgressEventReader, err := perf.NewReader(bf.objs.EgressTrafficEvents, bf.cfg.PerfBufferSize)
 	if err != nil {
+		log.Errorf("%v", err)
 		return err
 	}
 	for {
@@ -28,7 +30,7 @@ func (bf *BytecountFactory) startReader(ctx context.Context) error {
 			readerEg.Go(
 				func() error {
 					// read egress traffic
-					if err := bf.readTraffic(ctx, v4EgressEventReader, 1); err != nil {
+					if err := bf.readTraffic(ctx, v4EgressEventReader, consts.TRAFFIC_DIR_V4_EGRESS); err != nil {
 						log.Errorf("unable to read traffic: %v", err)
 					}
 					return nil
@@ -41,6 +43,7 @@ func (bf *BytecountFactory) startProcessor(ctx context.Context) error {
 	processorEg := errgroup.Group{}
 	processorEg.SetLimit(bf.cfg.MaxProcessorCount)
 	log := bf.logger
+	log.Infof("start bytecount factory processor...")
 	for {
 		select {
 		case <-ctx.Done():

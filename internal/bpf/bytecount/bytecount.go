@@ -58,6 +58,7 @@ func newBytecountFactory(p BytecountFactoryParam, cfg conf.BytecountFactoryConfi
 		logger:            logger,
 		workQueue:         workQueue,
 		param:             p,
+		cfg:               cfg,
 		rawTrafficChannel: make(chan *Traffic, cfg.MaxTrafficQueueLen),
 	}
 }

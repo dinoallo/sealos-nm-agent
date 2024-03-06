@@ -4,8 +4,8 @@ import (
 	"context"
 	"flag"
 	"os"
-	"os/signal"
-	"syscall"
+	// "os/signal"
+	// "syscall"
 
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/bpf/bytecount"
@@ -39,8 +39,8 @@ func main() {
 	// Init logger for main
 	log := logger.With(zap.String("component", "main"))
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
+	// sig := make(chan os.Signal, 1)
+	// signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
 
 	// Init configuration
 	mainConf, err := conf.InitConfig(logger, *devMode)
@@ -107,10 +107,9 @@ func main() {
 	}
 	ts.Launch(ctx, &mainEg)
 	defer ts.Stop(ctx)
-	<-sig
-	cancel()
-	close(sig)
 	if err := mainEg.Wait(); err != nil {
 		log.Errorf("%v", err)
+		return
 	}
+	log.Infof("shutting down...")
 }
