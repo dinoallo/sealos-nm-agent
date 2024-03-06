@@ -62,11 +62,11 @@ func (s *PersistentInterface) CreatePartialTTLIndex(ctx context.Context, coll st
 	return s.h.createPartialTTLIndex(ctx, coll, ptiName)
 }
 
-func (s *PersistentInterface) FindOne(ctx context.Context, coll store.Coll, filterKey string, filterValue any, obj any) error {
+func (s *PersistentInterface) FindOne(ctx context.Context, coll store.Coll, filterKey string, filterValue any, obj any) (bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.notReady() {
-		return util.ErrPersistentStorageNotReady
+		return false, util.ErrPersistentStorageNotReady
 	}
 	return s.h.findOne(ctx, coll, filterKey, filterValue, obj)
 }

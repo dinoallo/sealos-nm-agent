@@ -130,8 +130,9 @@ func TestFindItemUtils(t *testing.T) {
 		}
 		trSample := items[0]
 		var tr structs.TrafficRecord
-		err := p.FindOne(context.Background(), coll, "tr_id", trSample.ID, &tr)
+		found, err := p.FindOne(context.Background(), coll, "tr_id", trSample.ID, &tr)
 		is.NoErr(err)
+		is.True(found)
 		is.True(tr.ID == trSample.ID)
 	})
 }

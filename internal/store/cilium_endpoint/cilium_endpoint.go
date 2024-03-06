@@ -134,14 +134,15 @@ func (s *CiliumEndpointStore) getAllCEPsFromPersistent(ctx context.Context, ceps
 
 func (s *CiliumEndpointStore) getCEPFromPersistent(ctx context.Context, eid int64, cep *structs.CiliumEndpoint) (bool, error) {
 	p := s.p
-	found := false
 	var _cep structs.CiliumEndpoint
 	filterKey := "endpoint_id"
-	if err := p.FindOne(ctx, s.cepColl, filterKey, eid, &_cep); err != nil {
+	if found, err := p.FindOne(ctx, s.cepColl, filterKey, eid, &_cep); err != nil {
 		return false, err
+	} else if found {
+		*cep = _cep
+		return found, nil
 	}
-	*cep = _cep
-	return found, nil
+	return false, nil
 }
 
 func (s *CiliumEndpointStore) create(ctx context.Context, eid int64) error {

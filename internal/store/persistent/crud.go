@@ -38,10 +38,10 @@ func (p *Persistent) findAll(ctx context.Context, collMeta store.Coll, size int6
 	return nil
 }
 
-func (p *Persistent) findOne(ctx context.Context, collMeta store.Coll, filterKey string, filterValue any, obj any) error {
+func (p *Persistent) findOne(ctx context.Context, collMeta store.Coll, filterKey string, filterValue any, obj any) (bool, error) {
 	coll, err := p.getCurrentCollection(collMeta)
 	if err != nil {
-		return err
+		return false, err
 	}
 	_ctx, cancel := context.WithTimeout(ctx, time.Duration(p.cfg.ConnectionTimeout)*time.Second)
 	defer cancel()
@@ -49,10 +49,13 @@ func (p *Persistent) findOne(ctx context.Context, collMeta store.Coll, filterKey
 		Key:   filterKey,
 		Value: filterValue,
 	}}
-	if err := coll.FindOne(_ctx, filter).Decode(obj); err != nil {
-		return err
+	if err := coll.FindOne(_ctx, filter).Decode(obj); err == nil {
+		return true, nil
+	} else if err == mongo.ErrNoDocuments {
+		return false, nil
+	} else {
+		return false, err
 	}
-	return nil
 }
 
 func (p *Persistent) replaceOne(ctx context.Context, collMeta store.Coll, k string, v string, replacement interface{}) error {
