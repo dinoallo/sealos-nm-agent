@@ -56,7 +56,7 @@ func newTrafficRecordStore(param TrafficRecordStoreParam, cfg conf.TrafficRecord
 	trafficMonitors := make(map[string]*TrafficMonitor)
 	trafficRecordQueue := make(chan *structs.TrafficRecord, cfg.MaxRecordQueueLen)
 	trafficReportQueue := make(chan *structs.TrafficReport, cfg.MaxReportQueueLen)
-	name := "traffic_monitor_store"
+	name := "traffic_record_store"
 	logger := param.ParentLogger.With("component", name)
 	trColl := store.Coll{
 		T:    store.COLL_TYPE_TR,
