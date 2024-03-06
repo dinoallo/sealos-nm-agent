@@ -28,7 +28,7 @@ func TestCreate(t *testing.T) {
 	t.Run("create a cilium endpoint", func(t *testing.T) {
 		is := is.New(t)
 		eid := rand.Int63n(1000)
-		fmt.Printf("random eid for TestCreate: %v", eid)
+		fmt.Printf("random eid for TestCreate: %v\n", eid)
 		key := ces.h.getKey(eid, node)
 		err := ces.Create(context.Background(), eid)
 		is.NoErr(err)
@@ -43,8 +43,8 @@ func TestCreate(t *testing.T) {
 func TestRemove(t *testing.T) {
 	eid1 := rand.Int63n(1000)
 	eid2 := rand.Int63n(1000)
-	fmt.Printf("random eid1 for TestRemove: %v", eid1)
-	fmt.Printf("random eid2 for TestRemove: %v", eid2)
+	fmt.Printf("random eid1 for TestRemove: %v\n", eid1)
+	fmt.Printf("random eid2 for TestRemove: %v\n", eid2)
 	node := ces.h.getCurrentNode()
 	t.Run("create a cilium endpoint with eid1 to remove", func(t *testing.T) {
 		is := is.New(t)
@@ -74,9 +74,9 @@ func TestRemove(t *testing.T) {
 	})
 	t.Run("remove a cilium endpoint that's in the database", func(t *testing.T) {
 		is := is.New(t)
-		err := ces.RemoveCEP(context.Background(), eid1)
+		err := ces.RemoveCEP(context.Background(), eid2)
 		is.NoErr(err)
-		key := ces.h.getKey(eid1, node)
+		key := ces.h.getKey(eid2, node)
 		cep, ok := ces.h.cepCache.Get(key)
 		if !ok {
 			is.Fail()
@@ -88,8 +88,8 @@ func TestRemove(t *testing.T) {
 func TestFind(t *testing.T) {
 	eid1 := rand.Int63n(1000)
 	eid2 := rand.Int63n(1000)
-	fmt.Printf("random eid1 for TestFind: %v", eid1)
-	fmt.Printf("random eid2 for TestFind: %v", eid2)
+	fmt.Printf("random eid1 for TestFind: %v\n", eid1)
+	fmt.Printf("random eid2 for TestFind: %v\n", eid2)
 	node := ces.h.getCurrentNode()
 	t.Run("create a cilium endpoint with eid1 to find", func(t *testing.T) {
 		is := is.New(t)
@@ -136,7 +136,7 @@ func TestGet(t *testing.T) {
 		is := is.New(t)
 		for i := 0; i < total; i++ {
 			eid := rand.Int63n(1000)
-			fmt.Printf("random eid for TestCreate: %v", eid)
+			fmt.Printf("random eid for TestGet: %v\n", eid)
 			err := ces.Create(context.Background(), eid)
 			is.NoErr(err)
 		}
