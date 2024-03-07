@@ -1,4 +1,4 @@
 [submodule "proto"]
-	path = proto
+	path = api/proto
 	url = git@github.com:dinoallo/sealos-networkmanager-protoapi.git
 	ignore = dirty
