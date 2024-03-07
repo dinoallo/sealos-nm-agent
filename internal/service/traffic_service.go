@@ -5,12 +5,12 @@ import (
 	"net"
 	"time"
 
+	counterpb "github.com/dinoallo/sealos-networkmanager-agent/api/proto/agent"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/bpf/bytecount"
 	consts "github.com/dinoallo/sealos-networkmanager-agent/internal/common/const"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/store/cilium_endpoint"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/util"
-	counterpb "github.com/dinoallo/sealos-networkmanager-agent/proto/agent"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -29,7 +29,7 @@ type TrafficServiceParam struct {
 }
 
 type TrafficService struct {
-	counterpb.UnimplementedCountingServiceServer
+	counterpb.UnimplementedTrafficServiceServer
 	name         string
 	logger       *zap.SugaredLogger
 	param        TrafficServiceParam
@@ -54,7 +54,7 @@ func (s *TrafficService) Launch(ctx context.Context, mainEg *errgroup.Group) err
 	if s.svcRegistrar == nil {
 		return util.ErrServiceRegistrarNotInited
 	}
-	counterpb.RegisterCountingServiceServer(s.svcRegistrar, s)
+	counterpb.RegisterTrafficServiceServer(s.svcRegistrar, s)
 	reflection.Register(s.svcRegistrar)
 	mainEg.Go(func() error {
 		return s.serve(ctx)
@@ -104,22 +104,15 @@ func (s *TrafficService) serve(ctx context.Context) error {
 	}
 }
 
-func (s *TrafficService) CreateCounter(ctx context.Context, in *counterpb.CreateCounterRequest) (*counterpb.Empty, error) {
+func (s *TrafficService) CreateTrafficCounter(ctx context.Context, in *counterpb.CreateTrafficCounterRequest) (*counterpb.CreateTrafficCounterResponse, error) {
 	if in == nil {
-		return new(counterpb.Empty), util.ErrRequestNotPassed
+		return getResp(counterpb.Code_INVALID_ARGUMENT, "CreateTrafficCounterRequest is not passed"), util.ErrRequestNotPassed
 	}
 	bf := s.param.BF
-	if bf == nil {
-		return new(counterpb.Empty), util.ErrFactoryNotInited
-	}
 	cepStore := s.param.CES
-	if cepStore == nil {
-		return new(counterpb.Empty), util.ErrStoreNotInited
-	}
 	counter := in.GetCounter()
 	eid := counter.GetEndpointId()
 	_dir := counter.GetDirection()
-	cleanUp := in.GetCleanUp()
 
 	var dir consts.TrafficDirection
 	switch _dir {
@@ -128,30 +121,20 @@ func (s *TrafficService) CreateCounter(ctx context.Context, in *counterpb.Create
 	case counterpb.Direction_V4Egress:
 		dir = consts.TRAFFIC_DIR_V4_EGRESS
 	default:
-		return new(counterpb.Empty), util.ErrUnknownDirection
+		return getResp(counterpb.Code_UNIMPLEMENTED, "the direction is not currently implemented"), util.ErrUnknownDirection
 	}
-	if exists, err := cepStore.FindCEP(ctx, eid); err != nil {
-		return nil, err
-	} else if exists && !cleanUp {
-		// if the counter is already created, avoid creating the counter again
-		return new(counterpb.Empty), nil
-	} else {
-		if err := bf.CreateCounter(ctx, eid, dir); err != nil {
-			return new(counterpb.Empty), err
+	if err := bf.CreateCounter(ctx, eid, dir); err != nil {
+		switch err {
+		case util.ErrBPFCustomCallMapNotExist:
+			return getResp(counterpb.Code_NOT_FOUND, err.Error()), err
+		case util.ErrBPFMapNotLoaded:
+			return getResp(counterpb.Code_INTERNAL, err.Error()), err
+		case util.ErrBPFMapNotUpdated:
+			return getResp(counterpb.Code_INTERNAL, err.Error()), err
 		}
-		return new(counterpb.Empty), cepStore.Create(ctx, eid)
 	}
-}
-
-// the following apis have been deprecated
-func (s *TrafficService) Subscribe(ctx context.Context, in *counterpb.SubscribeRequest) (*counterpb.Empty, error) {
-	return new(counterpb.Empty), nil
-}
-
-func (s *TrafficService) Unsubscribe(ctx context.Context, in *counterpb.UnsubscribeRequest) (*counterpb.Empty, error) {
-	return new(counterpb.Empty), nil
-}
-
-func (s *TrafficService) DumpTraffic(ctx context.Context, in *counterpb.DumpTrafficRequest) (*counterpb.DumpTrafficResponse, error) {
-	return nil, nil
+	if err := cepStore.Create(ctx, eid); err != nil {
+		return getResp(counterpb.Code_INTERNAL, err.Error()), err
+	}
+	return getResp(counterpb.Code_OK, "counter created"), nil
 }

@@ -11,8 +11,8 @@ COPY go.sum go.sum
 RUN go mod download
 
 # Copy the go source
+COPY api/ api/
 COPY internal/ internal/
-COPY proto/ proto/
 COPY cmd/main.go cmd/main.go
 
 # Build
