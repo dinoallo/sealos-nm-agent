@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"time"
 
@@ -16,10 +17,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
-)
-
-const (
-	DEFAULT_TRAFFIC_SERVICE_ADDRESS = "0.0.0.0:5005"
 )
 
 type TrafficServiceParam struct {
@@ -83,7 +80,8 @@ func (s *TrafficService) serve(ctx context.Context) error {
 	if logger == nil {
 		return util.ErrLoggerNotInited
 	}
-	lis, err := net.Listen("tcp", DEFAULT_TRAFFIC_SERVICE_ADDRESS)
+	addr := fmt.Sprintf("0.0.0.0:%v", s.cfg.Port)
+	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}

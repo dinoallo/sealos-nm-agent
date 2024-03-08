@@ -38,6 +38,7 @@ const (
 	BYTECOUNT_FACTORY_DEFAULT_MAX_TRAFFIC_QUEUE_LEN = (1 << 20)
 
 	TRAFFIC_SERVICE_DEFAULT_MAX_CONNECTION_IDLE = 15
+	TRAFFIC_SERVICE_DEFAULT_PORT                = 5005
 )
 
 type TrafficRecordStoreConfig struct {
@@ -94,6 +95,7 @@ type BytecountFactoryConfig struct {
 
 type TrafficServiceConfig struct {
 	MaxConnectionIdle int `yaml:"max_connection_idle"`
+	Port              int `yaml:"port"`
 }
 
 type MainConfig struct {
@@ -193,5 +195,6 @@ func NewBytecountFactoryConfig() *BytecountFactoryConfig {
 func NewTrafficServiceConfig() *TrafficServiceConfig {
 	return &TrafficServiceConfig{
 		MaxConnectionIdle: TRAFFIC_SERVICE_DEFAULT_MAX_CONNECTION_IDLE,
+		Port:              TRAFFIC_SERVICE_DEFAULT_PORT,
 	}
 }
