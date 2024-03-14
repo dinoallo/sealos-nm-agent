@@ -47,6 +47,11 @@ generate: export BPF_CFLANGS := $(CFLAGS)
 generate:
 	go generate ./...
 
+.PHONY: predeploy-debug
+predeploy: 
+	cd deploy/kustomize/staging && kustomize edit set image agent-daemon=${DEBUG_TAG}
+	kustomize build deploy/kustomize/default > deploy/kustomize/example-deploy.yaml
+
 .PHONY: oci-build-debug
 oci-build-debug: generate
 	nerdctl build -t ${DEBUG_TAG} -f ./build/docker/main/Dockerfile.debug --output=type=image,oci-mediatypes=true .

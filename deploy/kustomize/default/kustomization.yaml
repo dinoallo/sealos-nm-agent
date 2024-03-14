@@ -1,0 +1,6 @@
+namespace: sealos-nm-system
+
+namePrefix: sealos-nm-
+
+resources:
+- ../staging
