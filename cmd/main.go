@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"os"
+
 	// "os/signal"
 	// "syscall"
 
@@ -54,6 +55,7 @@ func main() {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		log.Fatal(err)
 	}
+	log.Infof("memory lock removed")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -65,8 +67,11 @@ func main() {
 		DBURI:        dbUri,
 	}
 	p := persistent.NewPersistentInterface(pp, *mainConf.PersistentStorageConfig)
-	p.Launch(ctx, &mainEg)
+	if err := p.Launch(ctx, &mainEg); err != nil {
+		log.Fatalf("failed to launch the persistent storage: %v", err)
+	}
 	defer p.Stop(ctx)
+	log.Infof("persistent storage ready")
 
 	// init cilium endpoint store
 	cep := cilium_endpoint.CiliumEndpointStoreParam{
@@ -74,7 +79,10 @@ func main() {
 		P:            p,
 	}
 	ces := cilium_endpoint.NewCiliumEndpointStoreInterface(cep, *mainConf.CiliumEndpointStoreConfig)
-	ces.Launch(ctx, &mainEg)
+	if err := ces.Launch(ctx, &mainEg); err != nil {
+		log.Fatalf("failed to launch cilium endpoint store: %v", err)
+	}
+	log.Infof("cilium endpoint store ready")
 
 	// init traffic record store
 	trsp := traffic_record.TrafficRecordStoreParam{
@@ -82,7 +90,10 @@ func main() {
 		P:            p,
 	}
 	trs := traffic_record.NewTrafficRecordStoreInterface(trsp, *mainConf.TrafficRecordStoreConfig)
-	trs.Launch(ctx, &mainEg)
+	if err := trs.Launch(ctx, &mainEg); err != nil {
+		log.Fatalf("failed to launch traffic recrod store: %v", err)
+	}
+	log.Infof("traffic record store ready")
 
 	// init bytecount factory
 	bfp := bytecount.BytecountFactoryParam{
@@ -91,8 +102,11 @@ func main() {
 		CES:          ces,
 	}
 	bf := bytecount.NewBytecountFactoryInterface(bfp, *mainConf.BytecountFactoryConfig)
-	bf.Launch(ctx, &mainEg)
+	if err := bf.Launch(ctx, &mainEg); err != nil {
+		log.Fatalf("failed to launch bytecount factory: %v", err)
+	}
 	defer bf.Stop(ctx)
+	log.Infof("bytecount factory ready")
 
 	// Init Services
 	tsp := service.TrafficServiceParam{
@@ -105,8 +119,11 @@ func main() {
 		log.Fatalf("failed to create new traffic service: %v", err)
 		return
 	}
-	ts.Launch(ctx, &mainEg)
+	if err := ts.Launch(ctx, &mainEg); err != nil {
+		log.Fatalf("failed to launch traffic service: %v", err)
+	}
 	defer ts.Stop(ctx)
+	log.Infof("grpc server ready")
 	if err := mainEg.Wait(); err != nil {
 		log.Errorf("%v", err)
 		return
