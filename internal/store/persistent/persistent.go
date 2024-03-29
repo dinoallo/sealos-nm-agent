@@ -8,7 +8,6 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/util"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"go.mongodb.org/mongo-driver/mongo/readpref"
 	"go.uber.org/zap"
 )
 
@@ -46,11 +45,7 @@ func (p *Persistent) connect(ctx context.Context) error {
 	} else {
 		p.dbClient = client
 	}
-	if err := p.dbClient.Ping(connectCtx, readpref.Primary()); err != nil {
-		return err
-	} else {
-		p.database = p.dbClient.Database(p.cfg.DBName)
-	}
+	p.database = p.dbClient.Database(p.cfg.DBName)
 	return nil
 }
 
