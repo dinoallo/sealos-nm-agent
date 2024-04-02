@@ -19,6 +19,19 @@ type TrafficRecord struct {
 	Timestamp         time.Time             `bson:"timestamp"`
 }
 
+type SummaryMetaData struct {
+	IP   string `bson:"ip"`
+	Node string `bson:"node"`
+}
+
+type Summary struct {
+	ID          string          `bson:"sum_id"`
+	SummaryMeta SummaryMetaData `bson:"summary_meta"`
+	RecvBytes   uint32          `bson:"recv_bytes"`
+	SentBytes   uint32          `bson:"sent_bytes"`
+	Timestamp   time.Time       `bson:"timestamp"`
+}
+
 type TrafficReportMetaData struct {
 	SrcIP   string `bson:"src_ip"`
 	SrcPort uint32 `bson:"src_port"`
