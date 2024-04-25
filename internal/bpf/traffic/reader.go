@@ -6,7 +6,6 @@ import (
 
 	"time"
 
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 
 	"github.com/cilium/ebpf"
@@ -14,11 +13,16 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type TrafficEventReaderConfig struct {
+	WorkerCount         int
+	PerfEventBufferSize int
+}
+
 type TrafficEventReaderParams struct {
 	ParentLogger log.Logger
 	PerfEvents   *ebpf.Map
 	Events       chan *perf.Record
-	conf.TrafficEventReaderConfig
+	TrafficEventReaderConfig
 }
 
 type TrafficEventReader struct {

@@ -6,16 +6,19 @@ import (
 	"encoding/binary"
 
 	"github.com/cilium/ebpf/perf"
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/host"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 	"golang.org/x/sync/errgroup"
 )
 
+type TrafficEventHandlerConfig struct {
+	WorkerCount int
+}
+
 type TrafficEventHandlerParams struct {
 	ParentLogger log.Logger
 	Events       chan *perf.Record
-	conf.TrafficEventHandlerConfig
+	TrafficEventHandlerConfig
 	//TODO: add raw traffic handler
 }
 
