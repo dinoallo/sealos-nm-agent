@@ -3,7 +3,6 @@ package hooker
 import (
 	"log"
 	"net"
-	"os"
 	"testing"
 
 	"github.com/cilium/ebpf"
@@ -69,12 +68,14 @@ func setupDummyInterface(iface string) (*rtnetlink.Conn, error) {
 func TestMain(m *testing.M) {
 	logger, err := zaplog.NewZap(true)
 	if err != nil {
-		log.Fatalf("could not setup log: %v", err)
+		log.Printf("could not setup log: %v", err)
+		return
 	}
 	testIfAceExists := false
 	interfaces, err := net.Interfaces()
 	if err != nil {
-		log.Fatalf("unable to check if testing interface exists: %v", err)
+		logger.Errorf("unable to check if testing interface exists: %v", err)
+		return
 	}
 	for _, _iface := range interfaces {
 		if _iface.Name == iface {
@@ -84,11 +85,21 @@ func TestMain(m *testing.M) {
 	if !testIfAceExists {
 		rtnl, err := setupDummyInterface(iface)
 		if err != nil {
-			logger.Fatalf("could not setup dummy interface: %v\n", err)
+			logger.Errorf("could not setup dummy interface: %v", err)
+			return
 		}
 		defer rtnl.Close()
-		// TODO: delete device after test completes
-
+		devID, err := net.InterfaceByName(iface)
+		if err != nil {
+			logger.Errorf("could not get interface ID: %v", err)
+			return
+		}
+		defer func(ifIndex uint32, rtnl *rtnetlink.Conn) {
+			if err := rtnl.Link.Delete(ifIndex); err != nil {
+				logger.Errorf("could not delete interface: %v\n", err)
+				return
+			}
+		}(uint32(devID.Index), rtnl)
 	}
 
 	spec := ebpf.ProgramSpec{
@@ -105,17 +116,22 @@ func TestMain(m *testing.M) {
 	// Load the eBPF program into the kernel.
 	prog, err := ebpf.NewProgram(&spec)
 	if err != nil {
-		logger.Fatalf("failed to load eBPF program: %v\n", err)
+		logger.Errorf("failed to load eBPF program: %v\n", err)
+		return
 	}
 	ingressHook = prog
 	egressHook = prog
 	hooker, err = NewDeviceHooker(iface, logger)
 	if err != nil {
-		logger.Fatal(err)
+		logger.Error("failed to create a device hooker for testing: %v", err)
+		return
 	}
-	code := m.Run()
-	if err := hooker.Close(); err != nil {
-		logger.Error(err)
-	}
-	os.Exit(code)
+	defer func() {
+		if err := hooker.Close(); err != nil {
+			logger.Error(err)
+			return
+		}
+	}()
+	m.Run()
+	// os.Exit(code)
 }
