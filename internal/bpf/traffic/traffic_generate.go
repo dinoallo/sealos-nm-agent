@@ -1,0 +1,4 @@
+package traffic
+
+// $BPF_CLANG and $BPF_CFLAGS are set by the Makefile.
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -type event_t -cc $BPF_CLANG -cflags $BPF_CFLAGS traffic traffic.c -- -I../headers
