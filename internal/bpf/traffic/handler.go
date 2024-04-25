@@ -7,7 +7,7 @@ import (
 
 	"github.com/cilium/ebpf/perf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/node"
+	"github.com/dinoallo/sealos-networkmanager-agent/pkg/host"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 	"golang.org/x/sync/errgroup"
 )
@@ -30,7 +30,7 @@ func NewTrafficEventHandler(params TrafficEventHandlerParams) (*TrafficEventHand
 	if err != nil {
 		return nil, err
 	}
-	nativeEndian, err := node.GetNodeEndian()
+	nativeEndian, err := host.GetEndian()
 	if err != nil {
 		return nil, err
 	}
