@@ -105,6 +105,7 @@ func NewTrafficEventManager(params TrafficEventManagerParams) (*TrafficEventMana
 		logger:               logger,
 		trafficObjs:          trafficObjs,
 		close:                sync.Once{},
+		deviceHookers:        &sync.Map{},
 		trafficEventReaders:  trafficEventReaders,
 		trafficEventHandlers: trafficEventHandlers,
 	}, nil
