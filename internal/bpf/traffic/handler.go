@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
+	"time"
 
 	"github.com/cilium/ebpf/perf"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
+	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/host"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 	"golang.org/x/sync/errgroup"
@@ -19,7 +23,7 @@ type TrafficEventHandlerParams struct {
 	ParentLogger log.Logger
 	Events       chan *perf.Record
 	TrafficEventHandlerConfig
-	//TODO: add raw traffic handler
+	modules.RawTrafficStore
 }
 
 type TrafficEventHandler struct {
@@ -78,15 +82,42 @@ func (h *TrafficEventHandler) handle(ctx context.Context, trafficEvents chan *pe
 		if err := binary.Read(bytes.NewBuffer(trafficEvent.RawSample), h.nativeEndian, &e); err != nil {
 			return err
 		}
-		if err := h.submit(ctx, &e); err != nil {
+		if err := h.submit(ctx, e); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (h *TrafficEventHandler) submit(ctx context.Context, event *trafficEventT) error {
+func (h *TrafficEventHandler) submit(ctx context.Context, _event trafficEventT) error {
 	//TODO: imple me
-	h.logger.Info("submit")
+	if _event.Len <= 0 {
+		return nil
+	}
+	//TODO: skip self
+	event := convertToRawTrafficEvent(_event)
+	if err := h.AcceptRawTrafficEvent(ctx, event); err != nil {
+		return err
+	}
 	return nil
+}
+
+func convertToRawTrafficEvent(_event trafficEventT) structs.RawTrafficEvent {
+	//TODO: check ipv6
+	srcIP := fmt.Sprint(_event.SrcIp4)
+	dstIP := fmt.Sprint(_event.DstIp4)
+	return structs.RawTrafficEvent{
+		RawTrafficEventMeta: structs.RawTrafficEventMetaData{
+			SrcIP:    srcIP,
+			SrcPort:  _event.SrcPort,
+			DstIP:    dstIP,
+			DstPort:  uint32(_event.DstPort),
+			Protocol: _event.Protocol,
+			Family:   _event.Family,
+			// Identity: identity.NumericIdentity(_event.Identity),
+		},
+		// ID:        id, //TODO: generate id
+		DataBytes: _event.Len,
+		Timestamp: time.Now(), //TODO: maybe use bpf timestamp?
+	}
 }

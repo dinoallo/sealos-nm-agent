@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/bpf/traffic"
+	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	errutil "github.com/dinoallo/sealos-networkmanager-agent/pkg/errors/util"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 	netlib "github.com/dinoallo/sealos-networkmanager-agent/pkg/net"
@@ -35,7 +35,7 @@ type NetworkDeviceWatcherConfig struct {
 type NetworkDeviceWatcherParams struct {
 	ParentLogger log.Logger
 	NetworkDeviceWatcherConfig
-	traffic.BPFTrafficModule
+	modules.BPFTrafficModule
 	netlib.NetLib
 }
 
