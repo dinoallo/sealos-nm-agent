@@ -10,7 +10,7 @@ type Zap struct {
 }
 
 func (z *Zap) Debug(args ...any) {
-	z.logger.Debug(args)
+	z.logger.Debug(args...)
 }
 
 func NewZap(devMode bool) (*Zap, error) {
@@ -35,31 +35,31 @@ func (z *Zap) Close() error {
 }
 
 func (z *Zap) Debugf(template string, args ...any) {
-	z.logger.Debugf(template, args)
+	z.logger.Debugf(template, args...)
 }
 
 func (z *Zap) Error(args ...any) {
-	z.logger.Error(args)
+	z.logger.Error(args...)
 }
 
 func (z *Zap) Errorf(template string, args ...any) {
-	z.logger.Errorf(template, args)
+	z.logger.Errorf(template, args...)
 }
 
 func (z *Zap) Fatal(args ...any) {
-	z.logger.Fatal(args)
+	z.logger.Fatal(args...)
 }
 
 func (z *Zap) Fatalf(template string, args ...any) {
-	z.logger.Fatalf(template, args)
+	z.logger.Fatalf(template, args...)
 }
 
 func (z *Zap) Info(args ...any) {
-	z.logger.Info(args)
+	z.logger.Info(args...)
 }
 
 func (z *Zap) Infof(template string, args ...any) {
-	z.logger.Infof(template, args)
+	z.logger.Infof(template, args...)
 }
 
 func (z *Zap) WithCompName(compName string) (log.Logger, error) {
