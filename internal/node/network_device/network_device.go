@@ -28,8 +28,13 @@ var (
 )
 
 type NetworkDeviceWatcherConfig struct {
-	SyncPeriod  time.Duration
-	TestingMode bool
+	SyncPeriod time.Duration
+}
+
+func NewNetworkDeviceWatcherConfig() NetworkDeviceWatcherConfig {
+	return NetworkDeviceWatcherConfig{
+		SyncPeriod: 10 * time.Second,
+	}
 }
 
 type NetworkDeviceWatcherParams struct {
