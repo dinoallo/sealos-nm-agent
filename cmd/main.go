@@ -2,131 +2,98 @@ package main
 
 import (
 	"context"
-	"flag"
+	"fmt"
 	"os"
-
-	// "os/signal"
-	// "syscall"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/cilium/ebpf/rlimit"
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/bpf/bytecount"
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/service"
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/store/cilium_endpoint"
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/store/persistent"
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/store/traffic_record"
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/util"
-
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
-
-	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/bpf/traffic"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/node/network_device"
+	raw_traffic "github.com/dinoallo/sealos-networkmanager-agent/internal/traffic"
+	"github.com/dinoallo/sealos-networkmanager-agent/pkg/db/mongo"
+	zaplog "github.com/dinoallo/sealos-networkmanager-agent/pkg/log/zap"
+	netlib "github.com/dinoallo/sealos-networkmanager-agent/pkg/net"
 )
 
 func main() {
-
-	// parse flags
-	var devMode = flag.Bool("devMode", false, "run in development mode")
-	flag.Parse()
-
-	var dbUri string = os.Getenv(conf.DB_URI_ENV)
-
-	// Initialize the logger
-	logger, err := util.GetLogger(*devMode)
+	dbURI := os.Getenv("DB_URI")
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	mainCtx := context.Background()
+	logger, err := zaplog.NewZap(true)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "unable to create the logger: %v\n", err)
+		os.Exit(1)
+	}
+	opts := mongo.MongoOpts{
+		DBURI:             dbURI,
+		DBName:            "sealos-networkmanager",
+		ConnectionTimeout: 5 * time.Second,
+		MaxPoolSize:       100,
+		Logger:            logger,
+	}
+	db, err := mongo.NewMongo(opts)
+	if err != nil {
+		logger.Error(err)
 		return
 	}
-	logger.Info("the logger is ready...")
-
-	// Init logger for main
-	log := logger.With(zap.String("component", "main"))
-
-	// sig := make(chan os.Signal, 1)
-	// signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGKILL)
-
-	// Init configuration
-	mainConf, err := conf.InitConfig(logger, *devMode)
-	if err != nil {
-		log.Fatal(err)
+	defer db.Close(context.TODO())
+	// initialize and start the raw traffic handler
+	rthConfig := raw_traffic.NewRawTrafficHandlerConfig()
+	rthParams := raw_traffic.RawTrafficHandlerParams{
+		DB:                      db,
+		ParentLogger:            logger,
+		RawTrafficHandlerConfig: rthConfig,
 	}
-
-	// Allow the current process to lock memory for eBPF resources.
-	// only need this if the kernel version < 5.11
-	// requires CAP_SYS_RESOURCE on kernel < 5.11
+	rawTrafficStore, err := raw_traffic.NewRawTrafficHandler(rthParams)
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+	if err := rawTrafficStore.Start(mainCtx); err != nil {
+		logger.Error(err)
+		return
+	}
+	// initialize and start the bpf traffic event manager
 	if err := rlimit.RemoveMemlock(); err != nil {
-		log.Fatal(err)
+		logger.Error(err)
+		return
 	}
-	log.Infof("memory lock removed")
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	mainEg := errgroup.Group{}
-	// init persistent store
-	pp := persistent.PersistentParam{
-		ParentLogger: logger,
-		DBURI:        dbUri,
+	temConfig := traffic.NewTrafficEventManagerConfig()
+	temParams := traffic.TrafficEventManagerParams{
+		ParentLogger:    logger,
+		Config:          temConfig,
+		RawTrafficStore: rawTrafficStore,
 	}
-	p := persistent.NewPersistentInterface(pp, *mainConf.PersistentStorageConfig)
-	if err := p.Launch(ctx, &mainEg); err != nil {
-		log.Fatalf("failed to launch the persistent storage: %v", err)
-	}
-	defer p.Stop(ctx)
-	log.Infof("persistent storage ready")
-
-	// init cilium endpoint store
-	cep := cilium_endpoint.CiliumEndpointStoreParam{
-		ParentLogger: logger,
-		P:            p,
-	}
-	ces := cilium_endpoint.NewCiliumEndpointStoreInterface(cep, *mainConf.CiliumEndpointStoreConfig)
-	if err := ces.Launch(ctx, &mainEg); err != nil {
-		log.Fatalf("failed to launch cilium endpoint store: %v", err)
-	}
-	log.Infof("cilium endpoint store ready")
-
-	// init traffic record store
-	trsp := traffic_record.TrafficRecordStoreParam{
-		ParentLogger: logger,
-		P:            p,
-	}
-	trs := traffic_record.NewTrafficRecordStoreInterface(trsp, *mainConf.TrafficRecordStoreConfig)
-	if err := trs.Launch(ctx, &mainEg); err != nil {
-		log.Fatalf("failed to launch traffic recrod store: %v", err)
-	}
-	log.Infof("traffic record store ready")
-
-	// init bytecount factory
-	bfp := bytecount.BytecountFactoryParam{
-		ParentLogger: logger,
-		TRS:          trs,
-		CES:          ces,
-	}
-	bf := bytecount.NewBytecountFactoryInterface(bfp, *mainConf.BytecountFactoryConfig)
-	if err := bf.Launch(ctx, &mainEg); err != nil {
-		log.Fatalf("failed to launch bytecount factory: %v", err)
-	}
-	defer bf.Stop(ctx)
-	log.Infof("bytecount factory ready")
-
-	// Init Services
-	tsp := service.TrafficServiceParam{
-		ParentLogger: logger,
-		BF:           bf,
-		CES:          ces,
-	}
-	ts, err := service.NewTrafficService(tsp, *mainConf.TrafficServiceConfig)
+	trafficEventManager, err := traffic.NewTrafficEventManager(temParams)
 	if err != nil {
-		log.Fatalf("failed to create new traffic service: %v", err)
+		logger.Error(err)
 		return
 	}
-	if err := ts.Launch(ctx, &mainEg); err != nil {
-		log.Fatalf("failed to launch traffic service: %v", err)
-	}
-	defer ts.Stop(ctx)
-	log.Infof("grpc server ready")
-	if err := mainEg.Wait(); err != nil {
-		log.Errorf("%v", err)
+	if err := trafficEventManager.Start(mainCtx); err != nil {
+		logger.Error(err)
 		return
 	}
-	log.Infof("shutting down...")
+	defer trafficEventManager.Close()
+	// initialize and start the network device watcher
+	ndwConfig := network_device.NewNetworkDeviceWatcherConfig()
+	officialNetLib := netlib.NewGoNetLib()
+	ndwParams := network_device.NetworkDeviceWatcherParams{
+		ParentLogger:               logger,
+		NetworkDeviceWatcherConfig: ndwConfig,
+		BPFTrafficModule:           trafficEventManager,
+		NetLib:                     officialNetLib,
+	}
+	deviceWatcher, err := network_device.NewNetworkDeviceWatcher(ndwParams)
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+	if err := deviceWatcher.Start(mainCtx); err != nil {
+		logger.Error(err)
+		return
+	}
+	<-sigs
 }
