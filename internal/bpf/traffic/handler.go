@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"time"
 
 	"github.com/cilium/ebpf/perf"
@@ -12,6 +11,7 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/host"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
+	netutil "github.com/dinoallo/sealos-networkmanager-agent/pkg/net/util"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -110,13 +110,13 @@ func (h *TrafficEventHandler) submit(ctx context.Context, _event trafficEventT) 
 
 func convertToRawTrafficEvent(_event trafficEventT) structs.RawTrafficEvent {
 	//TODO: check ipv6
-	srcIP := fmt.Sprint(_event.SrcIp4)
-	dstIP := fmt.Sprint(_event.DstIp4)
+	srcIP := netutil.ToIP(_event.SrcIp4, nil, 4)
+	dstIP := netutil.ToIP(_event.DstIp4, nil, 4)
 	return structs.RawTrafficEvent{
 		RawTrafficEventMeta: structs.RawTrafficEventMetaData{
-			SrcIP:    srcIP,
+			SrcIP:    srcIP.String(),
 			SrcPort:  _event.SrcPort,
-			DstIP:    dstIP,
+			DstIP:    dstIP.String(),
 			DstPort:  uint32(_event.DstPort),
 			Protocol: _event.Protocol,
 			Family:   _event.Family,
