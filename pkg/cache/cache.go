@@ -140,7 +140,7 @@ func (c *Cache[V1, V2]) GetBatchExpiredEntries(parentCtx context.Context, timeou
 	for size := 0; size < batchSize; size++ {
 		select {
 		case <-ctx.Done():
-			return batch, fmt.Errorf("timeout waiting for expired entries ")
+			return batch, ErrTimeoutGettingExpiredEntries
 		case item := <-c.expiredEntries:
 			batch = append(batch, item)
 		}
