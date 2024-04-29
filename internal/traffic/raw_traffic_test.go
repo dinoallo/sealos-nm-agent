@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	consts "github.com/dinoallo/sealos-networkmanager-agent/internal/common/const"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/mock"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/db/common"
@@ -79,7 +78,6 @@ func generateRawTrafficEvent() structs.RawTrafficEvent {
 			SrcPort:  generatePort(),
 			DstIP:    generateIPV4(),
 			DstPort:  generatePort(),
-			Dir:      consts.TRAFFIC_DIR_V4_EGRESS,
 			Family:   6,
 			Identity: 233,
 		},

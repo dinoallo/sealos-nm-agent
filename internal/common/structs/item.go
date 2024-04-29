@@ -1,62 +1,56 @@
 package structs
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/cilium/cilium/pkg/identity"
-	consts "github.com/dinoallo/sealos-networkmanager-agent/internal/common/const"
 )
 
-type TrafficRecordMetaData struct {
-	Dir consts.TrafficDirection `bson:"dir"`
-	IP  string                  `bson:"ip"`
-	Tag string                  `bson:"tag"`
-}
-type TrafficRecord struct {
-	TrafficRecordMeta TrafficRecordMetaData `bson:"traffic_record_meta"`
-	DataBytes         uint32                `bson:"data_bytes"`
-	ID                string                `bson:"tr_id"`
-	Timestamp         time.Time             `bson:"timestamp"`
+type RawTrafficEvent struct {
+	RawTrafficEventMeta RawTrafficEventMetaData `bson:"meta"`
+	ID                  string                  `bson:"id"`
+	DataBytes           uint32                  `bson:"data_bytes"`
+	Timestamp           time.Time               `bson:"timestamp"`
 }
 
-type SummaryMetaData struct {
+type RawTrafficEventMetaData struct {
+	SrcIP    string                   `bson:"src_ip"`
+	SrcPort  uint32                   `bson:"src_port"`
+	DstIP    string                   `bson:"dst_ip"`
+	DstPort  uint32                   `bson:"dst_port"`
+	Protocol uint32                   `bson:"protocol"`
+	Family   uint32                   `bson:"family"`
+	Identity identity.NumericIdentity `bson:"identity"`
+}
+
+// TODO: total tcp, total udp, etc
+type RawTrafficMetric struct {
+	SentBytes uint32
+	RecvBytes uint32
+}
+
+type RawTrafficMetaData struct {
 	IP   string `bson:"ip"`
+	Tag  string `bson:"tag"`
 	Node string `bson:"node"`
 }
 
-type Summary struct {
-	ID          string          `bson:"sum_id"`
-	SummaryMeta SummaryMetaData `bson:"summary_meta"`
-	RecvBytes   uint32          `bson:"recv_bytes"`
-	SentBytes   uint32          `bson:"sent_bytes"`
-	Timestamp   time.Time       `bson:"timestamp"`
+type RawTraffic struct {
+	Metric    RawTrafficMetric   `bson:"metric"`
+	Meta      RawTrafficMetaData `bson:"meta"`
+	ID        string             `bson:"rt_id"`
+	Timestamp time.Time          `bson:"timestamp"`
 }
 
-type TrafficReportMetaData struct {
-	SrcIP   string `bson:"src_ip"`
-	SrcPort uint32 `bson:"src_port"`
-	DstIP   string `bson:"dst_ip"`
-	DstPort uint32 `bson:"dst_port"`
+func (e *RawTrafficEvent) GetTagsForSrc() []string {
+	//TODO: imple me
+	portTag := fmt.Sprintf("port:%v", e.RawTrafficEventMeta.SrcPort)
+	return []string{portTag}
 }
 
-type TrafficReport struct {
-	TrafficReportMeta TrafficReportMetaData    `bson:"traffic_report_meta"`
-	Dir               consts.TrafficDirection  `bson:"direction"`
-	Protocol          uint32                   `bson:"protocol"`
-	Family            uint32                   `bson:"family"`
-	DataBytes         uint32                   `bson:"data_bytes"`
-	Identity          identity.NumericIdentity `bson:"identity"`
-	Timestamp         time.Time                `bson:"timestamp"`
-}
-
-type CiliumEndpoint struct {
-	EndpointID  int64     `bson:"endpoint_id"`
-	CreatedTime time.Time `bson:"created_time"`
-	DeletedTime time.Time `bson:"deleted_time"`
-	ID          string    `bson:"cep_id"`
-	Node        string    `bson:"node"`
-}
-
-func (cep *CiliumEndpoint) IsIrrelevant(currentNode string) bool {
-	return !cep.DeletedTime.IsZero() || cep.Node != currentNode
+func (e *RawTrafficEvent) GetTagsForDst() []string {
+	//TODO: imple me
+	portTag := fmt.Sprintf("port:%v", e.RawTrafficEventMeta.DstPort)
+	return []string{portTag}
 }
