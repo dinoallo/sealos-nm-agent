@@ -112,14 +112,19 @@ func NewTrafficEventManager(params TrafficEventManagerParams) (*TrafficEventMana
 }
 
 func (h *TrafficEventManager) SubscribeToDevice(iface string) error {
-	//TODO: prevent the same device to be subscribed again
 	deviceHooker, err := hooker.NewDeviceHooker(iface, h.logger)
 	if err != nil {
 		return errutil.Err(ErrCreatingDeviceHooker, err)
 	}
-	h.deviceHookers.Store(iface, deviceHooker)
+	_, loaded := h.deviceHookers.LoadOrStore(iface, deviceHooker)
+	if loaded {
+		return nil
+	}
+	if err := deviceHooker.Init(); err != nil {
+		return err
+	}
 	//TODO: set up v4 ingress, v6 in/egress
-	// set up v4 egress hook
+	// set up v4 egress hook for the first time
 	if err := deviceHooker.AddFilter("sealos_nm_traffic_v4_egress", h.trafficObjs.V4EgressTrafficHook, common.TC_DIR_EGRESS); err != nil {
 		return errutil.Err(ErrAddingEgressFilter, err)
 	}
