@@ -20,6 +20,7 @@ var (
 )
 
 type DeviceHooker struct {
+	iface  string
 	logger log.Logger
 	// clsActQdisc *tc.Object
 	filters *sync.Map
@@ -29,33 +30,42 @@ type DeviceHooker struct {
 }
 
 func NewDeviceHooker(iface string, logger log.Logger) (*DeviceHooker, error) {
-	devID, err := net.InterfaceByName(iface)
-	if err != nil {
-		return nil, errutil.Err(ErrGettingInterfaceName, err)
-	}
-	tcnl, err := tc.Open(&tc.Config{})
-	if err != nil {
-		return nil, errutil.Err(ErrEstablishingSocket, err)
-	}
-	// set option `NETLINK_EXT_ACK`
-	if err := tcnl.SetOption(netlink.ExtendedAcknowledge, true); err != nil {
-		closeTCNL(tcnl, logger)
-		return nil, errutil.Err(ErrSettingExtAck, err)
-	}
-	_, err = setUpClsActQdisc(tcnl, devID)
-	if err != nil {
-		// closeQdisc(tcnl, clsActQdisc, logger)
-		closeTCNL(tcnl, logger)
-		return nil, errutil.Err(ErrSettingUpQdisc, err)
-	}
 	return &DeviceHooker{
+		iface:  iface,
 		logger: logger,
 		//	clsActQdisc: clsActQdisc,
 		filters: &sync.Map{},
-		tcnl:    tcnl,
-		devID:   devID,
+		tcnl:    nil,
+		devID:   nil,
 		close:   &sync.Once{},
 	}, nil
+}
+
+// TODO: check if tcnl and devID is nil
+// `Init` initialize `tcnl` and `devID`. Please call this function before calling any of other functions
+func (h *DeviceHooker) Init() error {
+	devID, err := net.InterfaceByName(h.iface)
+	if err != nil {
+		return errutil.Err(ErrGettingInterfaceName, err)
+	}
+	h.devID = devID
+	tcnl, err := tc.Open(&tc.Config{})
+	if err != nil {
+		return errutil.Err(ErrEstablishingSocket, err)
+	}
+	// set option `NETLINK_EXT_ACK`
+	if err := tcnl.SetOption(netlink.ExtendedAcknowledge, true); err != nil {
+		closeTCNL(tcnl, h.logger)
+		return errutil.Err(ErrSettingExtAck, err)
+	}
+	h.tcnl = tcnl
+	_, err = setUpClsActQdisc(tcnl, devID)
+	if err != nil {
+		// closeQdisc(tcnl, clsActQdisc, logger)
+		closeTCNL(tcnl, h.logger)
+		return errutil.Err(ErrSettingUpQdisc, err)
+	}
+	return nil
 }
 
 func newClsActQdisc(devID *net.Interface, handle uint32) (*tc.Object, error) {

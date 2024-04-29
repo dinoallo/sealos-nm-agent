@@ -126,6 +126,10 @@ func TestMain(m *testing.M) {
 		logger.Error("failed to create a device hooker for testing: %v", err)
 		return
 	}
+	if err := hooker.Init(); err != nil {
+		logger.Errorf("failed to initialize the device hooker: %v", err)
+		return
+	}
 	defer func() {
 		if err := hooker.Close(); err != nil {
 			logger.Error(err)
