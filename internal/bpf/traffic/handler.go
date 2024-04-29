@@ -19,6 +19,12 @@ type TrafficEventHandlerConfig struct {
 	WorkerCount int
 }
 
+func NewTrafficEventHandlerConfig() TrafficEventHandlerConfig {
+	return TrafficEventHandlerConfig{
+		WorkerCount: 5,
+	}
+}
+
 type TrafficEventHandlerParams struct {
 	ParentLogger log.Logger
 	Events       chan *perf.Record

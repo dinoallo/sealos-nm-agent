@@ -18,6 +18,13 @@ type TrafficEventReaderConfig struct {
 	PerfEventBufferSize int
 }
 
+func NewTrafficEventReaderConfig() TrafficEventReaderConfig {
+	return TrafficEventReaderConfig{
+		WorkerCount:         1,
+		PerfEventBufferSize: (32 << 10), // 32KB
+	}
+}
+
 type TrafficEventReaderParams struct {
 	ParentLogger log.Logger
 	PerfEvents   *ebpf.Map
