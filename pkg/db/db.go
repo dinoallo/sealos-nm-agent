@@ -14,5 +14,5 @@ type DB interface {
 	Get(ctx context.Context, collName string, selector common.Selector, objs any, opts common.GetOpts) error
 	GetOne(ctx context.Context, collName string, selector common.Selector, obj any) (bool, error)
 	Insert(ctx context.Context, collName string, objs []any) error
-	ReplaceOne(ctx context.Context, collName string, selector common.Selector) error
+	ReplaceOne(ctx context.Context, collName string, selector common.Selector, replacement any) error
 }

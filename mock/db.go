@@ -105,6 +105,6 @@ func (db *TestingDB) Insert(ctx context.Context, collName string, objs []any) er
 	return nil
 }
 
-func (db *TestingDB) ReplaceOne(ctx context.Context, collName string, selector common.Selector) error {
+func (db *TestingDB) ReplaceOne(ctx context.Context, collName string, selector common.Selector, replacement any) error {
 	return nil
 }
