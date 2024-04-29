@@ -74,12 +74,11 @@ func generateID() string {
 func generateRawTrafficEvent() structs.RawTrafficEvent {
 	return structs.RawTrafficEvent{
 		RawTrafficEventMeta: structs.RawTrafficEventMetaData{
-			SrcIP:    generateIPV4(),
-			SrcPort:  generatePort(),
-			DstIP:    generateIPV4(),
-			DstPort:  generatePort(),
-			Family:   6,
-			Identity: 233,
+			SrcIP:   generateIPV4(),
+			SrcPort: generatePort(),
+			DstIP:   generateIPV4(),
+			DstPort: generatePort(),
+			Family:  6,
 		},
 		ID:        generateID(), //TODO: make me a random string
 		DataBytes: 333,

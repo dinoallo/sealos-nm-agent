@@ -3,8 +3,6 @@ package structs
 import (
 	"fmt"
 	"time"
-
-	"github.com/cilium/cilium/pkg/identity"
 )
 
 type RawTrafficEvent struct {
@@ -15,13 +13,12 @@ type RawTrafficEvent struct {
 }
 
 type RawTrafficEventMetaData struct {
-	SrcIP    string                   `bson:"src_ip"`
-	SrcPort  uint32                   `bson:"src_port"`
-	DstIP    string                   `bson:"dst_ip"`
-	DstPort  uint32                   `bson:"dst_port"`
-	Protocol uint32                   `bson:"protocol"`
-	Family   uint32                   `bson:"family"`
-	Identity identity.NumericIdentity `bson:"identity"`
+	SrcIP    string `bson:"src_ip"`
+	SrcPort  uint32 `bson:"src_port"`
+	DstIP    string `bson:"dst_ip"`
+	DstPort  uint32 `bson:"dst_port"`
+	Protocol uint32 `bson:"protocol"`
+	Family   uint32 `bson:"family"`
 }
 
 // TODO: total tcp, total udp, etc

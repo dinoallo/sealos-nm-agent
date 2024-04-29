@@ -21,7 +21,6 @@ type trafficEventT struct {
 	SrcPort  uint32
 	DstPort  uint16
 	_        [2]byte
-	Identity uint32
 }
 
 // loadTraffic returns the embedded CollectionSpec for traffic.

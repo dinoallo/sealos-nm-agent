@@ -5,6 +5,7 @@
 #include "../headers/bpf_helpers.h"
 
 // clang-format on
+#define TC_ACT_OK 0
 char __license[] SEC("license") = "Dual MIT/GPL";
 
 struct event_t {
@@ -17,7 +18,6 @@ struct event_t {
   // __u32 src_ip6[4];
   __u32 src_port;
   __be16 dst_port;
-  __u32 identity;
 };
 
 const struct event_t *unused_traffic_event __attribute__((unused));
@@ -47,11 +47,9 @@ static __always_inline void marshal(struct event_t *event,
   event->dst_port = sk->dst_port;
 }
 
-static __always_inline void submit_v4_egress_traffic(struct __sk_buff *ctx,
-                                                     u32 identity) {
+static __always_inline void submit_v4_egress_traffic(struct __sk_buff *ctx) {
   struct event_t event = {};
   event.len = ctx->len;
-  event.identity = identity;
   struct bpf_sock *sk = ctx->sk;
   if (sk) {
     sk = bpf_sk_fullsock(sk);
@@ -60,11 +58,9 @@ static __always_inline void submit_v4_egress_traffic(struct __sk_buff *ctx,
   bpf_perf_event_output(ctx, &v4_egress_traffic_events, BPF_F_CURRENT_CPU,
                         &event, sizeof(struct event_t));
 }
-static __always_inline void submit_v4_ingress_traffic(struct __sk_buff *ctx,
-                                                      u32 identity) {
+static __always_inline void submit_v4_ingress_traffic(struct __sk_buff *ctx) {
   struct event_t event = {};
   event.len = ctx->len;
-  event.identity = identity;
   struct bpf_sock *sk = ctx->sk;
   if (sk) {
     sk = bpf_sk_fullsock(sk);
@@ -76,22 +72,12 @@ static __always_inline void submit_v4_ingress_traffic(struct __sk_buff *ctx,
 
 SEC("classifier")
 int v4_egress_traffic_hook(struct __sk_buff *ctx) {
-  u32 custom_meta = ctx->cb[4];
-  u32 identity = custom_meta & 0xffffff;
-  int ret = (custom_meta >> 24) & 0xff;
-
-  submit_v4_egress_traffic(ctx, identity);
-
-  return ret;
+  submit_v4_egress_traffic(ctx);
+  return TC_ACT_OK;
 }
 
 SEC("classifier")
 int v4_ingress_traffic_hook(struct __sk_buff *ctx) {
-  u32 custom_meta = ctx->cb[4];
-  u32 identity = custom_meta & 0xffffff;
-  int ret = (custom_meta >> 24) & 0xff;
-
-  submit_v4_ingress_traffic(ctx, identity);
-
-  return ret;
+  submit_v4_ingress_traffic(ctx);
+  return TC_ACT_OK;
 }
