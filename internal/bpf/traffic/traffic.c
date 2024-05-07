@@ -5,7 +5,8 @@
 #include "../headers/bpf_helpers.h"
 
 // clang-format on
-#define TC_ACT_OK 0
+// #define TC_ACT_OK 0
+#define TC_ACT_UNSPEC -1
 char __license[] SEC("license") = "Dual MIT/GPL";
 
 struct event_t {
@@ -73,11 +74,11 @@ static __always_inline void submit_v4_ingress_traffic(struct __sk_buff *ctx) {
 SEC("classifier")
 int v4_egress_traffic_hook(struct __sk_buff *ctx) {
   submit_v4_egress_traffic(ctx);
-  return TC_ACT_OK;
+  return TC_ACT_UNSPEC;
 }
 
 SEC("classifier")
 int v4_ingress_traffic_hook(struct __sk_buff *ctx) {
   submit_v4_ingress_traffic(ctx);
-  return TC_ACT_OK;
+  return TC_ACT_UNSPEC;
 }

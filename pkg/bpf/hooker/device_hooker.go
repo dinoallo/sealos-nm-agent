@@ -123,7 +123,7 @@ func (hooker *DeviceHooker) AddFilter(filterName string, hook *ebpf.Program, dir
 	fd := uint32(hook.FD())
 	flags := uint32(0x1)
 	//TODO: check if the host is little-endian to use htons
-	var prio uint32 = 42
+	var prio uint32 = 1
 	var protocol uint16 = htons(unix.ETH_P_ALL)
 	var info uint32 = core.BuildHandle(prio, uint32(protocol))
 	filter := tc.Object{
