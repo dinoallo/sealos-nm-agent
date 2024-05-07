@@ -18,6 +18,8 @@ type trafficEventT struct {
 	Protocol uint32
 	DstIp4   uint32
 	SrcIp4   uint32
+	DstIp6   [4]uint32
+	SrcIp6   [4]uint32
 	SrcPort  uint32
 	DstPort  uint16
 	_        [2]byte
@@ -64,16 +66,16 @@ type trafficSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type trafficProgramSpecs struct {
-	V4EgressTrafficHook  *ebpf.ProgramSpec `ebpf:"v4_egress_traffic_hook"`
-	V4IngressTrafficHook *ebpf.ProgramSpec `ebpf:"v4_ingress_traffic_hook"`
+	EgressTrafficHook  *ebpf.ProgramSpec `ebpf:"egress_traffic_hook"`
+	IngressTrafficHook *ebpf.ProgramSpec `ebpf:"ingress_traffic_hook"`
 }
 
 // trafficMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type trafficMapSpecs struct {
-	V4EgressTrafficEvents  *ebpf.MapSpec `ebpf:"v4_egress_traffic_events"`
-	V4IngressTrafficEvents *ebpf.MapSpec `ebpf:"v4_ingress_traffic_events"`
+	EgressTrafficEvents  *ebpf.MapSpec `ebpf:"egress_traffic_events"`
+	IngressTrafficEvents *ebpf.MapSpec `ebpf:"ingress_traffic_events"`
 }
 
 // trafficObjects contains all objects after they have been loaded into the kernel.
@@ -95,14 +97,14 @@ func (o *trafficObjects) Close() error {
 //
 // It can be passed to loadTrafficObjects or ebpf.CollectionSpec.LoadAndAssign.
 type trafficMaps struct {
-	V4EgressTrafficEvents  *ebpf.Map `ebpf:"v4_egress_traffic_events"`
-	V4IngressTrafficEvents *ebpf.Map `ebpf:"v4_ingress_traffic_events"`
+	EgressTrafficEvents  *ebpf.Map `ebpf:"egress_traffic_events"`
+	IngressTrafficEvents *ebpf.Map `ebpf:"ingress_traffic_events"`
 }
 
 func (m *trafficMaps) Close() error {
 	return _TrafficClose(
-		m.V4EgressTrafficEvents,
-		m.V4IngressTrafficEvents,
+		m.EgressTrafficEvents,
+		m.IngressTrafficEvents,
 	)
 }
 
@@ -110,14 +112,14 @@ func (m *trafficMaps) Close() error {
 //
 // It can be passed to loadTrafficObjects or ebpf.CollectionSpec.LoadAndAssign.
 type trafficPrograms struct {
-	V4EgressTrafficHook  *ebpf.Program `ebpf:"v4_egress_traffic_hook"`
-	V4IngressTrafficHook *ebpf.Program `ebpf:"v4_ingress_traffic_hook"`
+	EgressTrafficHook  *ebpf.Program `ebpf:"egress_traffic_hook"`
+	IngressTrafficHook *ebpf.Program `ebpf:"ingress_traffic_hook"`
 }
 
 func (p *trafficPrograms) Close() error {
 	return _TrafficClose(
-		p.V4EgressTrafficHook,
-		p.V4IngressTrafficHook,
+		p.EgressTrafficHook,
+		p.IngressTrafficHook,
 	)
 }
 

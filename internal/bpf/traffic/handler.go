@@ -13,6 +13,7 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 	netutil "github.com/dinoallo/sealos-networkmanager-agent/pkg/net/util"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/sys/unix"
 )
 
 type TrafficEventHandlerConfig struct {
@@ -110,14 +111,8 @@ func (h *TrafficEventHandler) submit(ctx context.Context, _event trafficEventT) 
 
 func convertToRawTrafficEvent(_event trafficEventT) structs.RawTrafficEvent {
 	//TODO: check ipv6
-	srcIP := netutil.ToIP(_event.SrcIp4, nil, 4)
-	dstIP := netutil.ToIP(_event.DstIp4, nil, 4)
-	return structs.RawTrafficEvent{
+	e := structs.RawTrafficEvent{
 		RawTrafficEventMeta: structs.RawTrafficEventMetaData{
-			SrcIP:    srcIP.String(),
-			SrcPort:  _event.SrcPort,
-			DstIP:    dstIP.String(),
-			DstPort:  uint32(_event.DstPort),
 			Protocol: _event.Protocol,
 			Family:   _event.Family,
 			// Identity: identity.NumericIdentity(_event.Identity),
@@ -126,4 +121,29 @@ func convertToRawTrafficEvent(_event trafficEventT) structs.RawTrafficEvent {
 		DataBytes: _event.Len,
 		Timestamp: time.Now(), //TODO: maybe use bpf timestamp?
 	}
+	// handle ipv4 and ipv6
+	var srcIP string
+	var dstIP string
+	if _event.Family == unix.AF_INET {
+		if _srcIP, ok := netutil.ToIP(_event.SrcIp4, nil, 4); ok {
+			srcIP = _srcIP.String()
+		}
+		if _dstIP, ok := netutil.ToIP(_event.DstIp4, nil, 4); ok {
+			dstIP = _dstIP.String()
+		}
+	} else if _event.Family == unix.AF_INET6 {
+		if _srcIP, ok := netutil.ToIP(0, _event.SrcIp6[:], 6); ok {
+			srcIP = _srcIP.String()
+		}
+		if _dstIP, ok := netutil.ToIP(0, _event.SrcIp6[:], 6); ok {
+			dstIP = _dstIP.String()
+		}
+	} else {
+		return e
+	}
+	e.RawTrafficEventMeta.SrcIP = srcIP
+	e.RawTrafficEventMeta.DstIP = dstIP
+	e.RawTrafficEventMeta.SrcPort = _event.SrcPort
+	e.RawTrafficEventMeta.DstPort = uint32(_event.DstPort)
+	return e
 }

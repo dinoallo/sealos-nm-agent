@@ -3,31 +3,30 @@ package util
 import (
 	"encoding/binary"
 	"net"
+	"net/netip"
 )
 
-// TODO: implemented ipv6
-func ToIP(_v4Addr uint32, _v6Addr []uint32, t int) net.IP {
+func ToIP(_v4Addr uint32, _v6Addr []uint32, t int) (netip.Addr, bool) {
 	if t == 4 {
 		return toIPv4(_v4Addr)
 	} else if t == 6 {
 		return toIPv6(_v6Addr)
 	}
-	return nil
+	return netip.Addr{}, false
 }
 
-func toIPv4(nn uint32) net.IP {
-	ip := make(net.IP, 4)
-	binary.LittleEndian.PutUint32(ip, nn)
-	return ip
+func toIPv4(nn uint32) (netip.Addr, bool) {
+	ip := make([]byte, net.IPv4len)
+	binary.BigEndian.PutUint32(ip, nn)
+	return netip.AddrFromSlice(ip)
 }
 
-func toIPv6(nn []uint32) net.IP {
-	/*
-		ip := make(net.IP, 16)
-		for i := 0; i < 8; i++ {
-			binary.BigEndian.PutUint16(ip[i*2:i*2+2], nn[i])
-		}
-		return ip*/
-	//TODO: implement me
-	return nil
+func toIPv6(nn []uint32) (netip.Addr, bool) {
+	var ip []byte
+	for i := 0; i < 4; i++ {
+		_ip := make([]byte, net.IPv4len)
+		binary.BigEndian.PutUint32(_ip, nn[i])
+		ip = append(ip, _ip...)
+	}
+	return netip.AddrFromSlice(ip)
 }

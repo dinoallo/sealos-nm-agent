@@ -17,10 +17,8 @@ import (
 type trafficEventKind uint32
 
 const (
-	v4In trafficEventKind = iota
-	v4E
-	v6In
-	v6E
+	Ingress trafficEventKind = iota
+	Egress
 )
 
 type TrafficEventManagerConfig struct {
@@ -92,12 +90,12 @@ func NewTrafficEventManager(params TrafficEventManagerParams) (*TrafficEventMana
 		trafficEventHandlers[kind] = handler
 		return nil
 	}
-	// v4 egress
-	v4EEvents := make(chan *perf.Record)
-	if err := setUpReader(trafficObjs.V4EgressTrafficEvents, v4EEvents, v4E); err != nil {
+	// egress
+	EgressEvents := make(chan *perf.Record)
+	if err := setUpReader(trafficObjs.EgressTrafficEvents, EgressEvents, Egress); err != nil {
 		return nil, errutil.Err(ErrCreatingEventReader, err)
 	}
-	if err := setUpHandler(v4EEvents, v4E); err != nil {
+	if err := setUpHandler(EgressEvents, Egress); err != nil {
 		return nil, errutil.Err(ErrCreatingEventHandler, err)
 	}
 
@@ -123,9 +121,8 @@ func (h *TrafficEventManager) SubscribeToDevice(iface string) error {
 	if err := deviceHooker.Init(); err != nil {
 		return err
 	}
-	//TODO: set up v4 ingress, v6 in/egress
-	// set up v4 egress hook for the first time
-	if err := deviceHooker.AddFilter("sealos_nm_traffic_v4_egress", h.trafficObjs.V4EgressTrafficHook, common.TC_DIR_EGRESS); err != nil {
+	//TODO: set up ingress hook
+	if err := deviceHooker.AddFilter("sealos_nm_traffic_egress", h.trafficObjs.EgressTrafficHook, common.TC_DIR_EGRESS); err != nil {
 		return errutil.Err(ErrAddingEgressFilter, err)
 	}
 	return nil
