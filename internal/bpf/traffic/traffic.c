@@ -44,11 +44,18 @@ static __always_inline void marshal(struct event_t *event,
   event->family = sk->family;
   event->src_ip4 = sk->src_ip4;
   event->dst_ip4 = sk->dst_ip4;
-  int i;
-  for (i = 0; i < 4; i++) {
-    event->src_ip6[i] = sk->src_ip6[i];
-    event->dst_ip6[i] = sk->dst_ip6[i];
-  }
+  // TODO: how to use #pragma unroll to imple this and pass the verifier? (clang
+  // seems to not unroll this)
+  // We need to be careful about loops since the verifier is usually not gonna
+  // be happy with them... So we manually unroll them.
+  event->src_ip6[0] = sk->src_ip6[0];
+  event->src_ip6[1] = sk->src_ip6[1];
+  event->src_ip6[2] = sk->src_ip6[2];
+  event->src_ip6[3] = sk->src_ip6[3];
+  event->dst_ip6[0] = sk->dst_ip6[0];
+  event->dst_ip6[1] = sk->dst_ip6[1];
+  event->dst_ip6[2] = sk->dst_ip6[2];
+  event->dst_ip6[3] = sk->dst_ip6[3];
   event->src_port = sk->src_port;
   event->dst_port = sk->dst_port;
 }
@@ -57,10 +64,11 @@ static __always_inline void submit_egress_traffic(struct __sk_buff *ctx) {
   struct event_t event = {};
   event.len = ctx->len;
   struct bpf_sock *sk = ctx->sk;
-  if (sk) {
-    sk = bpf_sk_fullsock(sk);
-    marshal(&event, sk);
+  if (!sk) {
+    return;
   }
+  sk = bpf_sk_fullsock(sk);
+  marshal(&event, sk);
   bpf_perf_event_output(ctx, &egress_traffic_events, BPF_F_CURRENT_CPU, &event,
                         sizeof(struct event_t));
 }
@@ -68,10 +76,11 @@ static __always_inline void submit_ingress_traffic(struct __sk_buff *ctx) {
   struct event_t event = {};
   event.len = ctx->len;
   struct bpf_sock *sk = ctx->sk;
-  if (sk) {
-    sk = bpf_sk_fullsock(sk);
-    marshal(&event, sk);
+  if (!sk) {
+    return;
   }
+  sk = bpf_sk_fullsock(sk);
+  marshal(&event, sk);
   bpf_perf_event_output(ctx, &ingress_traffic_events, BPF_F_CURRENT_CPU, &event,
                         sizeof(struct event_t));
 }
