@@ -3,6 +3,8 @@ package mongo
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"time"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/db/common"
@@ -23,7 +25,11 @@ type MongoOpts struct {
 	DBName            string
 	ConnectionTimeout time.Duration
 	MaxPoolSize       uint64
-	Logger            log.Logger
+	// a specific ip used for the outgoing connection to mongo. This needs to be set alongside SrcPort
+	SrcIP string
+	// a specific port used for the outgoing connection to mongo. If it's zero, choose a random one.
+	SrcPort uint32
+	Logger  log.Logger
 }
 
 type Mongo struct {
@@ -35,6 +41,18 @@ type Mongo struct {
 
 func NewMongo(opts MongoOpts) (*Mongo, error) {
 	clientOpts := options.Client().ApplyURI(opts.DBURI).SetMaxPoolSize(opts.MaxPoolSize)
+	if opts.SrcPort != 0 {
+		//TODO: currently only tcp connection is supported
+		mongoClientAddr := fmt.Sprintf("%v:%v", opts.SrcIP, opts.SrcPort)
+		localAddr, err := net.ResolveTCPAddr("tcp", mongoClientAddr)
+		if err != nil {
+			return nil, err
+		}
+		d := net.Dialer{
+			LocalAddr: localAddr,
+		}
+		clientOpts.SetDialer(&d)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), opts.ConnectionTimeout)
 	defer cancel()
 	client, err := mongo.Connect(ctx, clientOpts)
