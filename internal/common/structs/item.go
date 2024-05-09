@@ -27,10 +27,18 @@ type RawTrafficMetric struct {
 	RecvBytes uint32
 }
 
+func (m RawTrafficMetric) String() string {
+	return fmt.Sprintf("%v bytes sent and %v bytes received", m.SentBytes, m.RecvBytes)
+}
+
 type RawTrafficMetaData struct {
 	IP   string `bson:"ip"`
 	Tag  string `bson:"tag"`
 	Node string `bson:"node"`
+}
+
+func (m RawTrafficMetaData) String() string {
+	return fmt.Sprintf("ip: %v, tag: %v, node: %v", m.IP, m.Tag, m.Node)
 }
 
 type RawTraffic struct {
@@ -38,6 +46,10 @@ type RawTraffic struct {
 	Meta      RawTrafficMetaData `bson:"meta"`
 	ID        string             `bson:"rt_id"`
 	Timestamp time.Time          `bson:"timestamp"`
+}
+
+func (t RawTraffic) String() string {
+	return fmt.Sprintf("%v: %v; %v", t.Timestamp, t.Meta, t.Metric)
 }
 
 func (e *RawTrafficEvent) GetTagsForSrc() []string {
