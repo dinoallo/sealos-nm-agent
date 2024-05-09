@@ -1,0 +1,19 @@
+apiVersion: v1
+data:
+  config.yml: |  
+    raw_traffic_store:
+    default_coll: "raw_traffic"
+    summary_coll: "raw_traffic_summary"
+    max_worker_count: 4
+    batch_item_count: 100
+    get_batch_timeout_second: 10
+    flush_timeout_second: 10
+    default_cache_entry_ttl_second: 300
+    summary_cache_entry_ttl_second: 300
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/name: agent
+  name: sealos-nm-agent-config
+  namespace: sealos-nm-system
+---
