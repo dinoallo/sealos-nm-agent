@@ -19,6 +19,7 @@ const (
 type GlobalUserConfig struct {
 	Address                   string `koanf:"address"`
 	Port                      uint32 `koanf:"port"`
+	DebugUserConfig           `koanf:"debug"`
 	RawTrafficStoreUserConfig `koanf:"raw_traffic_store"`
 }
 
@@ -26,7 +27,18 @@ func NewGlobalUserConfig() GlobalUserConfig {
 	return GlobalUserConfig{
 		Address:                   defaultAddr,
 		Port:                      defaultPort,
+		DebugUserConfig:           NewDebugUserConfig(),
 		RawTrafficStoreUserConfig: RawTrafficStoreUserConfig{},
+	}
+}
+
+type DebugUserConfig struct {
+	Enabled bool `koanf:"enabled"`
+}
+
+func NewDebugUserConfig() DebugUserConfig {
+	return DebugUserConfig{
+		Enabled: true,
 	}
 }
 
@@ -39,4 +51,8 @@ func ReadGlobalConfig(path string) (GlobalUserConfig, error) {
 		return globalConfig, err
 	}
 	return globalConfig, nil
+}
+
+func PrintGlobalConfig() {
+	k.Print()
 }
