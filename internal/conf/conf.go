@@ -5,21 +5,9 @@ import (
 	"time"
 
 	raw_traffic "github.com/dinoallo/sealos-networkmanager-agent/internal/traffic"
-	"github.com/knadh/koanf/parsers/yaml"
-	"github.com/knadh/koanf/providers/file"
-	"github.com/knadh/koanf/v2"
 )
 
-var (
-	k      = koanf.New(".")
-	parser = yaml.Parser()
-)
-
-type GlobalConfig struct {
-	RawTrafficStoreConfig `koanf:"raw_traffic_store"`
-}
-
-type RawTrafficStoreConfig struct {
+type RawTrafficStoreUserConfig struct {
 	DefaultColl                string `koanf:"default_coll"`
 	SummaryColl                string `koanf:"summary_coll"`
 	MaxWorkerCount             int    `koanf:"max_worker_count"`
@@ -30,18 +18,7 @@ type RawTrafficStoreConfig struct {
 	SummaryCacheEntryTTLSecond int    `koanf:"summary_cache_entry_ttl_second"`
 }
 
-func ReadGlobalConfig(path string) (GlobalConfig, error) {
-	globalConfig := GlobalConfig{}
-	if err := k.Load(file.Provider(path), parser); err != nil {
-		return globalConfig, err
-	}
-	if err := k.Unmarshal("", &globalConfig); err != nil {
-		return globalConfig, err
-	}
-	return globalConfig, nil
-}
-
-func (c *RawTrafficStoreConfig) ParseRawTrafficStoreConfig() raw_traffic.RawTrafficHandlerConfig {
+func (c *RawTrafficStoreUserConfig) ParseRawTrafficStoreConfig() raw_traffic.RawTrafficHandlerConfig {
 	cfg := raw_traffic.NewRawTrafficHandlerConfig()
 	if isSet(c.DefaultColl) {
 		cfg.DefaultColl = c.DefaultColl

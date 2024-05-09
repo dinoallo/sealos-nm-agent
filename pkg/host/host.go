@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strings"
 	"sync"
 	"unsafe"
 )
@@ -14,13 +13,40 @@ var GetName = sync.OnceValues[string, error](func() (string, error) {
 	return getHostName()
 })
 
-var GetIPAddrs = sync.OnceValues[[]string, error](func() ([]string, error) {
-	return getHostIPAddrs()
-})
+// var GetIPAddrs = sync.OnceValues[[]string, error](func() ([]string, error) {
+// 	return getHostIPAddrs()
+// })
 
 var GetEndian = sync.OnceValues[binary.ByteOrder, error](func() (binary.ByteOrder, error) {
 	return getHostEndian()
 })
+
+// GetInterfaceIPAddr gets an specific version of ip address associated with an interface
+// If an interface doesn't have an this version of ip address, it will return an empty string
+func GetInterfaceIPAddr(ifaceName string, version int) (string, error) {
+	iface, err := net.InterfaceByName(ifaceName)
+	if err != nil {
+		return "", err
+	}
+	addrs, err := iface.Addrs()
+	if err != nil {
+		return "", err
+	}
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok {
+			if version == 4 {
+				if ipnet.IP.To4() != nil {
+					return ipnet.IP.To4().String(), nil
+				}
+			} else if version == 6 {
+				if ipnet.IP.To16() != nil {
+					return ipnet.IP.To16().String(), nil
+				}
+			}
+		}
+	}
+	return "", nil
+}
 
 func getHostName() (string, error) {
 	hostName, err := os.Hostname()
@@ -31,38 +57,38 @@ func getHostName() (string, error) {
 }
 
 // TODO: make this runtime detectable?
-func getHostIPAddrs() ([]string, error) {
-	var ipAddrs []string
-	ifs, err := net.Interfaces()
-	if err != nil {
-		return nil, err
-	}
-	ifsToIgnore := []string{"en"}
-	for _, infa := range ifs {
-		ignoreInfa := false
-		for _, prefix := range ifsToIgnore {
-			if strings.HasPrefix(infa.Name, prefix) {
-				ignoreInfa = true
-				break
-			}
-		}
-		if !ignoreInfa {
-			continue
-		}
-		addrs, err := infa.Addrs()
-		if err != nil {
-			return nil, err
-		}
-		for _, addr := range addrs {
-			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-				if ipnet.IP.To4() != nil || ipnet.IP.To16() != nil {
-					ipAddrs = append(ipAddrs, ipnet.IP.String())
-				}
-			}
-		}
-	}
-	return ipAddrs, nil
-}
+// func getHostIPAddrs() ([]string, error) {
+// 	var ipAddrs []string
+// 	ifs, err := net.Interfaces()
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	ifsToIgnore := []string{"en"}
+// 	for _, infa := range ifs {
+// 		ignoreInfa := false
+// 		for _, prefix := range ifsToIgnore {
+// 			if strings.HasPrefix(infa.Name, prefix) {
+// 				ignoreInfa = true
+// 				break
+// 			}
+// 		}
+// 		if !ignoreInfa {
+// 			continue
+// 		}
+// 		addrs, err := infa.Addrs()
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 		for _, addr := range addrs {
+// 			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+// 				if ipnet.IP.To4() != nil || ipnet.IP.To16() != nil {
+// 					ipAddrs = append(ipAddrs, ipnet.IP.String())
+// 				}
+// 			}
+// 		}
+// 	}
+// 	return ipAddrs, nil
+// }
 
 func getHostEndian() (binary.ByteOrder, error) {
 	buf := [2]byte{}

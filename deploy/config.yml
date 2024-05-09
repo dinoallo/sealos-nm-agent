@@ -1,3 +1,5 @@
+address: 127.0.0.1
+port: 30045
 raw_traffic_store:
   default_coll: "raw_traffic"
   summary_coll: "raw_traffic_summary"
