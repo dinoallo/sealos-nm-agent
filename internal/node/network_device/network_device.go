@@ -21,7 +21,9 @@ var (
 		"lo":      {},
 		"docker":  {},
 		// "cni":     {},
-		"veth": {},
+		"veth":       {},
+		"lxc_health": {},
+		"lxc":        {},
 	}
 
 	excludedIfFlagsMask uint32 = unix.IFF_SLAVE | unix.IFF_LOOPBACK
