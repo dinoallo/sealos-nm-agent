@@ -160,6 +160,9 @@ func (h *RawTrafficHandler) handleRawTraffic(ctx context.Context, c *cache.Cache
 			return err
 		}
 	}
+	if len(batch) <= 0 {
+		return nil
+	}
 	db := h.DB
 	_ctx, cancel := context.WithTimeout(ctx, h.FlushTimeout)
 	defer cancel()
