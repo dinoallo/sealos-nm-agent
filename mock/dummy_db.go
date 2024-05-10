@@ -3,8 +3,8 @@ package mock
 import (
 	"context"
 
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/db/common"
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/db/common"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/log"
 )
 
 type DummyDB struct {

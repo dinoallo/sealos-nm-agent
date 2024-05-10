@@ -9,9 +9,9 @@ import (
 	"github.com/cilium/ebpf/perf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/host"
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
-	netutil "github.com/dinoallo/sealos-networkmanager-agent/pkg/net/util"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/host"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/log"
+	netutil "github.com/dinoallo/sealos-networkmanager-library/pkg/net/util"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 )

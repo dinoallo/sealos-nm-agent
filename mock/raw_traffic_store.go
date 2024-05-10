@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/log"
 )
 
 type DummyRawTrafficStoreParams struct {

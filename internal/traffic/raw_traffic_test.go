@@ -12,8 +12,8 @@ import (
 
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/mock"
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/db/common"
-	zaplog "github.com/dinoallo/sealos-networkmanager-agent/pkg/log/zap"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/db/common"
+	zaplog "github.com/dinoallo/sealos-networkmanager-library/pkg/log/zap"
 	"github.com/stretchr/testify/assert"
 )
 

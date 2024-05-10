@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/db/common"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/db/common"
 )
 
 type TestingDBConfig struct {

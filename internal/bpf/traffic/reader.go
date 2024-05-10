@@ -6,7 +6,7 @@ import (
 
 	"time"
 
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/log"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"

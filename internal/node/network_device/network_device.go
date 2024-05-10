@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
-	errutil "github.com/dinoallo/sealos-networkmanager-agent/pkg/errors/util"
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
-	netlib "github.com/dinoallo/sealos-networkmanager-agent/pkg/net"
+	errutil "github.com/dinoallo/sealos-networkmanager-library/pkg/errors/util"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/log"
+	netlib "github.com/dinoallo/sealos-networkmanager-library/pkg/net"
 	"golang.org/x/sys/unix"
 )
 

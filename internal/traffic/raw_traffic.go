@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/cache"
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/db"
-	errutil "github.com/dinoallo/sealos-networkmanager-agent/pkg/errors/util"
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/host"
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/cache"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/db"
+	errutil "github.com/dinoallo/sealos-networkmanager-library/pkg/errors/util"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/host"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/log"
 	"golang.org/x/sync/errgroup"
 )
 

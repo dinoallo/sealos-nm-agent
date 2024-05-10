@@ -8,10 +8,10 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/bpf/common"
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/bpf/hooker"
-	errutil "github.com/dinoallo/sealos-networkmanager-agent/pkg/errors/util"
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/bpf/common"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/bpf/hooker"
+	errutil "github.com/dinoallo/sealos-networkmanager-library/pkg/errors/util"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/log"
 )
 
 type trafficEventKind uint32
