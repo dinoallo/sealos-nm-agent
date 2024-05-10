@@ -22,6 +22,6 @@ func NewDummyRawTrafficStore(params DummyRawTrafficStoreParams) *DummyRawTraffic
 }
 
 func (s *DummyRawTrafficStore) AcceptRawTrafficEvent(ctx context.Context, event structs.RawTrafficEvent) error {
-	s.Infof("src_ip: %v => dst_ip: %v; data_bytes: %v", event.RawTrafficEventMeta.SrcIP, event.RawTrafficEventMeta.DstIP, event.DataBytes)
+	s.Infof("src: %v:%v => dst: %v:%v; data_bytes: %v", event.RawTrafficEventMeta.SrcIP, event.RawTrafficEventMeta.SrcPort, event.RawTrafficEventMeta.DstIP, event.RawTrafficEventMeta.DstPort, event.DataBytes)
 	return nil
 }
