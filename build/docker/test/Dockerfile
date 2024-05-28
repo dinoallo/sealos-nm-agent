@@ -9,7 +9,6 @@ COPY go.sum go.sum
 RUN go mod download
 
 # Copy the go source
-COPY api/ api/
 COPY internal/ internal/
 
 CMD ["go", "test", "-v", "./..."]
