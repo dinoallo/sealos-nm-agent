@@ -12,21 +12,23 @@ var (
 )
 
 const (
-	defaultAddr = "localhost"
-	defaultPort = 30045
+	defaultNetworkDevice = "ens4"
+	defaultPort          = 30045
 )
 
 type GlobalUserConfig struct {
-	Address                   string `koanf:"address"`
+	NetworkDevice             string `koanf:"network_device"`
 	Port                      uint32 `koanf:"port"`
+	PreferredAddressVersion   int    `koanf:"preferred_address_version"`
 	DebugUserConfig           `koanf:"debug"`
 	RawTrafficStoreUserConfig `koanf:"raw_traffic_store"`
 }
 
 func NewGlobalUserConfig() GlobalUserConfig {
 	return GlobalUserConfig{
-		Address:                   defaultAddr,
+		NetworkDevice:             defaultNetworkDevice,
 		Port:                      defaultPort,
+		PreferredAddressVersion:   4,
 		DebugUserConfig:           NewDebugUserConfig(),
 		RawTrafficStoreUserConfig: RawTrafficStoreUserConfig{},
 	}
