@@ -10,29 +10,63 @@ import (
 
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/bpf/traffic"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/node/network_device"
 	raw_traffic "github.com/dinoallo/sealos-networkmanager-agent/internal/traffic"
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/db/mongo"
-	zaplog "github.com/dinoallo/sealos-networkmanager-agent/pkg/log/zap"
-	netlib "github.com/dinoallo/sealos-networkmanager-agent/pkg/net"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/db/mongo"
+	"github.com/dinoallo/sealos-networkmanager-library/pkg/host"
+	zaplog "github.com/dinoallo/sealos-networkmanager-library/pkg/log/zap"
+	netlib "github.com/dinoallo/sealos-networkmanager-library/pkg/net"
+)
+
+const (
+	defaultConfigPath = "/etc/sealos-nm-agent/config/config.yml"
 )
 
 func main() {
-	dbURI := os.Getenv("DB_URI")
+	// read the configuration
+	configPath := os.Getenv("CONFIG_PATH")
+	if configPath == "" {
+		configPath = defaultConfigPath
+	}
+	globalConfig, err := conf.ReadGlobalConfig(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to read the global configuration: %v\n", err)
+		return
+	}
+	// check if the agent is configured to run in the debug mode
+	var debugMode bool = false
+	if globalConfig.DebugUserConfig.Enabled {
+		debugMode = true
+		conf.PrintGlobalConfig()
+	}
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	mainCtx := context.Background()
-	logger, err := zaplog.NewZap(true)
+	logger, err := zaplog.NewZap(debugMode)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "unable to create the logger: %v\n", err)
 		os.Exit(1)
 	}
+	// set up the network address
+	srcIP, err := host.GetInterfaceIPAddr(globalConfig.NetworkDevice, globalConfig.PreferredAddressVersion)
+	if err != nil {
+		logger.Error("failed to get an address for the agent: %v", err)
+		return
+	} else if srcIP == "" {
+		logger.Error("there is no available address for this device")
+		return
+	}
+	// set up the database
+	dbURI := os.Getenv("DB_URI")
 	opts := mongo.MongoOpts{
 		DBURI:             dbURI,
 		DBName:            "sealos-networkmanager",
 		ConnectionTimeout: 5 * time.Second,
-		MaxPoolSize:       100,
+		MaxPoolSize:       1,
 		Logger:            logger,
+		SrcIP:             srcIP,
+		SrcPort:           globalConfig.Port,
 	}
 	db, err := mongo.NewMongo(opts)
 	if err != nil {
@@ -41,7 +75,7 @@ func main() {
 	}
 	defer db.Close(context.TODO())
 	// initialize and start the raw traffic handler
-	rthConfig := raw_traffic.NewRawTrafficHandlerConfig()
+	rthConfig := globalConfig.ParseRawTrafficStoreConfig()
 	rthParams := raw_traffic.RawTrafficHandlerParams{
 		DB:                      db,
 		ParentLogger:            logger,
@@ -57,6 +91,10 @@ func main() {
 		return
 	}
 	// initialize and start the bpf traffic event manager
+	// drtsParams := mock.DummyRawTrafficStoreParams{
+	// 	Logger: logger,
+	// }
+	// rawTrafficStore := mock.NewDummyRawTrafficStore(drtsParams)
 	if err := rlimit.RemoveMemlock(); err != nil {
 		logger.Error(err)
 		return
