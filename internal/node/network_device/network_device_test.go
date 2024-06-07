@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/mock"
-	loglib "github.com/dinoallo/sealos-networkmanager-library/pkg/log"
-	zaplog "github.com/dinoallo/sealos-networkmanager-library/pkg/log/zap"
+	loglib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
+	zaplog "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log/zap"
 	"github.com/stretchr/testify/assert"
 )
 

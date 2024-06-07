@@ -8,10 +8,10 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
-	"github.com/dinoallo/sealos-networkmanager-library/pkg/bpf/common"
-	"github.com/dinoallo/sealos-networkmanager-library/pkg/bpf/hooker"
-	errutil "github.com/dinoallo/sealos-networkmanager-library/pkg/errors/util"
-	"github.com/dinoallo/sealos-networkmanager-library/pkg/log"
+	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/bpf/common"
+	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/bpf/hooker"
+	errutil "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/errors/util"
+	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
 )
 
 type trafficEventKind uint32
@@ -38,7 +38,7 @@ func NewTrafficEventManagerConfig() TrafficEventManagerConfig {
 type TrafficEventManagerParams struct {
 	ParentLogger log.Logger
 	Config       TrafficEventManagerConfig
-	modules.RawTrafficStore
+	modules.ExportTrafficService
 }
 
 type TrafficEventManager struct {
@@ -67,7 +67,7 @@ func NewTrafficEventManager(params TrafficEventManagerParams) (*TrafficEventMana
 	handlerParams := TrafficEventHandlerParams{
 		ParentLogger:              params.ParentLogger,
 		TrafficEventHandlerConfig: params.Config.TrafficEventHandlerConfig,
-		RawTrafficStore:           params.RawTrafficStore,
+		ExportTrafficService:      params.ExportTrafficService,
 	}
 	trafficEventReaders := make(map[trafficEventKind]*TrafficEventReader)
 	trafficEventHandlers := make(map[trafficEventKind]*TrafficEventHandler)

@@ -9,9 +9,9 @@ import (
 	"github.com/cilium/ebpf/perf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
-	"github.com/dinoallo/sealos-networkmanager-library/pkg/host"
-	"github.com/dinoallo/sealos-networkmanager-library/pkg/log"
-	netutil "github.com/dinoallo/sealos-networkmanager-library/pkg/net/util"
+	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/host"
+	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
+	netutil "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/net/util"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 )
@@ -30,7 +30,7 @@ type TrafficEventHandlerParams struct {
 	ParentLogger log.Logger
 	Events       chan *perf.Record
 	TrafficEventHandlerConfig
-	modules.RawTrafficStore
+	modules.ExportTrafficService
 }
 
 type TrafficEventHandler struct {
@@ -97,13 +97,11 @@ func (h *TrafficEventHandler) handle(ctx context.Context, trafficEvents chan *pe
 }
 
 func (h *TrafficEventHandler) submit(ctx context.Context, _event trafficEventT) error {
-	//TODO: imple me
 	if _event.Len <= 0 {
 		return nil
 	}
-	//TODO: skip self
 	event := convertToRawTrafficEvent(_event)
-	if err := h.AcceptRawTrafficEvent(ctx, event); err != nil {
+	if err := h.SubmitRawTrafficEvent(ctx, event); err != nil {
 		return err
 	}
 	return nil
