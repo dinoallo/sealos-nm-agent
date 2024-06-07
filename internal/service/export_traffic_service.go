@@ -14,6 +14,15 @@ import (
 	"google.golang.org/grpc/keepalive"
 )
 
+var (
+	kacp = keepalive.ClientParameters{
+		Time:                10 * time.Second, // send pings every 10 seconds if there is no activity
+		Timeout:             time.Second,      // wait 1 second for ping ack before considering the connection dead
+		PermitWithoutStream: true,             // send pings even without active streams
+	}
+	insecureCreds = insecure.NewCredentials()
+)
+
 type ExportTrafficServiceConfig struct {
 	MaxWorkerCount      int
 	TrafficExporterAddr string
@@ -54,12 +63,7 @@ func NewExportTrafficService(params ExportTrafficServiceParams) (*ExportTrafficS
 func (s *ExportTrafficService) Start(ctx context.Context) error {
 	wg := errgroup.Group{}
 	wg.SetLimit(s.MaxWorkerCount)
-	conn, err := grpc.Dial(s.TrafficExporterAddr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithKeepaliveParams(
-		keepalive.ClientParameters{
-			Time:    10 * time.Second,
-			Timeout: 5 * time.Second,
-		},
-	))
+	conn, err := grpc.NewClient(s.TrafficExporterAddr, grpc.WithTransportCredentials(insecureCreds), grpc.WithKeepaliveParams(kacp))
 	if err != nil {
 		return err
 	}
