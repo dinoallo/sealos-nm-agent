@@ -97,12 +97,13 @@ func (s *ExportTrafficService) sendRawTrafficItem(ctx context.Context) {
 			err := stream.Send(item)
 			if err != nil {
 				s.logger.Errorf("failed to send a raw traffic item: %v", err)
-				continue
+				return
 			}
 		case <-ctx.Done():
 			_, err := stream.CloseAndRecv()
 			if err != nil {
 				s.logger.Errorf("failed to close the stream: %v", err)
+				return
 			}
 			return
 		}
