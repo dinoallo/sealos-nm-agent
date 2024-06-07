@@ -6,90 +6,45 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/bpf/traffic"
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/node/network_device"
-	raw_traffic "github.com/dinoallo/sealos-networkmanager-agent/internal/traffic"
-	"github.com/dinoallo/sealos-networkmanager-library/pkg/db/mongo"
-	"github.com/dinoallo/sealos-networkmanager-library/pkg/host"
-	zaplog "github.com/dinoallo/sealos-networkmanager-library/pkg/log/zap"
-	netlib "github.com/dinoallo/sealos-networkmanager-library/pkg/net"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/service"
+	zaplog "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log/zap"
+	netlib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/net"
 )
 
 const (
-	defaultConfigPath = "/etc/sealos-nm-agent/config/config.yml"
+	defaultConfigPath        = "/etc/sealos-nm-agent/config/config.yml"
+	defaultTrafficExportAddr = "sealos-nm-traffic-exporter-service.sealos-nm-system.svc.cluster.local:8080"
 )
 
 func main() {
-	// read the configuration
-	configPath := os.Getenv("CONFIG_PATH")
-	if configPath == "" {
-		configPath = defaultConfigPath
-	}
-	globalConfig, err := conf.ReadGlobalConfig(configPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to read the global configuration: %v\n", err)
-		return
-	}
-	// check if the agent is configured to run in the debug mode
-	var debugMode bool = false
-	if globalConfig.DebugUserConfig.Enabled {
-		debugMode = true
-		conf.PrintGlobalConfig()
-	}
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	mainCtx := context.Background()
-	logger, err := zaplog.NewZap(debugMode)
+	logger, err := zaplog.NewZap(true)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "unable to create the logger: %v\n", err)
 		os.Exit(1)
 	}
-	// set up the network address
-	srcIP, err := host.GetInterfaceIPAddr(globalConfig.NetworkDevice, globalConfig.PreferredAddressVersion)
-	if err != nil {
-		logger.Error("failed to get an address for the agent: %v", err)
-		return
-	} else if srcIP == "" {
-		logger.Error("there is no available address for this device")
-		return
+	etsConfig := service.NewExportTrafficServiceConfig()
+	etsConfig.TrafficExporterAddr = defaultTrafficExportAddr
+	etsParams := service.ExportTrafficServiceParams{
+		ParentLogger:               logger,
+		ExportTrafficServiceConfig: etsConfig,
 	}
-	// set up the database
-	dbURI := os.Getenv("DB_URI")
-	opts := mongo.MongoOpts{
-		DBURI:             dbURI,
-		DBName:            "sealos-networkmanager",
-		ConnectionTimeout: 5 * time.Second,
-		MaxPoolSize:       1,
-		Logger:            logger,
-		SrcIP:             srcIP,
-		SrcPort:           globalConfig.Port,
-	}
-	db, err := mongo.NewMongo(opts)
+	exportTrafficService, err := service.NewExportTrafficService(etsParams)
 	if err != nil {
+		logger.Errorf("failed to create the export traffic service: %v", err)
+	}
+	if err := exportTrafficService.Start(context.TODO()); err != nil {
 		logger.Error(err)
 		return
 	}
-	defer db.Close(context.TODO())
-	// initialize and start the raw traffic handler
-	rthConfig := globalConfig.ParseRawTrafficStoreConfig()
-	rthParams := raw_traffic.RawTrafficHandlerParams{
-		DB:                      db,
-		ParentLogger:            logger,
-		RawTrafficHandlerConfig: rthConfig,
-	}
-	rawTrafficStore, err := raw_traffic.NewRawTrafficHandler(rthParams)
-	if err != nil {
-		logger.Error(err)
-		return
-	}
-	if err := rawTrafficStore.Start(mainCtx); err != nil {
-		logger.Error(err)
-		return
-	}
+	defer exportTrafficService.Close()
+
 	// initialize and start the bpf traffic event manager
 	// drtsParams := mock.DummyRawTrafficStoreParams{
 	// 	Logger: logger,
@@ -101,9 +56,9 @@ func main() {
 	}
 	temConfig := traffic.NewTrafficEventManagerConfig()
 	temParams := traffic.TrafficEventManagerParams{
-		ParentLogger:    logger,
-		Config:          temConfig,
-		RawTrafficStore: rawTrafficStore,
+		ParentLogger:         logger,
+		Config:               temConfig,
+		ExportTrafficService: exportTrafficService,
 	}
 	trafficEventManager, err := traffic.NewTrafficEventManager(temParams)
 	if err != nil {
