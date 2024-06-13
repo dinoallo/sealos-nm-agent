@@ -3,6 +3,7 @@ module github.com/dinoallo/sealos-networkmanager-agent
 go 1.21.0
 
 require (
+	github.com/caarlos0/env/v11 v11.0.1
 	github.com/cilium/ebpf v0.15.0
 	github.com/stretchr/testify v1.9.0
 	gitlab.com/dinoallo/sealos-networkmanager-library v0.0.0-20240528064946-598feeb1aa46

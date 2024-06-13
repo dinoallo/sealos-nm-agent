@@ -7,10 +7,13 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/caarlos0/env/v11"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/bpf/traffic"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/node/network_device"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/service"
+	"github.com/dinoallo/sealos-networkmanager-agent/mock"
+	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	zaplog "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log/zap"
 	netlib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/net"
 )
@@ -29,21 +32,44 @@ func main() {
 		fmt.Fprintf(os.Stderr, "unable to create the logger: %v\n", err)
 		os.Exit(1)
 	}
+	globalConfig, err := initGlobalConfig()
+	if err != nil {
+		logger.Errorf("failed to initialize the global configuration: %v", err)
+		return
+	}
+	if globalConfig == nil {
+		logger.Infof("the global configuration is empty?")
+		return
+	}
+	logger.Infof("print global config: %+v", globalConfig)
 	etsConfig := service.NewExportTrafficServiceConfig()
 	etsConfig.TrafficExporterAddr = defaultTrafficExportAddr
 	etsParams := service.ExportTrafficServiceParams{
 		ParentLogger:               logger,
 		ExportTrafficServiceConfig: etsConfig,
 	}
-	exportTrafficService, err := service.NewExportTrafficService(etsParams)
-	if err != nil {
-		logger.Errorf("failed to create the export traffic service: %v", err)
+	var exportTrafficService modules.ExportTrafficService
+	if globalConfig.NoExportingTraffic {
+		ets, err := mock.NewDummyExportTrafficService(logger)
+		if err != nil {
+			logger.Errorf("failed to create a dummy export traffic service: %v", err)
+			return
+		}
+		exportTrafficService = ets
+
+	} else {
+		ets, err := service.NewExportTrafficService(etsParams)
+		if err != nil {
+			logger.Errorf("failed to create the export traffic service: %v", err)
+			return
+		}
+		if err := ets.Start(context.TODO()); err != nil {
+			logger.Error(err)
+			return
+		}
+		defer ets.Close()
+		exportTrafficService = ets
 	}
-	if err := exportTrafficService.Start(context.TODO()); err != nil {
-		logger.Error(err)
-		return
-	}
-	defer exportTrafficService.Close()
 
 	// initialize and start the bpf traffic event manager
 	// drtsParams := mock.DummyRawTrafficStoreParams{
@@ -89,4 +115,26 @@ func main() {
 		return
 	}
 	<-sigs
+}
+
+type GlobalConfig struct {
+	NoExportingTraffic bool `env:"NO_EXPORTING_TRAFFIC"`
+}
+
+func NewGlobalConfig() *GlobalConfig {
+	return &GlobalConfig{
+		//TODO: support v6 dns service
+		NoExportingTraffic: false,
+	}
+}
+
+func initGlobalConfig() (*GlobalConfig, error) {
+	cfg := NewGlobalConfig()
+	opts := env.Options{
+		Prefix: "NM_AGENT_",
+	}
+	if err := env.ParseWithOptions(cfg, opts); err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
