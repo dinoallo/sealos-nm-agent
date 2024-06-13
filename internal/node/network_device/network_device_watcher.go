@@ -11,22 +11,26 @@ import (
 	errutil "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/errors/util"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
 	netlib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/net"
-	"golang.org/x/sys/unix"
 )
 
 var (
 	//TODO: check me
 	excludedDevicePrefixes = map[string]struct{}{
-		"cilium_": {},
-		"lo":      {},
-		"docker":  {},
-		// "cni":     {},
+		"cilium_":    {},
+		"lo":         {},
+		"docker":     {},
 		"veth":       {},
 		"lxc_health": {},
-		"lxc":        {},
+		"tailscale":  {},
+		"kube":       {},
 	}
-
-	excludedIfFlagsMask uint32 = unix.IFF_SLAVE | unix.IFF_LOOPBACK
+	//TODO: make these configurable
+	podDevicePrefixes = map[string]struct{}{
+		"lxc": {},
+	}
+	hostDevicePrefixes = map[string]struct{}{
+		"e": {},
+	}
 )
 
 type NetworkDeviceWatcherConfig struct {
@@ -42,7 +46,8 @@ func NewNetworkDeviceWatcherConfig() NetworkDeviceWatcherConfig {
 type NetworkDeviceWatcherParams struct {
 	ParentLogger log.Logger
 	NetworkDeviceWatcherConfig
-	modules.BPFTrafficModule
+	modules.BPFHostTrafficModule
+	modules.BPFPodTrafficModule
 	netlib.NetLib
 }
 
@@ -53,7 +58,7 @@ type NetworkDeviceWatcher struct {
 }
 
 func NewNetworkDeviceWatcher(params NetworkDeviceWatcherParams) (*NetworkDeviceWatcher, error) {
-	logger, err := params.ParentLogger.WithCompName("network_device_watcher")
+	logger, err := params.ParentLogger.WithCompName("pod_network_device_watcher")
 	if err != nil {
 		return nil, err
 	}
@@ -109,8 +114,17 @@ func (w *NetworkDeviceWatcher) updateDevices(ctx context.Context) error {
 	// add new ifaces
 	for index, iface := range newIfaces {
 		w.devices.LoadOrStore(index, iface)
-		if w.isViableDevices(iface.Name) {
-			if err := w.SubscribeToDevice(iface.Name); err != nil {
+		if !isViableDevices(iface.Name) {
+			continue
+		}
+		if isPodDevice(iface.Name) {
+			if err := w.BPFPodTrafficModule.SubscribeToDevice(iface.Name); err != nil {
+				w.logger.Error(err)
+				continue
+			}
+		}
+		if isHostDevice(iface.Name) {
+			if err := w.BPFHostTrafficModule.SubscribeToDevice(iface.Name); err != nil {
 				w.logger.Error(err)
 				continue
 			}
@@ -134,7 +148,7 @@ func (w *NetworkDeviceWatcher) dumpDeviceIndexes() []int {
 	return indexes
 }
 
-func (w *NetworkDeviceWatcher) isViableDevices(iface string) bool {
+func isViableDevices(iface string) bool {
 	for prefix := range excludedDevicePrefixes {
 		if strings.HasPrefix(iface, prefix) {
 			return false
@@ -142,4 +156,22 @@ func (w *NetworkDeviceWatcher) isViableDevices(iface string) bool {
 	}
 	//TODO: ignore devices that masked by excludedFlags
 	return true
+}
+
+func isPodDevice(iface string) bool {
+	for prefix := range podDevicePrefixes {
+		if strings.HasPrefix(iface, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func isHostDevice(iface string) bool {
+	for prefix := range hostDevicePrefixes {
+		if strings.HasPrefix(iface, prefix) {
+			return true
+		}
+	}
+	return false
 }

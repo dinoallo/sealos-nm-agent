@@ -41,9 +41,10 @@ type ExportTrafficServiceParams struct {
 }
 
 type ExportTrafficService struct {
-	logger          log.Logger
-	rawTrafficItems chan *proto.RawTraffic
-	conn            *grpc.ClientConn
+	logger              log.Logger
+	rawHostTrafficItems chan *proto.RawTraffic
+	rawPodTrafficItems  chan *proto.RawTraffic
+	conn                *grpc.ClientConn
 	ExportTrafficServiceParams
 }
 
@@ -54,15 +55,18 @@ func NewExportTrafficService(params ExportTrafficServiceParams) (*ExportTrafficS
 	}
 	return &ExportTrafficService{
 		logger:                     logger,
-		rawTrafficItems:            make(chan *proto.RawTraffic),
+		rawHostTrafficItems:        make(chan *proto.RawTraffic),
+		rawPodTrafficItems:         make(chan *proto.RawTraffic),
 		conn:                       nil,
 		ExportTrafficServiceParams: params,
 	}, nil
 }
 
 func (s *ExportTrafficService) Start(ctx context.Context) error {
-	wg := errgroup.Group{}
-	wg.SetLimit(s.MaxWorkerCount)
+	pWg := errgroup.Group{}
+	pWg.SetLimit(s.MaxWorkerCount)
+	hWg := errgroup.Group{}
+	hWg.SetLimit(s.MaxWorkerCount)
 	conn, err := grpc.NewClient(s.TrafficExporterAddr, grpc.WithTransportCredentials(insecureCreds), grpc.WithKeepaliveParams(kacp))
 	if err != nil {
 		return err
@@ -74,8 +78,21 @@ func (s *ExportTrafficService) Start(ctx context.Context) error {
 			case <-ctx.Done():
 				return
 			default:
-				wg.Go(func() error {
-					s.sendRawTrafficItem(ctx)
+				pWg.Go(func() error {
+					s.sendRawPodTrafficItem(ctx)
+					return nil
+				})
+			}
+		}
+	}()
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				hWg.Go(func() error {
+					s.sendRawHostTrafficItem(ctx)
 					return nil
 				})
 			}
@@ -84,16 +101,42 @@ func (s *ExportTrafficService) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *ExportTrafficService) sendRawTrafficItem(ctx context.Context) {
+func (s *ExportTrafficService) sendRawPodTrafficItem(ctx context.Context) {
 	client := proto.NewTrafficExportServiceClient(s.conn)
-	stream, err := client.ExportTraffic(ctx)
+	stream, err := client.ExportPodTraffic(ctx)
 	if err != nil {
 		s.logger.Errorf("failed to open a stream to send a raw traffic item: %v", err)
 		return
 	}
 	for {
 		select {
-		case item := <-s.rawTrafficItems:
+		case item := <-s.rawPodTrafficItems:
+			err := stream.Send(item)
+			if err != nil {
+				s.logger.Errorf("failed to send a raw traffic item: %v", err)
+				return
+			}
+		case <-ctx.Done():
+			_, err := stream.CloseAndRecv()
+			if err != nil {
+				s.logger.Errorf("failed to close the stream: %v", err)
+				return
+			}
+			return
+		}
+	}
+}
+
+func (s *ExportTrafficService) sendRawHostTrafficItem(ctx context.Context) {
+	client := proto.NewTrafficExportServiceClient(s.conn)
+	stream, err := client.ExportHostTraffic(ctx)
+	if err != nil {
+		s.logger.Errorf("failed to open a stream to send a raw traffic item: %v", err)
+		return
+	}
+	for {
+		select {
+		case item := <-s.rawHostTrafficItems:
 			err := stream.Send(item)
 			if err != nil {
 				s.logger.Errorf("failed to send a raw traffic item: %v", err)
@@ -126,10 +169,20 @@ func convert(e structs.RawTrafficEvent) *proto.RawTraffic {
 	}
 }
 
-func (s *ExportTrafficService) SubmitRawTrafficEvent(ctx context.Context, e structs.RawTrafficEvent) error {
+func (s *ExportTrafficService) SubmitRawPodTrafficEvent(ctx context.Context, e structs.RawTrafficEvent) error {
 	item := convert(e)
 	select {
-	case s.rawTrafficItems <- item:
+	case s.rawPodTrafficItems <- item:
+	case <-ctx.Done():
+		return modules.ErrTimeoutSubmittingRTE
+	}
+	return nil
+}
+
+func (s *ExportTrafficService) SubmitRawHostTrafficEvent(ctx context.Context, e structs.RawTrafficEvent) error {
+	item := convert(e)
+	select {
+	case s.rawHostTrafficItems <- item:
 	case <-ctx.Done():
 		return modules.ErrTimeoutSubmittingRTE
 	}

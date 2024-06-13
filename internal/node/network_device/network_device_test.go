@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/mock"
+	"github.com/stretchr/testify/assert"
 	loglib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
 	zaplog "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log/zap"
-	"github.com/stretchr/testify/assert"
 )
 
 var (
@@ -24,7 +24,8 @@ func setUpEnv(netlib *mock.TestingNetLib) (*NetworkDeviceWatcher, error) {
 	params := NetworkDeviceWatcherParams{
 		ParentLogger:               globalLogger,
 		NetworkDeviceWatcherConfig: globalConfig,
-		BPFTrafficModule:           dummyBPFTrafficModule,
+		BPFPodTrafficModule:        dummyBPFTrafficModule,
+		BPFHostTrafficModule:       dummyBPFTrafficModule,
 		NetLib:                     netlib,
 	}
 	w, err := NewNetworkDeviceWatcher(params)
@@ -38,7 +39,7 @@ func setUpEnv(netlib *mock.TestingNetLib) (*NetworkDeviceWatcher, error) {
 }
 
 func TestDeviceChecking(t *testing.T) {
-	w, err := setUpEnv(mock.NewTestingNetLib())
+	_, err := setUpEnv(mock.NewTestingNetLib())
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
@@ -56,14 +57,14 @@ func TestDeviceChecking(t *testing.T) {
 	t.Run("check viable devices", func(t *testing.T) {
 		for _, dev := range viableDevices {
 			t.Logf("device name: %v", dev)
-			viable := w.isViableDevices(dev)
+			viable := isViableDevices(dev)
 			assert.Equal(t, true, viable)
 		}
 	})
 	t.Run("check not viable devices", func(t *testing.T) {
 		for _, dev := range nonViableDevices {
 			t.Logf("device name: %v", dev)
-			viable := w.isViableDevices(dev)
+			viable := isViableDevices(dev)
 			assert.Equal(t, false, viable)
 		}
 	})

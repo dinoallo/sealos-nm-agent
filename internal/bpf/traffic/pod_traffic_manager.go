@@ -14,49 +14,42 @@ import (
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
 )
 
-type trafficEventKind uint32
-
-const (
-	Ingress trafficEventKind = iota
-	Egress
-)
-
-type TrafficEventManagerConfig struct {
+type PodTrafficEventManagerConfig struct {
 	// reader
 	TrafficEventReaderConfig
 	// handler
-	TrafficEventHandlerConfig
+	PodTrafficEventHandlerConfig
 }
 
-func NewTrafficEventManagerConfig() TrafficEventManagerConfig {
-	return TrafficEventManagerConfig{
-		TrafficEventReaderConfig:  NewTrafficEventReaderConfig(),
-		TrafficEventHandlerConfig: NewTrafficEventHandlerConfig(),
+func NewPodTrafficEventManagerConfig() PodTrafficEventManagerConfig {
+	return PodTrafficEventManagerConfig{
+		TrafficEventReaderConfig:     NewTrafficEventReaderConfig(),
+		PodTrafficEventHandlerConfig: NewPodTrafficEventHandlerConfig(),
 	}
 }
 
-type TrafficEventManagerParams struct {
+type PodTrafficEventManagerParams struct {
 	ParentLogger log.Logger
-	Config       TrafficEventManagerConfig
+	Config       PodTrafficEventManagerConfig
 	modules.ExportTrafficService
 }
 
-type TrafficEventManager struct {
+type PodTrafficEventManager struct {
 	logger               log.Logger
-	trafficObjs          trafficObjects
+	trafficObjs          pod_trafficObjects
 	close                sync.Once
 	deviceHookers        *sync.Map
 	trafficEventReaders  map[trafficEventKind]*TrafficEventReader
-	trafficEventHandlers map[trafficEventKind]*TrafficEventHandler
+	trafficEventHandlers map[trafficEventKind]*PodTrafficEventHandler
 }
 
-func NewTrafficEventManager(params TrafficEventManagerParams) (*TrafficEventManager, error) {
-	logger, err := params.ParentLogger.WithCompName("traffic_event_manager")
+func NewPodTrafficEventManager(params PodTrafficEventManagerParams) (*PodTrafficEventManager, error) {
+	logger, err := params.ParentLogger.WithCompName("pod_traffic_event_manager")
 	if err != nil {
 		return nil, errutil.Err(ErrCreatingLogger, err)
 	}
-	trafficObjs := trafficObjects{}
-	if err := loadTrafficObjects(&trafficObjs, nil); err != nil {
+	trafficObjs := pod_trafficObjects{}
+	if err := loadPod_trafficObjects(&trafficObjs, nil); err != nil {
 		return nil, errutil.Err(ErrLoadingBPFObjects, err)
 	}
 
@@ -64,13 +57,13 @@ func NewTrafficEventManager(params TrafficEventManagerParams) (*TrafficEventMana
 		ParentLogger:             params.ParentLogger,
 		TrafficEventReaderConfig: params.Config.TrafficEventReaderConfig,
 	}
-	handlerParams := TrafficEventHandlerParams{
-		ParentLogger:              params.ParentLogger,
-		TrafficEventHandlerConfig: params.Config.TrafficEventHandlerConfig,
-		ExportTrafficService:      params.ExportTrafficService,
+	handlerParams := PodTrafficEventHandlerParams{
+		ParentLogger:                 params.ParentLogger,
+		PodTrafficEventHandlerConfig: params.Config.PodTrafficEventHandlerConfig,
+		ExportTrafficService:         params.ExportTrafficService,
 	}
 	trafficEventReaders := make(map[trafficEventKind]*TrafficEventReader)
-	trafficEventHandlers := make(map[trafficEventKind]*TrafficEventHandler)
+	trafficEventHandlers := make(map[trafficEventKind]*PodTrafficEventHandler)
 	setUpReader := func(perfEvents *ebpf.Map, events chan *perf.Record, kind trafficEventKind) error {
 		readerParams.Events = events
 		readerParams.PerfEvents = perfEvents
@@ -83,23 +76,31 @@ func NewTrafficEventManager(params TrafficEventManagerParams) (*TrafficEventMana
 	}
 	setUpHandler := func(events chan *perf.Record, kind trafficEventKind) error {
 		handlerParams.Events = events
-		handler, err := NewTrafficEventHandler(handlerParams)
+		handler, err := NewPodTrafficEventHandler(handlerParams)
 		if err != nil {
 			return err
 		}
 		trafficEventHandlers[kind] = handler
 		return nil
 	}
-	// egress
-	EgressEvents := make(chan *perf.Record)
-	if err := setUpReader(trafficObjs.EgressTrafficEvents, EgressEvents, Egress); err != nil {
+	// ingress
+	IngressEvents := make(chan *perf.Record)
+	if err := setUpReader(trafficObjs.IngressPodTrafficEvents, IngressEvents, Ingress); err != nil {
 		return nil, errutil.Err(ErrCreatingEventReader, err)
 	}
-	if err := setUpHandler(EgressEvents, Egress); err != nil {
+	if err := setUpHandler(IngressEvents, Ingress); err != nil {
 		return nil, errutil.Err(ErrCreatingEventHandler, err)
 	}
+	// egress
+	// EgressEvents := make(chan *perf.Record)
+	// if err := setUpReader(trafficObjs.EgressPodTrafficEvents, EgressEvents, Egress); err != nil {
+	// 	return nil, errutil.Err(ErrCreatingEventReader, err)
+	// }
+	// if err := setUpHandler(EgressEvents, Egress); err != nil {
+	// 	return nil, errutil.Err(ErrCreatingEventHandler, err)
+	// }
 
-	return &TrafficEventManager{
+	return &PodTrafficEventManager{
 		logger:               logger,
 		trafficObjs:          trafficObjs,
 		close:                sync.Once{},
@@ -109,7 +110,7 @@ func NewTrafficEventManager(params TrafficEventManagerParams) (*TrafficEventMana
 	}, nil
 }
 
-func (h *TrafficEventManager) SubscribeToDevice(iface string) error {
+func (h *PodTrafficEventManager) SubscribeToDevice(iface string) error {
 	deviceHooker, err := hooker.NewDeviceHooker(iface, h.logger)
 	if err != nil {
 		return errutil.Err(ErrCreatingDeviceHooker, err)
@@ -121,14 +122,18 @@ func (h *TrafficEventManager) SubscribeToDevice(iface string) error {
 	if err := deviceHooker.Init(); err != nil {
 		return err
 	}
-	//TODO: set up ingress hook
-	if err := deviceHooker.AddFilter("sealos_nm_traffic_egress", h.trafficObjs.EgressTrafficHook, common.TC_DIR_EGRESS); err != nil {
-		return errutil.Err(ErrAddingEgressFilter, err)
+	if err := deviceHooker.AddFilter("sealos_nm_pod_traffic_ingress", h.trafficObjs.IngressPodTrafficHook, common.TC_DIR_INGRESS); err != nil {
+		return errutil.Err(ErrAddingIngressFilter, err)
 	}
+	h.logger.Infof("add ingress pod traffic hook to device %v", iface)
+	// if err := deviceHooker.AddFilter("sealos_nm_host_traffic_egress", h.trafficObjs.EgressPodTrafficHook, common.TC_DIR_EGRESS); err != nil {
+	// 	return errutil.Err(ErrAddingEgressFilter, err)
+	// }
+	// h.logger.Infof("add egress pod traffic hook to device %v", iface)
 	return nil
 }
 
-func (h *TrafficEventManager) Start(ctx context.Context) error {
+func (h *PodTrafficEventManager) Start(ctx context.Context) error {
 	for _, reader := range h.trafficEventReaders {
 		reader.Start(ctx)
 	}
@@ -138,7 +143,7 @@ func (h *TrafficEventManager) Start(ctx context.Context) error {
 	return nil
 }
 
-func (h *TrafficEventManager) Close() {
+func (h *PodTrafficEventManager) Close() {
 	h.close.Do(func() {
 		closeDeviceHooker := func(key, value any) bool {
 			deviceHooker, ok := value.(*hooker.DeviceHooker)

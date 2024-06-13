@@ -12,5 +12,6 @@ var (
 )
 
 type ExportTrafficService interface {
-	SubmitRawTrafficEvent(ctx context.Context, e structs.RawTrafficEvent) error
+	SubmitRawPodTrafficEvent(ctx context.Context, e structs.RawTrafficEvent) error
+	SubmitRawHostTrafficEvent(ctx context.Context, e structs.RawTrafficEvent) error
 }

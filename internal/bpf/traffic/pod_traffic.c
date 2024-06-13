@@ -21,19 +21,19 @@ struct event_t {
   __be16 dst_port;
 };
 
-const struct event_t *unused_traffic_event __attribute__((unused));
+const struct event_t *unused_pod_traffic_event __attribute__((unused));
 
 struct {
   __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
   __uint(key_size, sizeof(u32));
   __uint(value_size, sizeof(u32));
-} egress_traffic_events SEC(".maps");
+} egress_pod_traffic_events SEC(".maps");
 
 struct {
   __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
   __uint(key_size, sizeof(u32));
   __uint(value_size, sizeof(u32));
-} ingress_traffic_events SEC(".maps");
+} ingress_pod_traffic_events SEC(".maps");
 
 static __always_inline void marshal(struct event_t *event,
                                     const struct bpf_sock *sk) {
@@ -69,8 +69,8 @@ static __always_inline void submit_egress_traffic(struct __sk_buff *ctx) {
   }
   sk = bpf_sk_fullsock(sk);
   marshal(&event, sk);
-  bpf_perf_event_output(ctx, &egress_traffic_events, BPF_F_CURRENT_CPU, &event,
-                        sizeof(struct event_t));
+  bpf_perf_event_output(ctx, &egress_pod_traffic_events, BPF_F_CURRENT_CPU,
+                        &event, sizeof(struct event_t));
 }
 static __always_inline void submit_ingress_traffic(struct __sk_buff *ctx) {
   struct event_t event = {};
@@ -81,18 +81,18 @@ static __always_inline void submit_ingress_traffic(struct __sk_buff *ctx) {
   }
   sk = bpf_sk_fullsock(sk);
   marshal(&event, sk);
-  bpf_perf_event_output(ctx, &ingress_traffic_events, BPF_F_CURRENT_CPU, &event,
-                        sizeof(struct event_t));
+  bpf_perf_event_output(ctx, &ingress_pod_traffic_events, BPF_F_CURRENT_CPU,
+                        &event, sizeof(struct event_t));
 }
 
 SEC("classifier")
-int egress_traffic_hook(struct __sk_buff *ctx) {
+int egress_pod_traffic_hook(struct __sk_buff *ctx) {
   submit_egress_traffic(ctx);
   return TC_ACT_UNSPEC;
 }
 
 SEC("classifier")
-int ingress_traffic_hook(struct __sk_buff *ctx) {
+int ingress_pod_traffic_hook(struct __sk_buff *ctx) {
   submit_ingress_traffic(ctx);
   return TC_ACT_UNSPEC;
 }

@@ -50,7 +50,7 @@ func main() {
 	}
 	var exportTrafficService modules.ExportTrafficService
 	if globalConfig.NoExportingTraffic {
-		ets, err := mock.NewDummyExportTrafficService(logger)
+		ets, err := mock.NewDummyExportTrafficService(logger, globalConfig.DummyWatchedPodIP, globalConfig.DummyWatchedHostIP)
 		if err != nil {
 			logger.Errorf("failed to create a dummy export traffic service: %v", err)
 			return
@@ -80,29 +80,46 @@ func main() {
 		logger.Error(err)
 		return
 	}
-	temConfig := traffic.NewTrafficEventManagerConfig()
-	temParams := traffic.TrafficEventManagerParams{
+	ptemConfig := traffic.NewPodTrafficEventManagerConfig()
+	ptemParams := traffic.PodTrafficEventManagerParams{
 		ParentLogger:         logger,
-		Config:               temConfig,
+		Config:               ptemConfig,
 		ExportTrafficService: exportTrafficService,
 	}
-	trafficEventManager, err := traffic.NewTrafficEventManager(temParams)
+	podTrafficEventManager, err := traffic.NewPodTrafficEventManager(ptemParams)
 	if err != nil {
 		logger.Error(err)
 		return
 	}
-	if err := trafficEventManager.Start(mainCtx); err != nil {
+	if err := podTrafficEventManager.Start(mainCtx); err != nil {
 		logger.Error(err)
 		return
 	}
-	defer trafficEventManager.Close()
+	defer podTrafficEventManager.Close()
+	htemConfig := traffic.NewHostTrafficEventManagerConfig()
+	htemParams := traffic.HostTrafficEventManagerParams{
+		ParentLogger:         logger,
+		Config:               htemConfig,
+		ExportTrafficService: exportTrafficService,
+	}
+	hostTrafficEventManager, err := traffic.NewHostTrafficEventManager(htemParams)
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+	if err := hostTrafficEventManager.Start(mainCtx); err != nil {
+		logger.Error(err)
+		return
+	}
+	defer hostTrafficEventManager.Close()
 	// initialize and start the network device watcher
 	ndwConfig := network_device.NewNetworkDeviceWatcherConfig()
 	officialNetLib := netlib.NewGoNetLib()
 	ndwParams := network_device.NetworkDeviceWatcherParams{
 		ParentLogger:               logger,
 		NetworkDeviceWatcherConfig: ndwConfig,
-		BPFTrafficModule:           trafficEventManager,
+		BPFHostTrafficModule:       hostTrafficEventManager,
+		BPFPodTrafficModule:        podTrafficEventManager,
 		NetLib:                     officialNetLib,
 	}
 	deviceWatcher, err := network_device.NewNetworkDeviceWatcher(ndwParams)
@@ -118,13 +135,17 @@ func main() {
 }
 
 type GlobalConfig struct {
-	NoExportingTraffic bool `env:"NO_EXPORTING_TRAFFIC"`
+	NoExportingTraffic bool   `env:"NO_EXPORTING_TRAFFIC"`
+	DummyWatchedPodIP  string `env:"DUMMY_WATCHED_POD_IP"`
+	DummyWatchedHostIP string `env:"DUMMY_WATCHED_HOST_IP"`
 }
 
 func NewGlobalConfig() *GlobalConfig {
 	return &GlobalConfig{
 		//TODO: support v6 dns service
 		NoExportingTraffic: false,
+		DummyWatchedPodIP:  "",
+		DummyWatchedHostIP: "",
 	}
 }
 
