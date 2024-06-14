@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/api/proto"
@@ -79,7 +80,7 @@ func (s *ExportTrafficService) Start(ctx context.Context) error {
 				return
 			default:
 				pWg.Go(func() error {
-					s.sendRawPodTrafficItem(ctx)
+					s.assignRawPodTrafficItems(ctx)
 					return nil
 				})
 			}
@@ -92,81 +93,13 @@ func (s *ExportTrafficService) Start(ctx context.Context) error {
 				return
 			default:
 				hWg.Go(func() error {
-					s.sendRawHostTrafficItem(ctx)
+					s.assignRawHostTrafficItems(ctx)
 					return nil
 				})
 			}
 		}
 	}()
 	return nil
-}
-
-func (s *ExportTrafficService) sendRawPodTrafficItem(ctx context.Context) {
-	client := proto.NewTrafficExportServiceClient(s.conn)
-	stream, err := client.ExportPodTraffic(ctx)
-	if err != nil {
-		s.logger.Errorf("failed to open a stream to send a raw traffic item: %v", err)
-		return
-	}
-	for {
-		select {
-		case item := <-s.rawPodTrafficItems:
-			err := stream.Send(item)
-			if err != nil {
-				s.logger.Errorf("failed to send a raw traffic item: %v", err)
-				return
-			}
-		case <-ctx.Done():
-			_, err := stream.CloseAndRecv()
-			if err != nil {
-				s.logger.Errorf("failed to close the stream: %v", err)
-				return
-			}
-			return
-		}
-	}
-}
-
-func (s *ExportTrafficService) sendRawHostTrafficItem(ctx context.Context) {
-	client := proto.NewTrafficExportServiceClient(s.conn)
-	stream, err := client.ExportHostTraffic(ctx)
-	if err != nil {
-		s.logger.Errorf("failed to open a stream to send a raw traffic item: %v", err)
-		return
-	}
-	for {
-		select {
-		case item := <-s.rawHostTrafficItems:
-			err := stream.Send(item)
-			if err != nil {
-				s.logger.Errorf("failed to send a raw traffic item: %v", err)
-				return
-			}
-		case <-ctx.Done():
-			_, err := stream.CloseAndRecv()
-			if err != nil {
-				s.logger.Errorf("failed to close the stream: %v", err)
-				return
-			}
-			return
-		}
-	}
-}
-
-func convert(e structs.RawTrafficEvent) *proto.RawTraffic {
-	return &proto.RawTraffic{
-		Meta: &proto.RawTrafficMetaData{
-			SrcIp:    e.RawTrafficEventMeta.SrcIP,
-			DstIp:    e.RawTrafficEventMeta.DstIP,
-			SrcPort:  e.RawTrafficEventMeta.SrcPort,
-			DstPort:  e.RawTrafficEventMeta.DstPort,
-			Protocol: e.RawTrafficEventMeta.Protocol,
-			Family:   e.RawTrafficEventMeta.Family,
-		},
-		Metric: &proto.RawTrafficMetric{
-			DataBytes: e.DataBytes,
-		},
-	}
 }
 
 func (s *ExportTrafficService) SubmitRawPodTrafficEvent(ctx context.Context, e structs.RawTrafficEvent) error {
@@ -192,5 +125,139 @@ func (s *ExportTrafficService) SubmitRawHostTrafficEvent(ctx context.Context, e 
 func (s *ExportTrafficService) Close() {
 	if s.conn != nil {
 		s.conn.Close()
+	}
+}
+
+func (s *ExportTrafficService) assignRawPodTrafficItems(ctx context.Context) {
+	recvCtx, cancel := context.WithTimeout(ctx, time.Second*1)
+	defer cancel()
+	var items []*proto.RawTraffic
+	var itemCount int = 0
+collecting_loop:
+	for {
+		select {
+		case item := <-s.rawPodTrafficItems:
+			items = append(items, item)
+			itemCount++
+			if itemCount == 100 {
+				//TODO: make this configurable
+				break collecting_loop
+			}
+		case <-recvCtx.Done():
+			//s.logger.Debugf("no more traffic items ready to be sent. prepare to send what we already have")
+			break collecting_loop
+		case <-ctx.Done():
+			s.logger.Infof("assigning cancelled since the context is cancelled")
+			return
+		}
+	}
+	if len(items) <= 0 {
+		return
+	}
+	//	s.logger.Debugf("try to send %v traffic items", len(items))
+	if err := s.sendRawPodTrafficItem(items); err != nil {
+		s.logger.Errorf("failed to send some traffic items: %v", err)
+		return
+	}
+	//	s.logger.Debugf("%v traffic items successfully sent", len(items))
+	return
+}
+
+func (s *ExportTrafficService) sendRawPodTrafficItem(items []*proto.RawTraffic) error {
+	client := proto.NewTrafficExportServiceClient(s.conn)
+	stream, err := client.ExportPodTraffic(context.TODO())
+	if err != nil {
+		s.logger.Errorf("failed to open a stream to send a raw traffic item: %v", err)
+		return err
+	}
+	for _, item := range items {
+		err := stream.Send(item)
+		if err == io.EOF {
+			s.logger.Infof("EOF returned while sending. abort the remaining items")
+			break
+		} else if err != nil {
+			s.logger.Errorf("failed to sent raw traffic item %+v: %v", item, err)
+			continue
+		}
+	}
+	_, err = stream.CloseAndRecv()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *ExportTrafficService) assignRawHostTrafficItems(ctx context.Context) {
+	recvCtx, cancel := context.WithTimeout(ctx, time.Second*1)
+	defer cancel()
+	var items []*proto.RawTraffic
+	var itemCount int = 0
+collecting_loop:
+	for {
+		select {
+		case item := <-s.rawHostTrafficItems:
+			items = append(items, item)
+			itemCount++
+			if itemCount == 100 {
+				//TODO: make this configurable
+				break collecting_loop
+			}
+		case <-recvCtx.Done():
+			// s.logger.Debugf("no more traffic items ready to be sent. prepare to send what we already have")
+			break collecting_loop
+		case <-ctx.Done():
+			s.logger.Infof("assigning cancelled since the context is cancelled")
+			return
+		}
+	}
+	if len(items) <= 0 {
+		return
+	}
+	// s.logger.Debugf("try to send %v traffic items", len(items))
+	if err := s.sendRawHostTrafficItem(items); err != nil {
+		s.logger.Errorf("failed to send some traffic items: %v", err)
+		return
+	}
+	// s.logger.Debugf("%v traffic items successfully sent", len(items))
+	return
+}
+
+func (s *ExportTrafficService) sendRawHostTrafficItem(items []*proto.RawTraffic) error {
+	client := proto.NewTrafficExportServiceClient(s.conn)
+	stream, err := client.ExportHostTraffic(context.TODO())
+	if err != nil {
+		s.logger.Errorf("failed to open a stream to send a raw traffic item: %v", err)
+		return err
+	}
+	for _, item := range items {
+		err := stream.Send(item)
+		if err == io.EOF {
+			// s.logger.Infof("EOF returned while sending. abort the remaining items")
+			break
+		} else if err != nil {
+			s.logger.Errorf("failed to sent raw traffic item %+v: %v", item, err)
+			continue
+		}
+	}
+	_, err = stream.CloseAndRecv()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func convert(e structs.RawTrafficEvent) *proto.RawTraffic {
+	return &proto.RawTraffic{
+		Meta: &proto.RawTrafficMetaData{
+			SrcIp:    e.RawTrafficEventMeta.SrcIP,
+			DstIp:    e.RawTrafficEventMeta.DstIP,
+			SrcPort:  e.RawTrafficEventMeta.SrcPort,
+			DstPort:  e.RawTrafficEventMeta.DstPort,
+			Protocol: e.RawTrafficEventMeta.Protocol,
+			Family:   e.RawTrafficEventMeta.Family,
+		},
+		Metric: &proto.RawTrafficMetric{
+			DataBytes: e.DataBytes,
+		},
 	}
 }
