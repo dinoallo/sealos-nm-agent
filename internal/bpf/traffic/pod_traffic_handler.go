@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"time"
 
 	"github.com/cilium/ebpf/perf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
@@ -100,7 +101,9 @@ func (h *PodTrafficEventHandler) submit(ctx context.Context, _event pod_trafficE
 	// 	return nil
 	// }
 	event := _event.convertToRawTrafficEvent()
-	if err := h.SubmitRawPodTrafficEvent(ctx, event); err != nil {
+	submitCtx, cancel := context.WithTimeout(ctx, time.Second*1) // TODO: make this configurable
+	defer cancel()
+	if err := h.SubmitRawPodTrafficEvent(submitCtx, event); err != nil {
 		return err
 	}
 	return nil
