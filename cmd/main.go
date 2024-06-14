@@ -42,12 +42,6 @@ func main() {
 		return
 	}
 	logger.Infof("print global config: %+v", globalConfig)
-	etsConfig := service.NewExportTrafficServiceConfig()
-	etsConfig.TrafficExporterAddr = defaultTrafficExportAddr
-	etsParams := service.ExportTrafficServiceParams{
-		ParentLogger:               logger,
-		ExportTrafficServiceConfig: etsConfig,
-	}
 	var exportTrafficService modules.ExportTrafficService
 	if globalConfig.NoExportingTraffic {
 		ets, err := mock.NewDummyExportTrafficService(logger, globalConfig.DummyWatchedPodIP, globalConfig.DummyWatchedHostIP)
@@ -58,6 +52,13 @@ func main() {
 		exportTrafficService = ets
 
 	} else {
+		etsConfig := service.NewExportTrafficServiceConfig()
+		etsConfig.TrafficExporterAddr = defaultTrafficExportAddr
+		etsConfig.MaxWorkerCount = globalConfig.ExportTrafficServiceWorkerCount
+		etsParams := service.ExportTrafficServiceParams{
+			ParentLogger:               logger,
+			ExportTrafficServiceConfig: etsConfig,
+		}
 		ets, err := service.NewExportTrafficService(etsParams)
 		if err != nil {
 			logger.Errorf("failed to create the export traffic service: %v", err)
@@ -81,6 +82,7 @@ func main() {
 		return
 	}
 	ptemConfig := traffic.NewPodTrafficEventManagerConfig()
+	ptemConfig.PodTrafficEventHandlerConfig.WorkerCount = globalConfig.TrafficEventHandlerWorkerCount
 	ptemParams := traffic.PodTrafficEventManagerParams{
 		ParentLogger:         logger,
 		Config:               ptemConfig,
@@ -97,6 +99,7 @@ func main() {
 	}
 	defer podTrafficEventManager.Close()
 	htemConfig := traffic.NewHostTrafficEventManagerConfig()
+	htemConfig.HostTrafficEventHandlerConfig.WorkerCount = globalConfig.TrafficEventHandlerWorkerCount
 	htemParams := traffic.HostTrafficEventManagerParams{
 		ParentLogger:         logger,
 		Config:               htemConfig,
@@ -135,17 +138,21 @@ func main() {
 }
 
 type GlobalConfig struct {
-	NoExportingTraffic bool   `env:"NO_EXPORTING_TRAFFIC"`
-	DummyWatchedPodIP  string `env:"DUMMY_WATCHED_POD_IP"`
-	DummyWatchedHostIP string `env:"DUMMY_WATCHED_HOST_IP"`
+	NoExportingTraffic              bool   `env:"NO_EXPORTING_TRAFFIC"`
+	DummyWatchedPodIP               string `env:"DUMMY_WATCHED_POD_IP"`
+	DummyWatchedHostIP              string `env:"DUMMY_WATCHED_HOST_IP"`
+	TrafficEventHandlerWorkerCount  int    `env:"TRAFFIC_EVENT_HANDLER_WORKER_COUNT"`
+	ExportTrafficServiceWorkerCount int    `env:"EXPORT_TRAFFIC_SERVICE_WORKER_COUNT"`
 }
 
 func NewGlobalConfig() *GlobalConfig {
 	return &GlobalConfig{
 		//TODO: support v6 dns service
-		NoExportingTraffic: false,
-		DummyWatchedPodIP:  "",
-		DummyWatchedHostIP: "",
+		NoExportingTraffic:              false,
+		DummyWatchedPodIP:               "",
+		DummyWatchedHostIP:              "",
+		TrafficEventHandlerWorkerCount:  5,
+		ExportTrafficServiceWorkerCount: 5,
 	}
 }
 
