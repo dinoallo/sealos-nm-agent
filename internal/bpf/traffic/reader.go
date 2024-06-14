@@ -85,6 +85,7 @@ func (r *TrafficEventReader) read(ctx context.Context) error {
 	//TODO: keep track of this
 	if record.LostSamples != 0 {
 		r.logger.Infof("the perf event ring buffer is full, so %d samples were dropped", record.LostSamples)
+		return nil
 	}
 	select {
 	case <-ctx.Done():
