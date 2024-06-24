@@ -3,7 +3,6 @@ package traffic
 import (
 	"context"
 	"errors"
-
 	"time"
 
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
@@ -13,28 +12,28 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	defaultSendTimeout = time.Second * 1
+)
+
 type TrafficEventReaderConfig struct {
-	WorkerCount         int
+	MaxWorker           int
 	PerfEventBufferSize int
 }
 
-func NewTrafficEventReaderConfig() TrafficEventReaderConfig {
-	return TrafficEventReaderConfig{
-		WorkerCount:         1,
-		PerfEventBufferSize: (32 << 10), // 32KB
-	}
-}
-
 type TrafficEventReaderParams struct {
-	ParentLogger log.Logger
-	PerfEvents   *ebpf.Map
-	Events       chan *perf.Record
+	ParentLogger         log.Logger
+	HostEgressPerfEvents *ebpf.Map
+	PodIngressPerfEvents *ebpf.Map
+	HostEgressEvents     chan *perf.Record
+	PodIngressEvents     chan *perf.Record
 	TrafficEventReaderConfig
 }
 
 type TrafficEventReader struct {
-	logger          log.Logger
-	perfEventReader *perf.Reader //TODO: implement ringbuf reader
+	log.Logger
+	hostEgressPerfEventReader *perf.Reader
+	podIngressPerfEventReader *perf.Reader //TODO: implement ringbuf reader
 	TrafficEventReaderParams
 }
 
@@ -43,20 +42,76 @@ func NewTrafficEventReader(params TrafficEventReaderParams) (*TrafficEventReader
 	if err != nil {
 		return nil, err
 	}
-	perfEventReader, err := perf.NewReader(params.PerfEvents, params.PerfEventBufferSize)
+	hostEgressPerfEventReader, err := perf.NewReader(params.HostEgressPerfEvents, params.PerfEventBufferSize)
+	if err != nil {
+		return nil, err
+	}
+	podIngressPerfEventReader, err := perf.NewReader(params.PodIngressPerfEvents, params.PerfEventBufferSize)
 	if err != nil {
 		return nil, err
 	}
 	return &TrafficEventReader{
-		logger:                   logger,
-		perfEventReader:          perfEventReader,
-		TrafficEventReaderParams: params,
+		Logger:                    logger,
+		hostEgressPerfEventReader: hostEgressPerfEventReader,
+		podIngressPerfEventReader: podIngressPerfEventReader,
+		TrafficEventReaderParams:  params,
 	}, nil
 }
 
-func (r *TrafficEventReader) Start(ctx context.Context) error {
+func (r *TrafficEventReader) Start(ctx context.Context) {
+	doReading(ctx, r.MaxWorker, r.readHostEgress, r.Logger)
+	doReading(ctx, r.MaxWorker, r.readPodIngress, r.Logger)
+}
+
+func (r *TrafficEventReader) readHostEgress(ctx context.Context) error {
+	record, err := r.hostEgressPerfEventReader.Read()
+	if errors.Is(err, perf.ErrClosed) {
+		r.Infof("the reader is closed for host egress perf events")
+		return nil
+	} else if err != nil {
+		return err
+	}
+	//TODO: keep track of this
+	if record.LostSamples != 0 {
+		r.Infof("the perf event buffer for host egress is full, so %v samples were dropped", record.LostSamples)
+		return nil
+	}
+	sendCtx, cancel := context.WithTimeout(ctx, defaultSendTimeout)
+	defer cancel()
+	select {
+	case <-sendCtx.Done():
+		return nil
+	case r.HostEgressEvents <- &record:
+		return nil
+	}
+}
+
+func (r *TrafficEventReader) readPodIngress(ctx context.Context) error {
+	record, err := r.podIngressPerfEventReader.Read()
+	if errors.Is(err, perf.ErrClosed) {
+		r.Infof("the reader is closed for pod ingress perf events")
+		return nil
+	} else if err != nil {
+		return err
+	}
+	//TODO: keep track of this
+	if record.LostSamples != 0 {
+		r.Infof("the perf event buffer for pod ingress is full, so %v samples were dropped", record.LostSamples)
+		return nil
+	}
+	sendCtx, cancel := context.WithTimeout(ctx, defaultSendTimeout)
+	defer cancel()
+	select {
+	case <-sendCtx.Done():
+		return nil
+	case r.PodIngressEvents <- &record:
+		return nil
+	}
+}
+
+func doReading(ctx context.Context, workerCount int, readFunc func(context.Context) error, logger log.Logger) {
 	wg := errgroup.Group{}
-	wg.SetLimit(r.WorkerCount)
+	wg.SetLimit(workerCount)
 	go func() {
 		for {
 			select {
@@ -64,33 +119,13 @@ func (r *TrafficEventReader) Start(ctx context.Context) error {
 				return
 			default:
 				wg.Go(func() error {
-					_ctx, cancel := context.WithTimeout(ctx, time.Second*1) //TODO: make this configurable
-					defer cancel()
-					return r.read(_ctx)
+					if err := readFunc(ctx); err != nil {
+						logger.Error("failed to read: %v", err)
+						return err
+					}
+					return nil
 				})
 			}
 		}
 	}()
-	return nil
-}
-
-func (r *TrafficEventReader) read(ctx context.Context) error {
-	record, err := r.perfEventReader.Read()
-	if errors.Is(err, perf.ErrClosed) {
-		r.logger.Info("the perf event channel is closed")
-		return nil
-	} else if err != nil {
-		return err
-	}
-	//TODO: keep track of this
-	if record.LostSamples != 0 {
-		r.logger.Infof("the perf event ring buffer is full, so %d samples were dropped", record.LostSamples)
-		return nil
-	}
-	select {
-	case <-ctx.Done():
-		return nil
-	case r.Events <- &record:
-		return nil
-	}
 }

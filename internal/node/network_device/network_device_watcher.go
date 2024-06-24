@@ -2,34 +2,22 @@ package network_device
 
 import (
 	"context"
-	"net"
-	"strings"
-	"sync"
+	"regexp"
 	"time"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
-	errutil "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/errors/util"
+	"github.com/puzpuzpuz/xsync"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
 	netlib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/net"
 )
 
 var (
-	//TODO: check me
-	excludedDevicePrefixes = map[string]struct{}{
-		"cilium_":    {},
-		"lo":         {},
-		"docker":     {},
-		"veth":       {},
-		"lxc_health": {},
-		"tailscale":  {},
-		"kube":       {},
-	}
 	//TODO: make these configurable
-	podDevicePrefixes = map[string]struct{}{
-		"lxc": {},
+	podDeviceRegexes = map[string]struct{}{
+		"^lxc[a-z0-9]": {},
 	}
-	hostDevicePrefixes = map[string]struct{}{
-		"e": {},
+	hostDeviceRegexes = map[string]struct{}{
+		"^(eth|ens|enp|eno)": {},
 	}
 )
 
@@ -46,132 +34,175 @@ func NewNetworkDeviceWatcherConfig() NetworkDeviceWatcherConfig {
 type NetworkDeviceWatcherParams struct {
 	ParentLogger log.Logger
 	NetworkDeviceWatcherConfig
-	modules.BPFHostTrafficModule
-	modules.BPFPodTrafficModule
+	modules.BPFTrafficFactory
 	netlib.NetLib
 }
 
+type actionKind int
+type ifaceKind int
+
+const (
+	actionSubscribe actionKind = iota
+	actionUnsubscribe
+
+	ifaceTypePod ifaceKind = iota
+	ifaceTypeHost
+)
+
+type DevMsg struct {
+	ifaceName string
+	ifaceType ifaceKind
+	action    actionKind
+}
+
 type NetworkDeviceWatcher struct {
-	logger  log.Logger
-	devices *sync.Map
+	log.Logger
+	deviceToSync  chan DevMsg
+	deviceWatched *xsync.MapOf[string, ifaceKind]
 	NetworkDeviceWatcherParams
 }
 
 func NewNetworkDeviceWatcher(params NetworkDeviceWatcherParams) (*NetworkDeviceWatcher, error) {
-	logger, err := params.ParentLogger.WithCompName("pod_network_device_watcher")
+	logger, err := params.ParentLogger.WithCompName("network_device_watcher")
 	if err != nil {
 		return nil, err
 	}
 	return &NetworkDeviceWatcher{
-		logger:                     logger,
-		devices:                    &sync.Map{},
+		Logger:                     logger,
 		NetworkDeviceWatcherParams: params,
+		deviceToSync:               make(chan DevMsg),
+		deviceWatched:              xsync.NewMapOf[ifaceKind](),
 	}, nil
 }
 
 func (w *NetworkDeviceWatcher) Start(ctx context.Context) error {
 	go func() {
 		for {
-			select {
-			case <-ctx.Done():
+			if err := w.watch(ctx); err != nil {
+				w.Error(err)
 				return
-			default:
-				if err := w.updateDevices(ctx); err != nil {
-					w.logger.Error(errutil.Err(ErrUpdateDevices, err))
-					return
-				}
-
-				time.Sleep(w.SyncPeriod)
+			}
+			time.Sleep(w.SyncPeriod)
+		}
+	}()
+	go func() {
+		for {
+			if err := w.sync(ctx); err != nil {
+				w.Error(err)
 			}
 		}
 	}()
 	return nil
 }
 
-func (w *NetworkDeviceWatcher) updateDevices(ctx context.Context) error {
+func (w *NetworkDeviceWatcher) sync(ctx context.Context) error {
+	var msg DevMsg
+	select {
+	case <-ctx.Done():
+	case msg = <-w.deviceToSync:
+	}
+	var err error
+	ifaceName := msg.ifaceName
+	if msg.action == actionSubscribe && msg.ifaceType == ifaceTypePod {
+		err = w.SubscribeToPodDevice(ifaceName)
+	} else if msg.action == actionSubscribe && msg.ifaceType == ifaceTypeHost {
+		err = w.SubscribeToHostDevice(ifaceName)
+	} else if msg.action == actionUnsubscribe && msg.ifaceType == ifaceTypePod {
+		err = w.UnsubscribeFromPodDevice(ifaceName)
+	} else if msg.action == actionUnsubscribe && msg.ifaceType == ifaceTypeHost {
+		err = w.UnsubscribeFromHostDevice(ifaceName)
+	}
+	if err != nil && err != modules.ErrDeviceNotFound {
+		select {
+		case <-ctx.Done():
+		case w.deviceToSync <- msg:
+		}
+	}
+	return err
+}
+
+func (w *NetworkDeviceWatcher) watch(ctx context.Context) error {
 	ifaces, err := w.Interfaces()
 	if err != nil {
 		return err
 	}
-	newIfaces := make(map[int]*net.Interface)
-	for i := 0; i < len(ifaces); i++ {
-		index := ifaces[i].Index
-		newIfaces[index] = &ifaces[i]
-	}
-	// delete stale ifaces
-	deleteIface := func(k, v any) bool {
-		id, ok := k.(int)
-		if !ok {
-			w.logger.Error(ErrConvertKeyToIfaceIDFailed)
-			return true
+	newIfaces := make(map[string]ifaceKind)
+	for _, iface := range ifaces {
+		if w.isPodDevice(iface.Name) {
+			newIfaces[iface.Name] = ifaceTypePod
+		} else if w.isHostDevice(iface.Name) {
+			newIfaces[iface.Name] = ifaceTypeHost
 		}
-		if _, ok := newIfaces[id]; !ok {
-			w.devices.Delete(id)
+	}
+	deleteStaleIface := func(ifaceName string, ifaceType ifaceKind) bool {
+		if _, ok := newIfaces[ifaceName]; !ok {
+			UnsubMsg := DevMsg{
+				ifaceName: ifaceName,
+				ifaceType: ifaceType,
+				action:    actionUnsubscribe,
+			}
+			select {
+			case <-ctx.Done():
+			case w.deviceToSync <- UnsubMsg:
+				w.deviceWatched.Delete(ifaceName)
+			}
 		}
 		return true
 	}
-	w.devices.Range(deleteIface)
-	// add new ifaces
-	for index, iface := range newIfaces {
-		w.devices.LoadOrStore(index, iface)
-		if !isViableDevices(iface.Name) {
+	w.deviceWatched.Range(deleteStaleIface)
+
+	for ifaceName, ifaceType := range newIfaces {
+		if _, loaded := w.deviceWatched.Load(ifaceName); loaded {
 			continue
 		}
-		if isPodDevice(iface.Name) {
-			if err := w.BPFPodTrafficModule.SubscribeToDevice(iface.Name); err != nil {
-				w.logger.Error(err)
-				continue
-			}
+		msg := DevMsg{
+			ifaceName: ifaceName,
+			ifaceType: ifaceType,
+			action:    actionSubscribe,
 		}
-		if isHostDevice(iface.Name) {
-			if err := w.BPFHostTrafficModule.SubscribeToDevice(iface.Name); err != nil {
-				w.logger.Error(err)
-				continue
-			}
+		select {
+		case <-ctx.Done():
+		case w.deviceToSync <- msg:
+			w.deviceWatched.Store(ifaceName, ifaceType)
 		}
 	}
 	return nil
 }
 
-// this function is only used for testing
-func (w *NetworkDeviceWatcher) dumpDeviceIndexes() []int {
-	var indexes []int
-	dumpDevice := func(key, value any) bool {
-		dev, ok := value.(*net.Interface)
-		if !ok {
+func (w *NetworkDeviceWatcher) isPodDevice(iface string) bool {
+	for regex := range podDeviceRegexes {
+		matched, err := regexp.MatchString(regex, iface)
+		if err != nil {
+			w.Errorf("failed to check if %v is a pod device with regex %v ignore this check: %v", iface, regex, err)
+			continue
+		}
+		if matched {
 			return true
 		}
-		indexes = append(indexes, dev.Index)
+	}
+	return false
+}
+
+func (w *NetworkDeviceWatcher) isHostDevice(iface string) bool {
+	for regex := range hostDeviceRegexes {
+		matched, err := regexp.MatchString(regex, iface)
+		if err != nil {
+			w.Errorf("failed to check if %v is a host device with regex %v ignore this check: %v", iface, regex, err)
+			continue
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *NetworkDeviceWatcher) dumpDevices() []string {
+	var devices []string
+	dump := func(ifaceName string, ifaceType ifaceKind) bool {
+		devices = append(devices, ifaceName)
 		return true
 	}
-	w.devices.Range(dumpDevice)
-	return indexes
-}
-
-func isViableDevices(iface string) bool {
-	for prefix := range excludedDevicePrefixes {
-		if strings.HasPrefix(iface, prefix) {
-			return false
-		}
-	}
-	//TODO: ignore devices that masked by excludedFlags
-	return true
-}
-
-func isPodDevice(iface string) bool {
-	for prefix := range podDevicePrefixes {
-		if strings.HasPrefix(iface, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-func isHostDevice(iface string) bool {
-	for prefix := range hostDevicePrefixes {
-		if strings.HasPrefix(iface, prefix) {
-			return true
-		}
-	}
-	return false
+	w.deviceWatched.Range(dump)
+	return devices
 }

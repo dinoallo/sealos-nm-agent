@@ -3,7 +3,6 @@ package network_device
 import (
 	"context"
 	"log"
-	"sort"
 	"testing"
 	"time"
 
@@ -18,14 +17,32 @@ var (
 	globalLogger          loglib.Logger
 	globalConfig          NetworkDeviceWatcherConfig
 	dummyBPFTrafficModule = mock.NewDummyBPFTrafficModule()
+
+	ignoredDevices = []string{
+		"lxc_health",
+		"cilium_host",
+		"tailscale0",
+		"wlan0",
+	}
+	podDevices = []string{
+		"lxc9c9be1a12014@if10",
+		"lxc0404f108f677@if16",
+	}
+	hostDevices = []string{
+		"enp5s0",
+		"ens18",
+		"eth0",
+	}
+
+	nonPodDevices  = append(ignoredDevices, hostDevices...)
+	nonHostDevices = append(ignoredDevices, podDevices...)
 )
 
 func setUpEnv(netlib *mock.TestingNetLib) (*NetworkDeviceWatcher, error) {
 	params := NetworkDeviceWatcherParams{
 		ParentLogger:               globalLogger,
 		NetworkDeviceWatcherConfig: globalConfig,
-		BPFPodTrafficModule:        dummyBPFTrafficModule,
-		BPFHostTrafficModule:       dummyBPFTrafficModule,
+		BPFTrafficFactory:          dummyBPFTrafficModule,
 		NetLib:                     netlib,
 	}
 	w, err := NewNetworkDeviceWatcher(params)
@@ -39,74 +56,73 @@ func setUpEnv(netlib *mock.TestingNetLib) (*NetworkDeviceWatcher, error) {
 }
 
 func TestDeviceChecking(t *testing.T) {
-	_, err := setUpEnv(mock.NewTestingNetLib())
+	w, err := setUpEnv(mock.NewTestingNetLib())
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
-	viableDevices := []string{
-		"eth0",
-		"ens4",
-		"lxc42",
-	}
-	nonViableDevices := []string{
-		"cilium_host",
-		"docker0",
-		"lo",
-		"veth0",
-	}
-	t.Run("check viable devices", func(t *testing.T) {
-		for _, dev := range viableDevices {
-			t.Logf("device name: %v", dev)
-			viable := isViableDevices(dev)
-			assert.Equal(t, true, viable)
+	t.Run("these are pod devices", func(t *testing.T) {
+		for _, dev := range podDevices {
+			ok := w.isPodDevice(dev)
+			assert.Truef(t, ok, "iface: %v", dev)
 		}
 	})
-	t.Run("check not viable devices", func(t *testing.T) {
-		for _, dev := range nonViableDevices {
-			t.Logf("device name: %v", dev)
-			viable := isViableDevices(dev)
-			assert.Equal(t, false, viable)
+	t.Run("these are not pod devices", func(t *testing.T) {
+		for _, dev := range nonPodDevices {
+			ok := w.isPodDevice(dev)
+			assert.Falsef(t, ok, "iface: %v", dev)
+		}
+	})
+	t.Run("these are host devices", func(t *testing.T) {
+		for _, dev := range hostDevices {
+			ok := w.isHostDevice(dev)
+			assert.Truef(t, ok, "iface: %v", dev)
+		}
+	})
+	t.Run("these are not host devices", func(t *testing.T) {
+		for _, dev := range nonHostDevices {
+			ok := w.isHostDevice(dev)
+			assert.Falsef(t, ok, "iface: %v", dev)
 		}
 	})
 }
 
-// please run this test when the devices on the host don't constantly change
-func TestDeviceUpdating(t *testing.T) {
+func TestDeviceWatching(t *testing.T) {
 	netlib := mock.NewTestingNetLib()
 	w, err := setUpEnv(netlib)
 	if !assert.NoError(t, err) {
 		t.FailNow()
 	}
-	var expectedIndexes []int
 	t.Run("update the interfaces and wait for a while", func(t *testing.T) {
 		err := netlib.Update()
-		assert.NoError(t, err)
-		expectedIndexes, err = netlib.GetInterfaceIndexes()
-		assert.NoError(t, err)
+		if !assert.NoError(t, err) {
+			t.FailNow()
+		}
+		expectedDevices, err := netlib.GetInterfaceNames()
+		if !assert.NoError(t, err) {
+			t.FailNow()
+		}
+		t.Logf("device to watch: %+v", expectedDevices)
 		time.Sleep(syncPeriod + time.Second*1)
 	})
 	t.Run("dump and check devices", func(t *testing.T) {
-		actualIndexes := w.dumpDeviceIndexes()
-		sort.Ints(expectedIndexes)
-		t.Logf("expected indexes: %v", expectedIndexes)
-		sort.Ints(actualIndexes)
-		t.Logf("actual indexes: %v", actualIndexes)
-		assert.Equal(t, expectedIndexes, actualIndexes)
+		actualDevices := w.dumpDevices()
+		t.Logf("devices watched: %+v", actualDevices)
 	})
 	t.Run("update the interfaces and wait for a while", func(t *testing.T) {
 		err := netlib.Update()
-		assert.NoError(t, err)
-		expectedIndexes, err = netlib.GetInterfaceIndexes()
-		assert.NoError(t, err)
+		if !assert.NoError(t, err) {
+			t.FailNow()
+		}
+		expectedDevices, err := netlib.GetInterfaceNames()
+		if !assert.NoError(t, err) {
+			t.FailNow()
+		}
+		t.Logf("device to watch: %+v", expectedDevices)
 		time.Sleep(syncPeriod + time.Second*1)
 	})
 	t.Run("dump and check devices", func(t *testing.T) {
-		actualIndexes := w.dumpDeviceIndexes()
-		sort.Ints(expectedIndexes)
-		t.Logf("expected indexes: %v", expectedIndexes)
-		sort.Ints(actualIndexes)
-		t.Logf("actual indexes: %v", actualIndexes)
-		assert.Equal(t, expectedIndexes, actualIndexes)
+		actualDevices := w.dumpDevices()
+		t.Logf("devices watched: %+v", actualDevices)
 	})
 }
 

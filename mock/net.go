@@ -4,24 +4,29 @@ import (
 	"math/rand"
 	"net"
 	"sync"
+	"time"
+)
+
+const (
+	suffixCharset = "abcdefghijklmnopqrstuvwxyz" + "0123456789"
 )
 
 var (
 	deviceSet = []string{
 		"eth42",
-		"eth24",
 		"ens42",
-		"ens24",
+		"enp5s0",
+		"wlan0",
 		"lxc42",
-		"lxc24",
+		"lxc_health",
 		"dummy42",
-		"dummy24",
 		"veth42",
-		"veth24",
 		"docker0",
 		"cilium_host",
 		"lo",
 	}
+
+	seededRand *rand.Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
 
 type TestingNetLib struct {
@@ -73,10 +78,36 @@ func (m *TestingNetLib) GetInterfaceIndexes() ([]int, error) {
 	}
 	return indexes, nil
 }
+
+func (m *TestingNetLib) GetInterfaceNames() ([]string, error) {
+	var names []string
+	ifaces, err := m.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	for _, iface := range ifaces {
+		names = append(names, iface.Name)
+	}
+	return names, nil
+}
+
 func (m *TestingNetLib) Update() error {
 	interfaces := randInterfaces()
 	m.interfaceMu.Lock()
 	defer m.interfaceMu.Unlock()
 	m.interfaces = interfaces
 	return nil
+}
+
+func generateRandomIface(prefix string) string {
+	suffix := generateRandomSuffix(8)
+	return prefix + suffix
+}
+
+func generateRandomSuffix(length int) string {
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = suffixCharset[seededRand.Intn(len(suffixCharset))]
+	}
+	return string(b)
 }

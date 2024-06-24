@@ -72,58 +72,35 @@ func main() {
 		exportTrafficService = ets
 	}
 
-	// initialize and start the bpf traffic event manager
-	// drtsParams := mock.DummyRawTrafficStoreParams{
-	// 	Logger: logger,
-	// }
-	// rawTrafficStore := mock.NewDummyRawTrafficStore(drtsParams)
 	if err := rlimit.RemoveMemlock(); err != nil {
 		logger.Error(err)
 		return
 	}
-	ptemConfig := traffic.NewPodTrafficEventManagerConfig()
-	ptemConfig.PodTrafficEventHandlerConfig.WorkerCount = globalConfig.TrafficEventHandlerWorkerCount
-	ptemParams := traffic.PodTrafficEventManagerParams{
-		ParentLogger:         logger,
-		Config:               ptemConfig,
-		ExportTrafficService: exportTrafficService,
+	tfConfig := modules.BPFTrafficFactoryConfig{
+		ReaderMaxWorker:  5,
+		HandlerMaxWorker: 5,
 	}
-	podTrafficEventManager, err := traffic.NewPodTrafficEventManager(ptemParams)
+	params := traffic.TrafficFactoryParams{
+		ParentLogger:            logger,
+		BPFTrafficFactoryConfig: tfConfig,
+		ExportTrafficService:    exportTrafficService,
+	}
+	trafficFactory, err := traffic.NewTrafficFactory(params)
 	if err != nil {
 		logger.Error(err)
 		return
 	}
-	if err := podTrafficEventManager.Start(mainCtx); err != nil {
-		logger.Error(err)
-		return
-	}
-	defer podTrafficEventManager.Close()
-	htemConfig := traffic.NewHostTrafficEventManagerConfig()
-	htemConfig.HostTrafficEventHandlerConfig.WorkerCount = globalConfig.TrafficEventHandlerWorkerCount
-	htemParams := traffic.HostTrafficEventManagerParams{
-		ParentLogger:         logger,
-		Config:               htemConfig,
-		ExportTrafficService: exportTrafficService,
-	}
-	hostTrafficEventManager, err := traffic.NewHostTrafficEventManager(htemParams)
-	if err != nil {
-		logger.Error(err)
-		return
-	}
-	if err := hostTrafficEventManager.Start(mainCtx); err != nil {
-		logger.Error(err)
-		return
-	}
-	defer hostTrafficEventManager.Close()
+	trafficFactory.Start(context.TODO())
+	defer trafficFactory.Close()
+
 	// initialize and start the network device watcher
 	ndwConfig := network_device.NewNetworkDeviceWatcherConfig()
-	officialNetLib := netlib.NewGoNetLib()
+	nmNetLib := netlib.NewNMNetLib()
 	ndwParams := network_device.NetworkDeviceWatcherParams{
 		ParentLogger:               logger,
 		NetworkDeviceWatcherConfig: ndwConfig,
-		BPFHostTrafficModule:       hostTrafficEventManager,
-		BPFPodTrafficModule:        podTrafficEventManager,
-		NetLib:                     officialNetLib,
+		BPFTrafficFactory:          trafficFactory,
+		NetLib:                     nmNetLib,
 	}
 	deviceWatcher, err := network_device.NewNetworkDeviceWatcher(ndwParams)
 	if err != nil {
