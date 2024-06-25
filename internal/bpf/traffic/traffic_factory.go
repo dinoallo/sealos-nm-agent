@@ -2,6 +2,7 @@ package traffic
 
 import (
 	"context"
+	"errors"
 
 	"github.com/cilium/ebpf/perf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
@@ -36,15 +37,15 @@ type TrafficFactory struct {
 func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 	logger, err := params.ParentLogger.WithCompName("traffic_factory")
 	if err != nil {
-		return nil, modules.ErrCreatingLogger
+		return nil, errors.Join(err, modules.ErrCreatingLogger)
 	}
 	podTrafficObjs := pod_trafficObjects{}
 	if err := loadPod_trafficObjects(&podTrafficObjs, nil); err != nil {
-		return nil, modules.ErrLoadingPodTrafficObjs
+		return nil, errors.Join(err, modules.ErrLoadingPodTrafficObjs)
 	}
 	hostTrafficObjs := host_trafficObjects{}
 	if err := loadHost_trafficObjects(&hostTrafficObjs, nil); err != nil {
-		return nil, modules.ErrLoadingHostTrafficObjs
+		return nil, errors.Join(err, modules.ErrLoadingHostTrafficObjs)
 	}
 	hostEgressTrafficEvents := make(chan *perf.Record)
 	podIngressTrafficEvents := make(chan *perf.Record)
@@ -60,7 +61,7 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 	}
 	handler, err := NewTrafficEventHandler(handlerParams)
 	if err != nil {
-		return nil, modules.ErrCreatingTrafficEventHandler
+		return nil, errors.Join(err, modules.ErrCreatingTrafficEventHandler)
 	}
 	readerConfig := TrafficEventReaderConfig{
 		MaxWorker:           params.ReaderMaxWorker,
@@ -76,7 +77,7 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 	}
 	reader, err := NewTrafficEventReader(readerParams)
 	if err != nil {
-		return nil, modules.ErrCreatingTrafficEventReader
+		return nil, errors.Join(err, modules.ErrCreatingTrafficEventReader)
 	}
 	return &TrafficFactory{
 		Logger:               logger,
@@ -91,10 +92,10 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 
 func (f *TrafficFactory) SubscribeToPodDevice(ifaceName string) error {
 	newDevHooker, err := hooker.NewDeviceHooker(ifaceName, false)
-	if err == hooker.ErrFailedToFindInterface {
-		return modules.ErrDeviceNotFound
+	if errors.Is(err, hooker.ErrInterfaceNotExists) {
+		return errors.Join(err, modules.ErrDeviceNotFound)
 	} else if err != nil {
-		return modules.ErrCreatingDeviceHooker
+		return errors.Join(err, modules.ErrCreatingDeviceHooker)
 	}
 	ifaceHash := getIfaceHash(ifaceName)
 	devHooker, loaded := f.devHookers.LoadOrStore(ifaceHash, newDevHooker)
@@ -103,7 +104,7 @@ func (f *TrafficFactory) SubscribeToPodDevice(ifaceName string) error {
 		return nil
 	}
 	if err := devHooker.AddFilterToIngressQdisc(ingressFilterNameForPodDev, f.podTrafficObjs.IngressPodTrafficHook.FD()); err != nil {
-		return modules.ErrAddingIngressFilter
+		return errors.Join(err, modules.ErrAddingIngressFilter)
 	}
 	f.Debugf("pod device %v has been subscribed to", ifaceName)
 	return nil
@@ -111,10 +112,10 @@ func (f *TrafficFactory) SubscribeToPodDevice(ifaceName string) error {
 
 func (f *TrafficFactory) SubscribeToHostDevice(ifaceName string) error {
 	newDevHooker, err := hooker.NewDeviceHooker(ifaceName, false)
-	if err == hooker.ErrFailedToFindInterface {
-		return modules.ErrDeviceNotFound
+	if errors.Is(err, hooker.ErrInterfaceNotExists) {
+		return errors.Join(err, modules.ErrDeviceNotFound)
 	} else if err != nil {
-		return modules.ErrCreatingDeviceHooker
+		return errors.Join(err, modules.ErrCreatingDeviceHooker)
 	}
 	ifaceHash := getIfaceHash(ifaceName)
 	devHooker, loaded := f.devHookers.LoadOrStore(ifaceHash, newDevHooker)
@@ -122,7 +123,7 @@ func (f *TrafficFactory) SubscribeToHostDevice(ifaceName string) error {
 		return nil
 	}
 	if err := devHooker.AddFilterToEgressQdisc(egressFilterNameForHostDev, f.hostTrafficObjs.EgressHostTrafficHook.FD()); err != nil {
-		return modules.ErrAddingEgressFilter
+		return errors.Join(err, modules.ErrAddingEgressFilter)
 	}
 	f.Debugf("host device %v has been subscribed to", ifaceName)
 	return nil
@@ -134,10 +135,10 @@ func (f *TrafficFactory) UnsubscribeFromPodDevice(ifaceName string) error {
 		return nil
 	}
 	if err := devHooker.DelFilterFromIngressQdisc(ingressFilterNameForPodDev); err != nil {
-		if err == hooker.ErrFailedToFindInterface {
-			return modules.ErrDeviceNotFound
+		if errors.Is(err, hooker.ErrInterfaceNotExists) {
+			return errors.Join(err, modules.ErrDeviceNotFound)
 		}
-		return modules.ErrDeletingIngressFilter
+		return errors.Join(err, modules.ErrDeletingIngressFilter)
 	}
 	f.Debugf("pod device %v has been unsubscribed from", ifaceName)
 	return nil
@@ -149,10 +150,10 @@ func (f *TrafficFactory) UnsubscribeFromHostDevice(ifaceName string) error {
 		return nil
 	}
 	if err := devHooker.DelFilterFromEgressQdisc(egressFilterNameForHostDev); err != nil {
-		if err == hooker.ErrFailedToFindInterface {
-			return modules.ErrDeviceNotFound
+		if errors.Is(err, hooker.ErrInterfaceNotExists) {
+			return errors.Join(err, modules.ErrDeviceNotFound)
 		}
-		return modules.ErrDeletingEgressFilter
+		return errors.Join(err, modules.ErrDeletingEgressFilter)
 	}
 	f.Debugf("host device %v has been unsubscribed from", ifaceName)
 	return nil
@@ -162,6 +163,11 @@ func (f *TrafficFactory) Start(ctx context.Context) error {
 	f.trafficEventReader.Start(ctx)
 	f.trafficEventHandler.Start(ctx)
 	return nil
+}
+
+func (f *TrafficFactory) Close() {
+	f.podTrafficObjs.Close()
+	f.hostTrafficObjs.Close()
 }
 
 func getIfaceHash(ifaceName string) string {

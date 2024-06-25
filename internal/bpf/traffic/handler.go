@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"time"
 
 	"github.com/cilium/ebpf/perf"
@@ -44,11 +45,11 @@ func (h *TrafficEventHandler) Start(ctx context.Context) {
 func NewTrafficEventHandler(params TrafficEventHandlerParams) (*TrafficEventHandler, error) {
 	logger, err := params.ParentLogger.WithCompName("traffic_event_handler")
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(err, modules.ErrCreatingLogger)
 	}
 	nativeEndian, err := host.GetEndian()
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(err, modules.ErrGettingHostEndian)
 	}
 	return &TrafficEventHandler{
 		Logger:                    logger,
@@ -64,7 +65,7 @@ func (h *TrafficEventHandler) handleHostEgress(ctx context.Context) error {
 	case record := <-h.HostEgressTrafficEvents:
 		var e host_trafficEventT
 		if err := binary.Read(bytes.NewBuffer(record.RawSample), h.nativeEndian, &e); err != nil {
-			return err
+			return errors.Join(err, modules.ErrReadingFromRawSample)
 		}
 		if e.Len <= 0 {
 			// If this traffic event doesn't have any data, do not submit anything
@@ -82,7 +83,7 @@ func (h *TrafficEventHandler) handlePodIngress(ctx context.Context) error {
 	case record := <-h.PodIngressTrafficEvents:
 		var e pod_trafficEventT
 		if err := binary.Read(bytes.NewBuffer(record.RawSample), h.nativeEndian, &e); err != nil {
-			return err
+			return errors.Join(err, modules.ErrReadingFromRawSample)
 		}
 		if e.Len <= 0 {
 			// If this traffic event doesn't have any data, do not submit anything

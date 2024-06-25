@@ -23,7 +23,6 @@ var (
 	ErrClosingDeviceHooker               = errors.New("failed to close the device hooker")
 	ErrCreatingDeviceHooker              = errors.New("failed to create a device hooker")
 	ErrInitializingDeviceHooker          = errors.New("failed to initialize a device hooker")
-	ErrCreatingLogger                    = errors.New("failed to create a logger")
 	ErrCreatingTrafficEventHandler       = errors.New("failed to create the reader for traffic events")
 	ErrCreatingTrafficEventReader        = errors.New("failed to create the handler for traffic events")
 	ErrLoadingBPFObjects                 = errors.New("failed to load bpf objects")
@@ -31,4 +30,9 @@ var (
 	ErrLoadingHostTrafficObjs            = errors.New("failed to load host traffic bpf objects")
 	ErrCreatingHostEgressPerfEventReader = errors.New("failed to create a event reader for egress perf events")
 	ErrCreatingPodIngressPerfEventReader = errors.New("failed to create a event reader for ingress pod events")
+
+	ErrGettingHostEndian    = errors.New("failed to get the endian of the host")
+	ErrReadingFromRawSample = errors.New("failed to read from a raw sample")
+
+	ErrReadingFromPerfEventReader = errors.New("failed to read from the perf event reader")
 )

@@ -9,6 +9,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
+	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -40,15 +41,15 @@ type TrafficEventReader struct {
 func NewTrafficEventReader(params TrafficEventReaderParams) (*TrafficEventReader, error) {
 	logger, err := params.ParentLogger.WithCompName("traffic_event_reader")
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(err, modules.ErrCreatingLogger)
 	}
 	hostEgressPerfEventReader, err := perf.NewReader(params.HostEgressPerfEvents, params.PerfEventBufferSize)
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(err, modules.ErrCreatingHostEgressPerfEventReader)
 	}
 	podIngressPerfEventReader, err := perf.NewReader(params.PodIngressPerfEvents, params.PerfEventBufferSize)
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(err, modules.ErrCreatingPodIngressPerfEventReader)
 	}
 	return &TrafficEventReader{
 		Logger:                    logger,
@@ -69,7 +70,7 @@ func (r *TrafficEventReader) readHostEgress(ctx context.Context) error {
 		r.Infof("the reader is closed for host egress perf events")
 		return nil
 	} else if err != nil {
-		return err
+		return errors.Join(err, modules.ErrReadingFromPerfEventReader)
 	}
 	//TODO: keep track of this
 	if record.LostSamples != 0 {
@@ -92,7 +93,7 @@ func (r *TrafficEventReader) readPodIngress(ctx context.Context) error {
 		r.Infof("the reader is closed for pod ingress perf events")
 		return nil
 	} else if err != nil {
-		return err
+		return errors.Join(err, modules.ErrReadingFromPerfEventReader)
 	}
 	//TODO: keep track of this
 	if record.LostSamples != 0 {

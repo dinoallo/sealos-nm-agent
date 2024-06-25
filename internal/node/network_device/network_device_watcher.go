@@ -2,6 +2,7 @@ package network_device
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"time"
 
@@ -19,15 +20,17 @@ var (
 	hostDeviceRegexes = map[string]struct{}{
 		"^(eth|ens|enp|eno)": {},
 	}
+
+	ErrGettingInterfaces = errors.New("failed to get all interfaces")
 )
 
 type NetworkDeviceWatcherConfig struct {
-	SyncPeriod time.Duration
+	WatchPeriod time.Duration
 }
 
 func NewNetworkDeviceWatcherConfig() NetworkDeviceWatcherConfig {
 	return NetworkDeviceWatcherConfig{
-		SyncPeriod: 10 * time.Second,
+		WatchPeriod: 10 * time.Second,
 	}
 }
 
@@ -65,7 +68,7 @@ type NetworkDeviceWatcher struct {
 func NewNetworkDeviceWatcher(params NetworkDeviceWatcherParams) (*NetworkDeviceWatcher, error) {
 	logger, err := params.ParentLogger.WithCompName("network_device_watcher")
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(err, modules.ErrCreatingLogger)
 	}
 	return &NetworkDeviceWatcher{
 		Logger:                     logger,
@@ -82,13 +85,14 @@ func (w *NetworkDeviceWatcher) Start(ctx context.Context) error {
 				w.Error(err)
 				return
 			}
-			time.Sleep(w.SyncPeriod)
+			time.Sleep(w.WatchPeriod)
 		}
 	}()
 	go func() {
 		for {
 			if err := w.sync(ctx); err != nil {
 				w.Error(err)
+				return
 			}
 		}
 	}()
@@ -112,7 +116,7 @@ func (w *NetworkDeviceWatcher) sync(ctx context.Context) error {
 	} else if msg.action == actionUnsubscribe && msg.ifaceType == ifaceTypeHost {
 		err = w.UnsubscribeFromHostDevice(ifaceName)
 	}
-	if err != nil && err != modules.ErrDeviceNotFound {
+	if err != nil && !errors.Is(err, modules.ErrDeviceNotFound) {
 		select {
 		case <-ctx.Done():
 		case w.deviceToSync <- msg:
@@ -124,7 +128,7 @@ func (w *NetworkDeviceWatcher) sync(ctx context.Context) error {
 func (w *NetworkDeviceWatcher) watch(ctx context.Context) error {
 	ifaces, err := w.Interfaces()
 	if err != nil {
-		return err
+		return errors.Join(err, ErrGettingInterfaces)
 	}
 	newIfaces := make(map[string]ifaceKind)
 	for _, iface := range ifaces {
