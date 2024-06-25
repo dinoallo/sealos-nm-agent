@@ -166,6 +166,13 @@ func (f *TrafficFactory) Start(ctx context.Context) error {
 }
 
 func (f *TrafficFactory) Close() {
+	delFilter := func(ifaceName string, devHooker *hooker.DeviceHooker) bool {
+		if err := devHooker.Close(); err != nil {
+			f.Error(err)
+		}
+		return true
+	}
+	f.devHookers.Range(delFilter)
 	f.podTrafficObjs.Close()
 	f.hostTrafficObjs.Close()
 }
