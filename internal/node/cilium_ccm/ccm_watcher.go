@@ -89,6 +89,7 @@ func (w *CiliumCCMWatcher) Start(ctx context.Context) error {
 			}
 		}
 	}()
+	w.Debugf("ready")
 	return nil
 }
 
