@@ -177,7 +177,7 @@ func (f *TrafficFactory) UnsubscribeFromHostDevice(ifaceName string) error {
 func (f *TrafficFactory) SubscribeToCep(eid int64) error {
 	newCepHooker := hooker.NewCiliumCCMHooker(eid)
 	cepHooker, loaded := f.cepHookers.LoadOrStore(eid, newCepHooker)
-	if !loaded {
+	if loaded {
 		return nil
 	}
 	if err := cepHooker.AttachV4EgressHook(f.cepTrafficObjs.EgressCepTrafficHook); err != nil {
