@@ -29,3 +29,13 @@ func (m *DummyBPFTrafficModule) UnsubscribeFromHostDevice(ifaceName string) erro
 	log.Printf("unsubscribe to host device: %v", ifaceName)
 	return nil
 }
+
+func (m *DummyBPFTrafficModule) SubscribeToCep(cep int64) error {
+	log.Printf("subscribe to cep: %v", cep)
+	return nil
+}
+
+func (m *DummyBPFTrafficModule) UnsubscribeFromCep(cep int64) error {
+	log.Printf("unsubscribe from cep: %v", cep)
+	return nil
+}

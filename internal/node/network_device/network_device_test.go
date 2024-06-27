@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	syncPeriod            = time.Second * 2
+	watchPeriod           = time.Second * 2
 	globalLogger          loglib.Logger
 	globalConfig          NetworkDeviceWatcherConfig
 	dummyBPFTrafficModule = mock.NewDummyBPFTrafficModule()
@@ -102,7 +102,7 @@ func TestDeviceWatching(t *testing.T) {
 			t.FailNow()
 		}
 		t.Logf("device to watch: %+v", expectedDevices)
-		time.Sleep(syncPeriod + time.Second*1)
+		time.Sleep(watchPeriod + time.Second*1)
 	})
 	t.Run("dump and check devices", func(t *testing.T) {
 		actualDevices := w.dumpDevices()
@@ -118,7 +118,7 @@ func TestDeviceWatching(t *testing.T) {
 			t.FailNow()
 		}
 		t.Logf("device to watch: %+v", expectedDevices)
-		time.Sleep(syncPeriod + time.Second*1)
+		time.Sleep(watchPeriod + time.Second*1)
 	})
 	t.Run("dump and check devices", func(t *testing.T) {
 		actualDevices := w.dumpDevices()
@@ -134,7 +134,7 @@ func TestMain(m *testing.M) {
 		return
 	}
 	globalConfig = NetworkDeviceWatcherConfig{
-		SyncPeriod: syncPeriod,
+		WatchPeriod: watchPeriod,
 	}
 	m.Run()
 }

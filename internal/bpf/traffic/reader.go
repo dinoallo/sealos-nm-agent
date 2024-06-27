@@ -25,16 +25,16 @@ type TrafficEventReaderConfig struct {
 type TrafficEventReaderParams struct {
 	ParentLogger         log.Logger
 	HostEgressPerfEvents *ebpf.Map
-	PodIngressPerfEvents *ebpf.Map
+	PodEgressPerfEvents  *ebpf.Map
 	HostEgressEvents     chan *perf.Record
-	PodIngressEvents     chan *perf.Record
+	PodEgressEvents      chan *perf.Record
 	TrafficEventReaderConfig
 }
 
 type TrafficEventReader struct {
 	log.Logger
 	hostEgressPerfEventReader *perf.Reader
-	podIngressPerfEventReader *perf.Reader //TODO: implement ringbuf reader
+	podEgressPerfEventReader  *perf.Reader //TODO: implement ringbuf reader
 	TrafficEventReaderParams
 }
 
@@ -47,21 +47,21 @@ func NewTrafficEventReader(params TrafficEventReaderParams) (*TrafficEventReader
 	if err != nil {
 		return nil, errors.Join(err, modules.ErrCreatingHostEgressPerfEventReader)
 	}
-	podIngressPerfEventReader, err := perf.NewReader(params.PodIngressPerfEvents, params.PerfEventBufferSize)
+	podEgressPerfEventReader, err := perf.NewReader(params.PodEgressPerfEvents, params.PerfEventBufferSize)
 	if err != nil {
-		return nil, errors.Join(err, modules.ErrCreatingPodIngressPerfEventReader)
+		return nil, errors.Join(err, modules.ErrCreatingPodEgressPerfEventReader)
 	}
 	return &TrafficEventReader{
 		Logger:                    logger,
 		hostEgressPerfEventReader: hostEgressPerfEventReader,
-		podIngressPerfEventReader: podIngressPerfEventReader,
+		podEgressPerfEventReader:  podEgressPerfEventReader,
 		TrafficEventReaderParams:  params,
 	}, nil
 }
 
 func (r *TrafficEventReader) Start(ctx context.Context) {
 	doReading(ctx, r.MaxWorker, r.readHostEgress, r.Logger)
-	doReading(ctx, r.MaxWorker, r.readPodIngress, r.Logger)
+	doReading(ctx, r.MaxWorker, r.readPodEgress, r.Logger)
 }
 
 func (r *TrafficEventReader) readHostEgress(ctx context.Context) error {
@@ -87,8 +87,8 @@ func (r *TrafficEventReader) readHostEgress(ctx context.Context) error {
 	}
 }
 
-func (r *TrafficEventReader) readPodIngress(ctx context.Context) error {
-	record, err := r.podIngressPerfEventReader.Read()
+func (r *TrafficEventReader) readPodEgress(ctx context.Context) error {
+	record, err := r.podEgressPerfEventReader.Read()
 	if errors.Is(err, perf.ErrClosed) {
 		r.Infof("the reader is closed for pod ingress perf events")
 		return nil
@@ -105,7 +105,7 @@ func (r *TrafficEventReader) readPodIngress(ctx context.Context) error {
 	select {
 	case <-sendCtx.Done():
 		return nil
-	case r.PodIngressEvents <- &record:
+	case r.PodEgressEvents <- &record:
 		return nil
 	}
 }

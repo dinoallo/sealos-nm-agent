@@ -3,19 +3,23 @@ package modules
 import "errors"
 
 type BPFTrafficFactoryConfig struct {
-	ReaderMaxWorker  int `env:"READER_MAX_WORKER"`
-	HandlerMaxWorker int `env:"HANDLER_MAX_WORKER"`
+	ReaderMaxWorker  int  `env:"READER_MAX_WORKER"`
+	HandlerMaxWorker int  `env:"HANDLER_MAX_WORKER"`
+	UseCiliumCCM     bool `env:"USE_CILIUM_CCM"`
 }
 
 type BPFTrafficFactory interface {
 	SubscribeToPodDevice(ifaceName string) error
 	SubscribeToHostDevice(ifaceName string) error
+	SubscribeToCep(eid int64) error
 	UnsubscribeFromPodDevice(ifaceName string) error
 	UnsubscribeFromHostDevice(ifaceName string) error
+	UnsubscribeFromCep(eid int64) error
 }
 
 var (
 	ErrDeviceNotFound                    = errors.New("this device cannot be found")
+	ErrCepNotFound                       = errors.New("this cilium endpoint cannot be found")
 	ErrAddingEgressFilter                = errors.New("failed to add filter at the egress side")
 	ErrAddingIngressFilter               = errors.New("failed to add filter at the ingress side")
 	ErrDeletingEgressFilter              = errors.New("failed to delete filter at the egress side")
@@ -26,10 +30,13 @@ var (
 	ErrCreatingTrafficEventHandler       = errors.New("failed to create the reader for traffic events")
 	ErrCreatingTrafficEventReader        = errors.New("failed to create the handler for traffic events")
 	ErrLoadingBPFObjects                 = errors.New("failed to load bpf objects")
-	ErrLoadingPodTrafficObjs             = errors.New("failed to load pod traffic bpf objects")
+	ErrLoadingLxcTrafficObjs             = errors.New("failed to load pod traffic bpf objects")
 	ErrLoadingHostTrafficObjs            = errors.New("failed to load host traffic bpf objects")
+	ErrLoadingCepTrafficObjs             = errors.New("failed to load cep traffic bpf objects")
 	ErrCreatingHostEgressPerfEventReader = errors.New("failed to create a event reader for egress perf events")
-	ErrCreatingPodIngressPerfEventReader = errors.New("failed to create a event reader for ingress pod events")
+	ErrCreatingPodEgressPerfEventReader  = errors.New("failed to create a event reader for egress pod events")
+	ErrAttachingEgressHookToCCM          = errors.New("failed to attach egress hook to cilium custom call map")
+	ErrDetachingAllHooksFromCCM          = errors.New("failed to detach all hooks from cilium custom call map")
 
 	ErrGettingHostEndian    = errors.New("failed to get the endian of the host")
 	ErrReadingFromRawSample = errors.New("failed to read from a raw sample")

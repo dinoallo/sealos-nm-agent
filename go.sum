@@ -25,8 +25,8 @@ github.com/vishvananda/netlink v1.1.0/go.mod h1:cTgwzPIzzgDAYoQrMm0EdrjRUBkTqKYp
 github.com/vishvananda/netns v0.0.0-20191106174202-0a2b9b5464df/go.mod h1:JP3t17pCcGlemwknint6hfoeCVQrEMVwxRLRjXpq+BU=
 github.com/vishvananda/netns v0.0.4 h1:Oeaw1EM2JMxD51g9uhtC0D7erkIjgmj8+JZc26m1YX8=
 github.com/vishvananda/netns v0.0.4/go.mod h1:SpkAiCQRtJ6TvvxPnOSyH3BMl6unz3xZlaprSwhNNJM=
-gitlab.com/dinoallo/sealos-networkmanager-library v0.0.0-20240625092920-6c1c3efe09dd h1:RPe0qpP1OnDc3CZlU/GEuvgZ/5YY45y/WJtd4rBS6+A=
-gitlab.com/dinoallo/sealos-networkmanager-library v0.0.0-20240625092920-6c1c3efe09dd/go.mod h1:kQVYisDjKucy55FwORN+NVP+I9/lnlKmUaXL1DSV/HQ=
+gitlab.com/dinoallo/sealos-networkmanager-library v0.0.0-20240627063825-87f3b7cf2153 h1:GXQ3W+DsSpRrR5ObjIyG+6yAwjPXnwgVKvcoa7mnhMM=
+gitlab.com/dinoallo/sealos-networkmanager-library v0.0.0-20240627063825-87f3b7cf2153/go.mod h1:kQVYisDjKucy55FwORN+NVP+I9/lnlKmUaXL1DSV/HQ=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
 go.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/WLlf7HGZPjdw8EucARQHekz1X6bE=
 go.uber.org/multierr v1.11.0 h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=

@@ -10,10 +10,13 @@ import (
 	"github.com/caarlos0/env/v11"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/bpf/traffic"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/node/cilium_ccm"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/node/network_device"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/service"
 	"github.com/dinoallo/sealos-networkmanager-agent/mock"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
+	bpfcommon "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/bpf/common"
+	ciliumbpffs "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/bpf/fs"
 	zaplog "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log/zap"
 	netlib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/net"
 )
@@ -79,6 +82,7 @@ func main() {
 	tfConfig := modules.BPFTrafficFactoryConfig{
 		ReaderMaxWorker:  5,
 		HandlerMaxWorker: 5,
+		UseCiliumCCM:     globalConfig.WatchCiliumEndpoint,
 	}
 	params := traffic.TrafficFactoryParams{
 		ParentLogger:            logger,
@@ -95,6 +99,7 @@ func main() {
 
 	// initialize and start the network device watcher
 	ndwConfig := network_device.NewNetworkDeviceWatcherConfig()
+	ndwConfig.WatchPodDevice = !globalConfig.WatchCiliumEndpoint
 	nmNetLib := netlib.NewNMNetLib()
 	ndwParams := network_device.NetworkDeviceWatcherParams{
 		ParentLogger:               logger,
@@ -111,11 +116,35 @@ func main() {
 		logger.Error(err)
 		return
 	}
+	// initialize and start the cep watcher if WatchCiliumEndpoint is set to true
+	cwConfig := cilium_ccm.NewCiliumCCMWatcherConfig()
+	cwConfig.Enabled = globalConfig.WatchCiliumEndpoint
+	ciliumBPFFS := ciliumbpffs.NewCiliumBPFFS(bpfcommon.DefaultCiliumTCRoot)
+	cwParams := cilium_ccm.CiliumCCMWatcherParams{
+		ParentLogger:           logger,
+		CiliumCCMWatcherConfig: cwConfig,
+		BPFTrafficFactory:      trafficFactory,
+		CiliumBPFFS_:           ciliumBPFFS,
+	}
+	ccmWatcher, err := cilium_ccm.NewCiliumCCMWatcher(cwParams)
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+	if err := ccmWatcher.Start(mainCtx); err != nil {
+		logger.Error(err)
+		return
+	}
 	<-sigs
 }
 
 type GlobalConfig struct {
-	NoExportingTraffic              bool   `env:"NO_EXPORTING_TRAFFIC"`
+	NoExportingTraffic bool `env:"NO_EXPORTING_TRAFFIC"`
+	// if this option is set to true, the agent will watch the cilium endpoints' custom call maps
+	// instead of their lxc devices, which also means the agent will receive traffic events by
+	// cilium tail-calling our programs via custom call maps
+	// this feature requires using cilium as cni and enable custom call hook
+	WatchCiliumEndpoint             bool   `env:"WATCH_CILIUM_ENDPOINT"`
 	DummyWatchedPodIP               string `env:"DUMMY_WATCHED_POD_IP"`
 	DummyWatchedHostIP              string `env:"DUMMY_WATCHED_HOST_IP"`
 	TrafficEventHandlerWorkerCount  int    `env:"TRAFFIC_EVENT_HANDLER_WORKER_COUNT"`
@@ -124,8 +153,8 @@ type GlobalConfig struct {
 
 func NewGlobalConfig() *GlobalConfig {
 	return &GlobalConfig{
-		//TODO: support v6 dns service
 		NoExportingTraffic:              false,
+		WatchCiliumEndpoint:             false,
 		DummyWatchedPodIP:               "",
 		DummyWatchedHostIP:              "",
 		TrafficEventHandlerWorkerCount:  5,

@@ -26,7 +26,7 @@ type TrafficEventHandlerConfig struct {
 type TrafficEventHandlerParams struct {
 	ParentLogger            log.Logger
 	HostEgressTrafficEvents chan *perf.Record
-	PodIngressTrafficEvents chan *perf.Record
+	PodEgressTrafficEvents  chan *perf.Record
 	TrafficEventHandlerConfig
 	modules.ExportTrafficService
 }
@@ -39,7 +39,7 @@ type TrafficEventHandler struct {
 
 func (h *TrafficEventHandler) Start(ctx context.Context) {
 	doHandling(ctx, h.MaxWorker, h.handleHostEgress, h.Logger)
-	doHandling(ctx, h.MaxWorker, h.handlePodIngress, h.Logger)
+	doHandling(ctx, h.MaxWorker, h.handlePodEgress, h.Logger)
 }
 
 func NewTrafficEventHandler(params TrafficEventHandlerParams) (*TrafficEventHandler, error) {
@@ -58,31 +58,21 @@ func NewTrafficEventHandler(params TrafficEventHandlerParams) (*TrafficEventHand
 	}, nil
 }
 
-func (h *TrafficEventHandler) handleHostEgress(ctx context.Context) error {
-	select {
-	case <-ctx.Done():
-		return nil
-	case record := <-h.HostEgressTrafficEvents:
-		var e host_trafficEventT
-		if err := binary.Read(bytes.NewBuffer(record.RawSample), h.nativeEndian, &e); err != nil {
-			return errors.Join(err, modules.ErrReadingFromRawSample)
-		}
-		if e.Len <= 0 {
-			// If this traffic event doesn't have any data, do not submit anything
-			return nil
-		}
-		event := e.convertToRawTrafficEvent()
-		return submitWithTimeout(ctx, event, defaultSubmitTimeout, h.SubmitRawHostTrafficEvent)
-	}
+func (h *TrafficEventHandler) handlePodEgress(ctx context.Context) error {
+	return _handle(ctx, h.PodEgressTrafficEvents, h.nativeEndian, h.SubmitRawPodTrafficEvent)
 }
 
-func (h *TrafficEventHandler) handlePodIngress(ctx context.Context) error {
+func (h *TrafficEventHandler) handleHostEgress(ctx context.Context) error {
+	return _handle(ctx, h.HostEgressTrafficEvents, h.nativeEndian, h.SubmitRawHostTrafficEvent)
+}
+
+func _handle(ctx context.Context, records chan *perf.Record, hostEndian binary.ByteOrder, submitFunc func(context.Context, structs.RawTrafficEvent) error) error {
 	select {
 	case <-ctx.Done():
 		return nil
-	case record := <-h.PodIngressTrafficEvents:
-		var e pod_trafficEventT
-		if err := binary.Read(bytes.NewBuffer(record.RawSample), h.nativeEndian, &e); err != nil {
+	case record := <-records:
+		var e trafficEventT
+		if err := binary.Read(bytes.NewBuffer(record.RawSample), hostEndian, &e); err != nil {
 			return errors.Join(err, modules.ErrReadingFromRawSample)
 		}
 		if e.Len <= 0 {
@@ -90,7 +80,7 @@ func (h *TrafficEventHandler) handlePodIngress(ctx context.Context) error {
 			return nil
 		}
 		event := e.convertToRawTrafficEvent()
-		return submitWithTimeout(ctx, event, defaultSubmitTimeout, h.SubmitRawPodTrafficEvent)
+		return submitWithTimeout(ctx, event, defaultSubmitTimeout, submitFunc)
 	}
 }
 

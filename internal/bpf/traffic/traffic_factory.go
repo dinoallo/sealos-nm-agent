@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"github.com/puzpuzpuz/xsync"
@@ -27,7 +28,9 @@ type TrafficFactoryParams struct {
 type TrafficFactory struct {
 	log.Logger
 	hostTrafficObjs     host_trafficObjects
-	podTrafficObjs      pod_trafficObjects
+	lxcTrafficObjs      lxc_trafficObjects
+	cepTrafficObjs      cep_trafficObjects
+	cepHookers          *xsync.MapOf[int64, *hooker.CiliumCCMHooker]
 	devHookers          *xsync.MapOf[string, *hooker.DeviceHooker] //ifaceHash -> devHooker
 	trafficEventReader  *TrafficEventReader
 	trafficEventHandler *TrafficEventHandler
@@ -39,23 +42,27 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 	if err != nil {
 		return nil, errors.Join(err, modules.ErrCreatingLogger)
 	}
-	podTrafficObjs := pod_trafficObjects{}
-	if err := loadPod_trafficObjects(&podTrafficObjs, nil); err != nil {
-		return nil, errors.Join(err, modules.ErrLoadingPodTrafficObjs)
+	lxcTrafficObjs := lxc_trafficObjects{}
+	if err := loadLxc_trafficObjects(&lxcTrafficObjs, nil); err != nil {
+		return nil, errors.Join(err, modules.ErrLoadingLxcTrafficObjs)
 	}
 	hostTrafficObjs := host_trafficObjects{}
 	if err := loadHost_trafficObjects(&hostTrafficObjs, nil); err != nil {
 		return nil, errors.Join(err, modules.ErrLoadingHostTrafficObjs)
 	}
+	cepTrafficObjs := cep_trafficObjects{}
+	if err := loadCep_trafficObjects(&cepTrafficObjs, nil); err != nil {
+		return nil, errors.Join(err, modules.ErrLoadingCepTrafficObjs)
+	}
 	hostEgressTrafficEvents := make(chan *perf.Record)
-	podIngressTrafficEvents := make(chan *perf.Record)
+	podEgressTrafficEvents := make(chan *perf.Record)
 	handlerConfig := TrafficEventHandlerConfig{
 		MaxWorker: params.HandlerMaxWorker,
 	}
 	handlerParams := TrafficEventHandlerParams{
 		ParentLogger:              logger,
 		HostEgressTrafficEvents:   hostEgressTrafficEvents,
-		PodIngressTrafficEvents:   podIngressTrafficEvents,
+		PodEgressTrafficEvents:    podEgressTrafficEvents,
 		TrafficEventHandlerConfig: handlerConfig,
 		ExportTrafficService:      params.ExportTrafficService,
 	}
@@ -67,12 +74,16 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 		MaxWorker:           params.ReaderMaxWorker,
 		PerfEventBufferSize: (32 << 10), // 32KB
 	}
+	var egressPodTrafficPerfEvents *ebpf.Map
+	if params.UseCiliumCCM {
+		egressPodTrafficPerfEvents = cepTrafficObjs.EgressCepTrafficEvents
+	}
 	readerParams := TrafficEventReaderParams{
 		ParentLogger:             logger,
 		HostEgressPerfEvents:     hostTrafficObjs.EgressHostTrafficEvents,
-		PodIngressPerfEvents:     podTrafficObjs.IngressPodTrafficEvents,
+		PodEgressPerfEvents:      egressPodTrafficPerfEvents,
 		HostEgressEvents:         hostEgressTrafficEvents,
-		PodIngressEvents:         podIngressTrafficEvents,
+		PodEgressEvents:          podEgressTrafficEvents,
 		TrafficEventReaderConfig: readerConfig,
 	}
 	reader, err := NewTrafficEventReader(readerParams)
@@ -82,8 +93,10 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 	return &TrafficFactory{
 		Logger:               logger,
 		hostTrafficObjs:      hostTrafficObjs,
-		podTrafficObjs:       podTrafficObjs,
+		lxcTrafficObjs:       lxcTrafficObjs,
+		cepTrafficObjs:       cepTrafficObjs,
 		devHookers:           xsync.NewMapOf[*hooker.DeviceHooker](),
+		cepHookers:           xsync.NewIntegerMapOf[int64, *hooker.CiliumCCMHooker](),
 		trafficEventHandler:  handler,
 		trafficEventReader:   reader,
 		TrafficFactoryParams: params,
@@ -103,7 +116,9 @@ func (f *TrafficFactory) SubscribeToPodDevice(ifaceName string) error {
 		// this device has already been subscribed to
 		return nil
 	}
-	if err := devHooker.AddFilterToIngressQdisc(ingressFilterNameForPodDev, f.podTrafficObjs.IngressPodTrafficHook.FD()); err != nil {
+	// attach to filter to ingress qdisc of a lxc device so that we can get egress traffic of a pod
+	// notice that this is not a bug since the ingress side of lxc device equals to the egress side of a pod (they are a veth pair)
+	if err := devHooker.AddFilterToIngressQdisc(ingressFilterNameForPodDev, f.lxcTrafficObjs.IngressLxcTrafficHook.FD()); err != nil {
 		return errors.Join(err, modules.ErrAddingIngressFilter)
 	}
 	f.Debugf("pod device %v has been subscribed to", ifaceName)
@@ -159,6 +174,37 @@ func (f *TrafficFactory) UnsubscribeFromHostDevice(ifaceName string) error {
 	return nil
 }
 
+func (f *TrafficFactory) SubscribeToCep(eid int64) error {
+	newCepHooker := hooker.NewCiliumCCMHooker(eid)
+	cepHooker, loaded := f.cepHookers.LoadOrStore(eid, newCepHooker)
+	if !loaded {
+		return nil
+	}
+	if err := cepHooker.AttachV4EgressHook(f.cepTrafficObjs.EgressCepTrafficHook); err != nil {
+		if errors.Is(err, hooker.ErrCiliumCCMNotExists) {
+			return errors.Join(err, modules.ErrCepNotFound)
+		}
+		return errors.Join(err, modules.ErrAttachingEgressHookToCCM)
+	}
+	f.Debugf("cep %v has been subscribed to", eid)
+	return nil
+}
+
+func (f *TrafficFactory) UnsubscribeFromCep(eid int64) error {
+	cepHooker, loaded := f.cepHookers.LoadAndDelete(eid)
+	if !loaded {
+		return nil
+	}
+	if err := cepHooker.DetachAllHooks(); err != nil {
+		if errors.Is(err, hooker.ErrCiliumCCMNotExists) {
+			return errors.Join(err, modules.ErrCepNotFound)
+		}
+		return errors.Join(err, modules.ErrDetachingAllHooksFromCCM)
+	}
+	f.Debugf("cep %v has been unsubscribed from", eid)
+	return nil
+}
+
 func (f *TrafficFactory) Start(ctx context.Context) error {
 	f.trafficEventReader.Start(ctx)
 	f.trafficEventHandler.Start(ctx)
@@ -173,8 +219,16 @@ func (f *TrafficFactory) Close() {
 		return true
 	}
 	f.devHookers.Range(delFilter)
-	f.podTrafficObjs.Close()
+	detachHook := func(eid int64, cepHooker *hooker.CiliumCCMHooker) bool {
+		if err := cepHooker.DetachAllHooks(); err != nil {
+			f.Error(err)
+		}
+		return true
+	}
+	f.cepHookers.Range(detachHook)
+	f.lxcTrafficObjs.Close()
 	f.hostTrafficObjs.Close()
+	f.cepTrafficObjs.Close()
 }
 
 func getIfaceHash(ifaceName string) string {

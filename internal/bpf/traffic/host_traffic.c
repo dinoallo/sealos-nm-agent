@@ -1,25 +1,12 @@
 // clang-format off
 //go:build ignore
 
-#include "../headers/vmlinux.h"
-#include "../headers/bpf_helpers.h"
+#include "../headers/common.h"
 
 // clang-format on
 // #define TC_ACT_OK 0
-
 #define TC_ACT_UNSPEC -1
 char __license[] SEC("license") = "Dual MIT/GPL";
-struct event_t {
-  __u32 len;
-  __u32 family;
-  __u32 protocol;
-  __u32 dst_ip4;
-  __u32 src_ip4;
-  __u32 dst_ip6[4];
-  __u32 src_ip6[4];
-  __u32 src_port;
-  __be16 dst_port;
-};
 
 const struct event_t *unused_host_traffic_event __attribute__((unused));
 

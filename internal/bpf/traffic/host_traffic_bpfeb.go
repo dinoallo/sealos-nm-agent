@@ -12,19 +12,6 @@ import (
 	"github.com/cilium/ebpf"
 )
 
-type host_trafficEventT struct {
-	Len      uint32
-	Family   uint32
-	Protocol uint32
-	DstIp4   uint32
-	SrcIp4   uint32
-	DstIp6   [4]uint32
-	SrcIp6   [4]uint32
-	SrcPort  uint32
-	DstPort  uint16
-	_        [2]byte
-}
-
 // loadHost_traffic returns the embedded CollectionSpec for host_traffic.
 func loadHost_traffic() (*ebpf.CollectionSpec, error) {
 	reader := bytes.NewReader(_Host_trafficBytes)

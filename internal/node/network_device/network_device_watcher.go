@@ -25,12 +25,14 @@ var (
 )
 
 type NetworkDeviceWatcherConfig struct {
-	WatchPeriod time.Duration
+	WatchPeriod    time.Duration
+	WatchPodDevice bool
 }
 
 func NewNetworkDeviceWatcherConfig() NetworkDeviceWatcherConfig {
 	return NetworkDeviceWatcherConfig{
-		WatchPeriod: 10 * time.Second,
+		WatchPeriod:    10 * time.Second,
+		WatchPodDevice: true,
 	}
 }
 
@@ -116,7 +118,9 @@ func (w *NetworkDeviceWatcher) sync(ctx context.Context) error {
 	} else if msg.action == actionUnsubscribe && msg.ifaceType == ifaceTypeHost {
 		err = w.UnsubscribeFromHostDevice(ifaceName)
 	}
-	if err != nil && !errors.Is(err, modules.ErrDeviceNotFound) {
+	if errors.Is(err, modules.ErrDeviceNotFound) {
+		return nil
+	} else if err != nil {
 		select {
 		case <-ctx.Done():
 		case w.deviceToSync <- msg:
@@ -132,7 +136,7 @@ func (w *NetworkDeviceWatcher) watch(ctx context.Context) error {
 	}
 	newIfaces := make(map[string]ifaceKind)
 	for _, iface := range ifaces {
-		if w.isPodDevice(iface.Name) {
+		if w.isPodDevice(iface.Name) && w.WatchPodDevice {
 			newIfaces[iface.Name] = ifaceTypePod
 		} else if w.isHostDevice(iface.Name) {
 			newIfaces[iface.Name] = ifaceTypeHost
