@@ -77,6 +77,8 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 	var egressPodTrafficPerfEvents *ebpf.Map
 	if params.UseCiliumCCM {
 		egressPodTrafficPerfEvents = cepTrafficObjs.EgressCepTrafficEvents
+	} else {
+		egressPodTrafficPerfEvents = lxcTrafficObjs.EgressLxcTrafficEvents
 	}
 	readerParams := TrafficEventReaderParams{
 		ParentLogger:             logger,
