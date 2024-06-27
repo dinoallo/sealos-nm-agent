@@ -151,7 +151,7 @@ func (f *TrafficFactory) UnsubscribeFromPodDevice(ifaceName string) error {
 	}
 	if err := devHooker.DelFilterFromIngressQdisc(ingressFilterNameForPodDev); err != nil {
 		if errors.Is(err, hooker.ErrInterfaceNotExists) {
-			return errors.Join(err, modules.ErrDeviceNotFound)
+			return nil
 		}
 		return errors.Join(err, modules.ErrDeletingIngressFilter)
 	}
@@ -166,7 +166,7 @@ func (f *TrafficFactory) UnsubscribeFromHostDevice(ifaceName string) error {
 	}
 	if err := devHooker.DelFilterFromEgressQdisc(egressFilterNameForHostDev); err != nil {
 		if errors.Is(err, hooker.ErrInterfaceNotExists) {
-			return errors.Join(err, modules.ErrDeviceNotFound)
+			return nil
 		}
 		return errors.Join(err, modules.ErrDeletingEgressFilter)
 	}
@@ -197,7 +197,7 @@ func (f *TrafficFactory) UnsubscribeFromCep(eid int64) error {
 	}
 	if err := cepHooker.DetachAllHooks(); err != nil {
 		if errors.Is(err, hooker.ErrCiliumCCMNotExists) {
-			return errors.Join(err, modules.ErrCepNotFound)
+			return nil
 		}
 		return errors.Join(err, modules.ErrDetachingAllHooksFromCCM)
 	}
