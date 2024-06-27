@@ -25,14 +25,16 @@ var (
 )
 
 type NetworkDeviceWatcherConfig struct {
-	WatchPeriod    time.Duration
-	WatchPodDevice bool
+	WatchPeriod     time.Duration
+	WatchPodDevice  bool
+	WatchHostDevice bool
 }
 
 func NewNetworkDeviceWatcherConfig() NetworkDeviceWatcherConfig {
 	return NetworkDeviceWatcherConfig{
-		WatchPeriod:    10 * time.Second,
-		WatchPodDevice: true,
+		WatchPeriod:     10 * time.Second,
+		WatchPodDevice:  true,
+		WatchHostDevice: true,
 	}
 }
 
@@ -130,7 +132,7 @@ func (w *NetworkDeviceWatcher) watch(ctx context.Context) error {
 	for _, iface := range ifaces {
 		if w.isPodDevice(iface.Name) && w.WatchPodDevice {
 			newIfaces[iface.Name] = ifaceTypePod
-		} else if w.isHostDevice(iface.Name) {
+		} else if w.isHostDevice(iface.Name) && w.WatchHostDevice {
 			newIfaces[iface.Name] = ifaceTypeHost
 		}
 	}

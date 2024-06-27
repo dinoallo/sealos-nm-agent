@@ -100,6 +100,7 @@ func main() {
 	// initialize and start the network device watcher
 	ndwConfig := network_device.NewNetworkDeviceWatcherConfig()
 	ndwConfig.WatchPodDevice = !globalConfig.WatchCiliumEndpoint
+	ndwConfig.WatchHostDevice = globalConfig.WatchHost
 	nmNetLib := netlib.NewNMNetLib()
 	ndwParams := network_device.NetworkDeviceWatcherParams{
 		ParentLogger:               logger,
@@ -145,6 +146,7 @@ type GlobalConfig struct {
 	// cilium tail-calling our programs via custom call maps
 	// this feature requires using cilium as cni and enable custom call hook
 	WatchCiliumEndpoint             bool   `env:"WATCH_CILIUM_ENDPOINT"`
+	WatchHost                       bool   `env:"WATCH_HOST"`
 	DummyWatchedPodIP               string `env:"DUMMY_WATCHED_POD_IP"`
 	DummyWatchedHostIP              string `env:"DUMMY_WATCHED_HOST_IP"`
 	TrafficEventHandlerWorkerCount  int    `env:"TRAFFIC_EVENT_HANDLER_WORKER_COUNT"`
@@ -155,6 +157,7 @@ func NewGlobalConfig() *GlobalConfig {
 	return &GlobalConfig{
 		NoExportingTraffic:              false,
 		WatchCiliumEndpoint:             false,
+		WatchHost:                       true,
 		DummyWatchedPodIP:               "",
 		DummyWatchedHostIP:              "",
 		TrafficEventHandlerWorkerCount:  5,
