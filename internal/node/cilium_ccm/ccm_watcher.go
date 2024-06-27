@@ -106,14 +106,6 @@ func (w *CiliumCCMWatcher) sync(ctx context.Context) error {
 	} else if msg.action == actionUnsubscribe {
 		err = w.UnsubscribeFromCep(eid)
 	}
-	if errors.Is(err, modules.ErrCepNotFound) {
-		return nil
-	} else if err != nil {
-		select {
-		case <-ctx.Done():
-		case w.cepToSync <- msg:
-		}
-	}
 	return err
 }
 

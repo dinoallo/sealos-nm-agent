@@ -149,10 +149,7 @@ func (f *TrafficFactory) UnsubscribeFromPodDevice(ifaceName string) error {
 	if !loaded {
 		return nil
 	}
-	if err := devHooker.DelFilterFromIngressQdisc(ingressFilterNameForPodDev); err != nil {
-		if errors.Is(err, hooker.ErrInterfaceNotExists) {
-			return nil
-		}
+	if err := devHooker.DelFilterFromIngressQdisc(ingressFilterNameForPodDev); err != nil && !errors.Is(err, hooker.ErrInterfaceNotExists) {
 		return errors.Join(err, modules.ErrDeletingIngressFilter)
 	}
 	f.Debugf("pod device %v has been unsubscribed from", ifaceName)
@@ -164,10 +161,7 @@ func (f *TrafficFactory) UnsubscribeFromHostDevice(ifaceName string) error {
 	if !loaded {
 		return nil
 	}
-	if err := devHooker.DelFilterFromEgressQdisc(egressFilterNameForHostDev); err != nil {
-		if errors.Is(err, hooker.ErrInterfaceNotExists) {
-			return nil
-		}
+	if err := devHooker.DelFilterFromEgressQdisc(egressFilterNameForHostDev); err != nil && !errors.Is(err, hooker.ErrInterfaceNotExists) {
 		return errors.Join(err, modules.ErrDeletingEgressFilter)
 	}
 	f.Debugf("host device %v has been unsubscribed from", ifaceName)
@@ -195,10 +189,7 @@ func (f *TrafficFactory) UnsubscribeFromCep(eid int64) error {
 	if !loaded {
 		return nil
 	}
-	if err := cepHooker.DetachAllHooks(); err != nil {
-		if errors.Is(err, hooker.ErrCiliumCCMNotExists) {
-			return nil
-		}
+	if err := cepHooker.DetachAllHooks(); err != nil && !errors.Is(err, hooker.ErrCiliumCCMNotExists) {
 		return errors.Join(err, modules.ErrDetachingAllHooksFromCCM)
 	}
 	f.Debugf("cep %v has been unsubscribed from", eid)
