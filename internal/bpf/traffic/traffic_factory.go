@@ -191,7 +191,7 @@ func (f *TrafficFactory) UnsubscribeFromCep(eid int64) error {
 	if !loaded {
 		return nil
 	}
-	if err := cepHooker.DetachAllHooks(); err != nil && !errors.Is(err, hooker.ErrCiliumCCMNotExists) {
+	if err := f.detachAllHooks(cepHooker); err != nil && !errors.Is(err, hooker.ErrCiliumCCMNotExists) {
 		return errors.Join(err, modules.ErrDetachingAllHooksFromCCM)
 	}
 	f.Debugf("cep %v has been unsubscribed from", eid)
@@ -213,7 +213,7 @@ func (f *TrafficFactory) Close() {
 	}
 	f.devHookers.Range(delFilter)
 	detachHook := func(eid int64, cepHooker *hooker.CiliumCCMHooker) bool {
-		if err := cepHooker.DetachAllHooks(); err != nil {
+		if err := f.detachAllHooks(cepHooker); err != nil {
 			f.Error(err)
 		}
 		return true
@@ -222,6 +222,12 @@ func (f *TrafficFactory) Close() {
 	f.lxcTrafficObjs.Close()
 	f.hostTrafficObjs.Close()
 	f.cepTrafficObjs.Close()
+}
+
+func (f *TrafficFactory) detachAllHooks(cepHooker *hooker.CiliumCCMHooker) error {
+	var err error
+	err = cepHooker.DetachV4EgressHook()
+	return err
 }
 
 func getIfaceHash(ifaceName string) string {

@@ -7,7 +7,7 @@ require (
 	github.com/cilium/ebpf v0.15.0
 	github.com/puzpuzpuz/xsync v1.5.2
 	github.com/stretchr/testify v1.9.0
-	gitlab.com/dinoallo/sealos-networkmanager-library v0.0.0-20240627063825-87f3b7cf2153
+	gitlab.com/dinoallo/sealos-networkmanager-library v0.0.0-20240628100519-60721f1db2b8
 	golang.org/x/sync v0.6.0
 	golang.org/x/sys v0.21.0
 	google.golang.org/grpc v1.64.0

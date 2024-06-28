@@ -1,7 +1,9 @@
 package traffic
 
 import (
+	"encoding/binary"
 	"time"
+	"unsafe"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
 	netutil "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/net/util"
@@ -15,19 +17,25 @@ const (
 	Egress
 )
 
+var (
+	v4Proto = uint32(htons(unix.ETH_P_IP))
+	v6Proto = uint32(htons(unix.ETH_P_IPV6))
+)
+
 // this struct matches the event_t struct in c source code
 type trafficEventT struct {
-	Len      uint32
-	Family   uint32
-	Protocol uint32
-	DstIp4   uint32
-	SrcIp4   uint32
-	DstIp6   [4]uint32
-	SrcIp6   [4]uint32
-	SrcPort  uint32
-	DstPort  uint16
-	_        [2]byte
-	Identity uint32
+	Protocol   uint32
+	Len        uint32
+	Family     uint32
+	SkProtocol uint32
+	DstIp4     uint32
+	SrcIp4     uint32
+	DstIp6     [4]uint32
+	SrcIp6     [4]uint32
+	SrcPort    uint32
+	DstPort    uint16
+	_          [2]byte
+	Identity   uint32
 }
 
 func (_event *trafficEventT) convertToRawTrafficEvent() structs.RawTrafficEvent {
@@ -45,18 +53,18 @@ func (_event *trafficEventT) convertToRawTrafficEvent() structs.RawTrafficEvent 
 	// handle ipv4 and ipv6
 	var srcIP string
 	var dstIP string
-	if _event.Family == unix.AF_INET {
+	if _event.Protocol == v4Proto {
 		if _srcIP, ok := netutil.ToIP(_event.SrcIp4, nil, 4); ok {
 			srcIP = _srcIP.String()
 		}
 		if _dstIP, ok := netutil.ToIP(_event.DstIp4, nil, 4); ok {
 			dstIP = _dstIP.String()
 		}
-	} else if _event.Family == unix.AF_INET6 {
+	} else if _event.Protocol == v6Proto {
 		if _srcIP, ok := netutil.ToIP(0, _event.SrcIp6[:], 6); ok {
 			srcIP = _srcIP.String()
 		}
-		if _dstIP, ok := netutil.ToIP(0, _event.SrcIp6[:], 6); ok {
+		if _dstIP, ok := netutil.ToIP(0, _event.DstIp6[:], 6); ok {
 			dstIP = _dstIP.String()
 		}
 	} else {
@@ -67,4 +75,11 @@ func (_event *trafficEventT) convertToRawTrafficEvent() structs.RawTrafficEvent 
 	e.RawTrafficEventMeta.SrcPort = _event.SrcPort
 	e.RawTrafficEventMeta.DstPort = uint32(_event.DstPort)
 	return e
+}
+
+// https://github.com/chamaken/cgolmnl/blob/728c8fce1cb5d8ee97851dc9bd553c95515eb0b0/inet/inet.go#L28
+func htons(i uint16) uint16 {
+	b := make([]byte, 2)
+	binary.BigEndian.PutUint16(b, i)
+	return *(*uint16)(unsafe.Pointer(&b[0]))
 }
