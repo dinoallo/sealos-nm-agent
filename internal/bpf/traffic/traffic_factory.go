@@ -127,6 +127,9 @@ func (f *TrafficFactory) SubscribeToPodDevice(ifaceName string) error {
 	// attach to filter to ingress qdisc of a lxc device so that we can get egress traffic of a pod
 	// notice that this is not a bug since the ingress side of lxc device equals to the egress side of a pod (they are a veth pair)
 	if err := devHooker.AddFilterToIngressQdisc(ingressFilterNameForPodDev, f.lxcTrafficObjs.IngressLxcTrafficHook.FD()); err != nil {
+		if errors.Is(err, hooker.ErrClsactQdiscNotExists) {
+			return errors.Join(err, modules.ErrClsactQdiscNotFound)
+		}
 		return errors.Join(err, modules.ErrAddingIngressFilter)
 	}
 	f.Debugf("pod device %v has been subscribed to", ifaceName)
@@ -146,6 +149,9 @@ func (f *TrafficFactory) SubscribeToHostDevice(ifaceName string) error {
 		return nil
 	}
 	if err := devHooker.AddFilterToEgressQdisc(egressFilterNameForHostDev, f.hostTrafficObjs.EgressHostTrafficHook.FD()); err != nil {
+		if errors.Is(err, hooker.ErrClsactQdiscNotExists) {
+			return errors.Join(err, modules.ErrClsactQdiscNotFound)
+		}
 		return errors.Join(err, modules.ErrAddingEgressFilter)
 	}
 	f.Debugf("host device %v has been subscribed to", ifaceName)

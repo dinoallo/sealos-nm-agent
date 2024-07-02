@@ -62,6 +62,9 @@ func (w *CiliumCCMWatcher) Start(ctx context.Context) error {
 	if !w.Enabled {
 		return nil
 	}
+	if err := w.CheckCiliumTCRoot(); err != nil {
+		return err
+	}
 	go func() {
 		for {
 			if err := w.watch(ctx); err != nil {

@@ -14,6 +14,7 @@ type BPFTrafficFactory interface {
 var (
 	ErrDeviceNotFound                    = errors.New("this device cannot be found")
 	ErrCepNotFound                       = errors.New("this cilium endpoint cannot be found")
+	ErrClsactQdiscNotFound               = errors.New("failed to find the clsact qdisc of this device")
 	ErrAddingEgressFilter                = errors.New("failed to add filter at the egress side")
 	ErrAddingIngressFilter               = errors.New("failed to add filter at the ingress side")
 	ErrDeletingEgressFilter              = errors.New("failed to delete filter at the egress side")

@@ -109,6 +109,9 @@ func (w *NetworkDeviceWatcher) sync(ctx context.Context) error {
 	} else if msg.action == actionUnsubscribe && msg.ifaceType == ifaceTypeHost {
 		err = w.UnsubscribeFromHostDevice(ifaceName)
 	}
+	if errors.Is(err, modules.ErrClsactQdiscNotFound) {
+		w.deviceToSync <- msg
+	}
 	return err
 }
 
