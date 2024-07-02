@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"github.com/puzpuzpuz/xsync"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
@@ -28,21 +29,10 @@ type CepMsg struct {
 	action actionKind
 }
 
-type CiliumCCMWatcherConfig struct {
-	Enabled     bool
-	WatchPeriod time.Duration
-}
-
-func NewCiliumCCMWatcherConfig() CiliumCCMWatcherConfig {
-	return CiliumCCMWatcherConfig{
-		Enabled:     false,
-		WatchPeriod: time.Second * 10,
-	}
-}
-
 type CiliumCCMWatcherParams struct {
+	Enabled      bool
 	ParentLogger log.Logger
-	CiliumCCMWatcherConfig
+	conf.CiliumCCMWatcherConfig
 	modules.BPFTrafficFactory
 	ciliumbpffs.CiliumBPFFS_
 }

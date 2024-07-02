@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/mock"
 	"github.com/stretchr/testify/assert"
 	loglib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
@@ -15,7 +16,7 @@ import (
 var (
 	watchPeriod           = time.Second * 2
 	globalLogger          loglib.Logger
-	globalConfig          NetworkDeviceWatcherConfig
+	globalConfig          conf.NetworkDeviceWatcherConfig
 	dummyBPFTrafficModule = mock.NewDummyBPFTrafficModule()
 
 	ignoredDevices = []string{
@@ -133,7 +134,7 @@ func TestMain(m *testing.M) {
 		log.Printf("failed to initialize logger: %v", err)
 		return
 	}
-	globalConfig = NetworkDeviceWatcherConfig{
+	globalConfig = conf.NetworkDeviceWatcherConfig{
 		WatchPeriod: watchPeriod,
 	}
 	m.Run()

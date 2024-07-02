@@ -2,12 +2,6 @@ package modules
 
 import "errors"
 
-type BPFTrafficFactoryConfig struct {
-	ReaderMaxWorker  int  `env:"READER_MAX_WORKER"`
-	HandlerMaxWorker int  `env:"HANDLER_MAX_WORKER"`
-	UseCiliumCCM     bool `env:"USE_CILIUM_CCM"`
-}
-
 type BPFTrafficFactory interface {
 	SubscribeToPodDevice(ifaceName string) error
 	SubscribeToHostDevice(ifaceName string) error

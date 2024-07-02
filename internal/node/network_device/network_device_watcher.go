@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"github.com/puzpuzpuz/xsync"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
@@ -24,23 +25,11 @@ var (
 	ErrGettingInterfaces = errors.New("failed to get all interfaces")
 )
 
-type NetworkDeviceWatcherConfig struct {
-	WatchPeriod     time.Duration
+type NetworkDeviceWatcherParams struct {
+	ParentLogger    log.Logger
 	WatchPodDevice  bool
 	WatchHostDevice bool
-}
-
-func NewNetworkDeviceWatcherConfig() NetworkDeviceWatcherConfig {
-	return NetworkDeviceWatcherConfig{
-		WatchPeriod:     10 * time.Second,
-		WatchPodDevice:  true,
-		WatchHostDevice: true,
-	}
-}
-
-type NetworkDeviceWatcherParams struct {
-	ParentLogger log.Logger
-	NetworkDeviceWatcherConfig
+	conf.NetworkDeviceWatcherConfig
 	modules.BPFTrafficFactory
 	netlib.NetLib
 }

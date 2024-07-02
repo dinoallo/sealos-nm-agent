@@ -6,6 +6,7 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/perf"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"github.com/puzpuzpuz/xsync"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/bpf/hooker"
@@ -21,8 +22,11 @@ const (
 
 type TrafficFactoryParams struct {
 	ParentLogger log.Logger
-	modules.BPFTrafficFactoryConfig
-	modules.ExportTrafficService
+	UseCiliumCCM bool
+	conf.BPFTrafficFactoryConfig
+	modules.PodTrafficStore
+	modules.HostTrafficStore
+	modules.Classifier
 }
 
 type TrafficFactory struct {
@@ -64,7 +68,9 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 		HostEgressTrafficEvents:   hostEgressTrafficEvents,
 		PodEgressTrafficEvents:    podEgressTrafficEvents,
 		TrafficEventHandlerConfig: handlerConfig,
-		ExportTrafficService:      params.ExportTrafficService,
+		PodTrafficStore:           params.PodTrafficStore,
+		HostTrafficStore:          params.HostTrafficStore,
+		Classifier:                params.Classifier,
 	}
 	handler, err := NewTrafficEventHandler(handlerParams)
 	if err != nil {

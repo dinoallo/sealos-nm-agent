@@ -5,13 +5,17 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/cilium/ebpf/perf"
+	structsapi "github.com/dinoallo/sealos-networkmanager-agent/api/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
+	hashlib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/encoding/hash"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/host"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
+	taglib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/tag"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -28,7 +32,9 @@ type TrafficEventHandlerParams struct {
 	HostEgressTrafficEvents chan *perf.Record
 	PodEgressTrafficEvents  chan *perf.Record
 	TrafficEventHandlerConfig
-	modules.ExportTrafficService
+	modules.PodTrafficStore
+	modules.HostTrafficStore
+	modules.Classifier
 }
 
 type TrafficEventHandler struct {
@@ -38,8 +44,8 @@ type TrafficEventHandler struct {
 }
 
 func (h *TrafficEventHandler) Start(ctx context.Context) {
-	doHandling(ctx, h.MaxWorker, h.handleHostEgress, h.Logger)
-	doHandling(ctx, h.MaxWorker, h.handlePodEgress, h.Logger)
+	h.doHandling(ctx, h.MaxWorker, h.handlePodEgress)
+	h.doHandling(ctx, h.MaxWorker, h.handleHostEgress)
 }
 
 func NewTrafficEventHandler(params TrafficEventHandlerParams) (*TrafficEventHandler, error) {
@@ -59,29 +65,123 @@ func NewTrafficEventHandler(params TrafficEventHandlerParams) (*TrafficEventHand
 }
 
 func (h *TrafficEventHandler) handlePodEgress(ctx context.Context) error {
-	return _handle(ctx, h.PodEgressTrafficEvents, h.nativeEndian, h.SubmitRawPodTrafficEvent)
-}
-
-func (h *TrafficEventHandler) handleHostEgress(ctx context.Context) error {
-	return _handle(ctx, h.HostEgressTrafficEvents, h.nativeEndian, h.SubmitRawHostTrafficEvent)
-}
-
-func _handle(ctx context.Context, records chan *perf.Record, hostEndian binary.ByteOrder, submitFunc func(context.Context, structs.RawTrafficEvent) error) error {
 	select {
 	case <-ctx.Done():
 		return nil
-	case record := <-records:
+	case record := <-h.PodEgressTrafficEvents:
 		var e trafficEventT
-		if err := binary.Read(bytes.NewBuffer(record.RawSample), hostEndian, &e); err != nil {
+		if err := binary.Read(bytes.NewBuffer(record.RawSample), h.nativeEndian, &e); err != nil {
 			return errors.Join(err, modules.ErrReadingFromRawSample)
 		}
 		if e.Len <= 0 {
-			// If this traffic event doesn't have any data, do not submit anything
 			return nil
 		}
-		event := e.convertToRawTrafficEvent()
-		return submitWithTimeout(ctx, event, defaultSubmitTimeout, submitFunc)
+		item := e.convertToRawTraffic()
+		srcAddr := item.Meta.Src.IP
+		dstAddr := item.Meta.Dst.IP
+		srcAddrType, err := h.GetAddrType(srcAddr)
+		if err != nil {
+			return err
+		}
+		dstAddrType, err := h.GetAddrType(dstAddr)
+		if err != nil {
+			return err
+		}
+		if checkSkipped(srcAddrType, dstAddrType) {
+			return nil
+		}
+		if srcAddrType == modules.AddrTypePod {
+			if err := h.handleOutboundTrafficFromPod(ctx, item.Meta.Src, dstAddrType, &item); err != nil {
+				return err
+			}
+		}
 	}
+	return nil
+}
+
+func (h *TrafficEventHandler) handleHostEgress(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case record := <-h.HostEgressTrafficEvents:
+		var e trafficEventT
+		if err := binary.Read(bytes.NewBuffer(record.RawSample), h.nativeEndian, &e); err != nil {
+			return errors.Join(err, modules.ErrReadingFromRawSample)
+		}
+		if e.Len <= 0 {
+			return nil
+		}
+		item := e.convertToRawTraffic()
+		srcAddr := item.Meta.Src.IP
+		dstAddr := item.Meta.Dst.IP
+		srcAddrType, err := h.GetAddrType(srcAddr)
+		if err != nil {
+			return err
+		}
+		dstAddrType, err := h.GetAddrType(dstAddr)
+		if err != nil {
+			return err
+		}
+		if checkSkipped(srcAddrType, dstAddrType) {
+			return nil
+		}
+		if srcAddrType == modules.AddrTypeHost && dstAddrType == modules.AddrTypeWorld {
+			if err := h.handleOutBoundTrafficFromHost(ctx, item.Meta.Src, &item); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (h *TrafficEventHandler) handleOutboundTrafficFromPod(ctx context.Context, addrInfo structsapi.RawTrafficAddrInfo, dstAddrType modules.AddrType, item *structsapi.RawTraffic) error {
+	podAddr := addrInfo.IP
+	podPort := addrInfo.Port
+	podMeta, exists := h.GetPodMeta(podAddr)
+	if !exists {
+		//TODO: handle me
+		return nil
+	}
+	podMetric := structsapi.PodMetric{
+		SentBytes: uint64(item.DataBytes),
+		RecvBytes: 0,
+	}
+	// check if the outbound traffic is sent to world
+	if dstAddrType == modules.AddrTypeWorld {
+		tag := taglib.TagDstWorld
+		if err := h.updatePodMetric(ctx, podAddr, tag, podMeta, podMetric); err != nil {
+			return err
+		}
+		return nil
+	}
+	// check if the outbound traffic from exposed ports
+	isFromExposedPort, err := h.IsPortExposed(podAddr, podPort)
+	if err != nil {
+		return err
+	}
+	if isFromExposedPort && dstAddrType != modules.AddrTypePod {
+		tag := taglib.GetTagSrcPortN(podPort)
+		if err := h.updatePodMetric(ctx, podAddr, *tag, podMeta, podMetric); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (h *TrafficEventHandler) handleOutBoundTrafficFromHost(ctx context.Context, addrInfo structsapi.RawTrafficAddrInfo, item *structsapi.RawTraffic) error {
+	hostMetric := structsapi.HostTrafficMetric{
+		SentBytes: uint64(item.DataBytes),
+		RecvBytes: 0,
+	}
+	hostTrafficMeta := structsapi.HostTrafficMeta{
+		IP:   addrInfo.IP,
+		Port: addrInfo.Port,
+	}
+	hash := fmt.Sprintf("[%v]:%v", addrInfo.IP, addrInfo.Port)
+	if err := h.HostTrafficStore.Update(ctx, hash, hostTrafficMeta, hostMetric); err != nil {
+		return err
+	}
+	return nil
 }
 
 func submitWithTimeout(ctx context.Context, event structs.RawTrafficEvent, timeout time.Duration, submitFunc func(context.Context, structs.RawTrafficEvent) error) error {
@@ -93,23 +193,50 @@ func submitWithTimeout(ctx context.Context, event structs.RawTrafficEvent, timeo
 	return nil
 }
 
-func doHandling(ctx context.Context, workerCount int, handleFunc func(context.Context) error, logger log.Logger) {
-	wg := &errgroup.Group{}
-	wg.SetLimit(workerCount)
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				wg.Go(func() error {
-					if err := handleFunc(ctx); err != nil {
-						logger.Error("failed to handle: %v", err)
-						return err
-					}
+func (h *TrafficEventHandler) updatePodMetric(ctx context.Context, podAddr string, tag taglib.Tag, podMeta structsapi.PodMeta, podMetric structsapi.PodMetric) error {
+	podTrafficMeta := h.getPodTrafficMeta(podAddr, tag, podMeta)
+	at := hashlib.NewAT(podAddr, tag.TID)
+	atCode, err := at.Encode()
+	if err != nil {
+		return err
+	}
+	hash := atCode.String()
+	if err := h.PodTrafficStore.Update(ctx, hash, podTrafficMeta, podMetric); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (h *TrafficEventHandler) getPodTrafficMeta(addr string, tag taglib.Tag, _meta structsapi.PodMeta) structsapi.PodTrafficMeta {
+	return structsapi.PodTrafficMeta{
+		PodName:      _meta.Name,
+		PodNamespace: _meta.Namespace,
+		PodAddress:   addr,
+		TrafficTag:   tag.String,
+		PodType:      _meta.Type,
+		PodTypeName:  _meta.TypeName,
+	}
+}
+
+func (h *TrafficEventHandler) doHandling(ctx context.Context, workerCount int, handleFunc func(context.Context) error) {
+	eg := errgroup.Group{}
+	for i := 0; i < workerCount; i++ {
+		eg.Go(func() error {
+			for {
+				select {
+				case <-ctx.Done():
 					return nil
-				})
+				default:
+					if err := handleFunc(ctx); err != nil {
+						h.Errorf("failed to handle: %v", err)
+						continue
+					}
+				}
 			}
-		}
-	}()
+		})
+	}
+}
+
+func checkSkipped(srcAddrType modules.AddrType, dstAddrType modules.AddrType) bool {
+	return srcAddrType == modules.AddrTypeSkipped || srcAddrType == modules.AddrTypeUnknown || dstAddrType == modules.AddrTypeSkipped || dstAddrType == modules.AddrTypeUnknown
 }
