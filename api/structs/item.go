@@ -65,7 +65,7 @@ type PodTrafficMeta struct {
 	PodAddress   string `bson:"pod_address"`
 	TrafficTag   string `bson:"traffic_tag"`
 	PodType      int    `bson:"pod_type"`
-	PodTypeName  string `bson:"string"`
+	PodTypeName  string `bson:"pod_type_name"`
 }
 
 type PodTraffic struct {
