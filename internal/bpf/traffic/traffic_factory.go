@@ -119,11 +119,7 @@ func (f *TrafficFactory) SubscribeToPodDevice(ifaceName string) error {
 		return errors.Join(err, modules.ErrCreatingDeviceHooker)
 	}
 	ifaceHash := getIfaceHash(ifaceName)
-	devHooker, loaded := f.devHookers.LoadOrStore(ifaceHash, newDevHooker)
-	if loaded {
-		// this device has already been subscribed to
-		return nil
-	}
+	devHooker, _ := f.devHookers.LoadOrStore(ifaceHash, newDevHooker)
 	// attach to filter to ingress qdisc of a lxc device so that we can get egress traffic of a pod
 	// notice that this is not a bug since the ingress side of lxc device equals to the egress side of a pod (they are a veth pair)
 	if err := devHooker.AddFilterToIngressQdisc(ingressFilterNameForPodDev, f.lxcTrafficObjs.IngressLxcTrafficHook.FD()); err != nil {
@@ -144,10 +140,7 @@ func (f *TrafficFactory) SubscribeToHostDevice(ifaceName string) error {
 		return errors.Join(err, modules.ErrCreatingDeviceHooker)
 	}
 	ifaceHash := getIfaceHash(ifaceName)
-	devHooker, loaded := f.devHookers.LoadOrStore(ifaceHash, newDevHooker)
-	if loaded {
-		return nil
-	}
+	devHooker, _ := f.devHookers.LoadOrStore(ifaceHash, newDevHooker)
 	if err := devHooker.AddFilterToEgressQdisc(egressFilterNameForHostDev, f.hostTrafficObjs.EgressHostTrafficHook.FD()); err != nil {
 		if errors.Is(err, hooker.ErrClsactQdiscNotExists) {
 			return errors.Join(err, modules.ErrClsactQdiscNotFound)
@@ -184,10 +177,7 @@ func (f *TrafficFactory) UnsubscribeFromHostDevice(ifaceName string) error {
 
 func (f *TrafficFactory) SubscribeToCep(eid int64) error {
 	newCepHooker := hooker.NewCiliumCCMHooker(eid)
-	cepHooker, loaded := f.cepHookers.LoadOrStore(eid, newCepHooker)
-	if loaded {
-		return nil
-	}
+	cepHooker, _ := f.cepHookers.LoadOrStore(eid, newCepHooker)
 	if err := cepHooker.AttachV4EgressHook(f.cepTrafficObjs.EgressCepTrafficHook); err != nil {
 		if errors.Is(err, hooker.ErrCiliumCCMNotExists) {
 			return errors.Join(err, modules.ErrCepNotFound)
