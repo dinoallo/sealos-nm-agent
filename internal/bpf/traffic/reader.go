@@ -90,14 +90,14 @@ func (r *TrafficEventReader) readHostEgress(ctx context.Context) error {
 func (r *TrafficEventReader) readPodEgress(ctx context.Context) error {
 	record, err := r.podEgressPerfEventReader.Read()
 	if errors.Is(err, perf.ErrClosed) {
-		r.Infof("the reader is closed for pod ingress perf events")
+		r.Infof("the reader is closed for pod egress perf events")
 		return nil
 	} else if err != nil {
 		return errors.Join(err, modules.ErrReadingFromPerfEventReader)
 	}
 	//TODO: keep track of this
 	if record.LostSamples != 0 {
-		r.Infof("the perf event buffer for pod ingress is full, so %v samples were dropped", record.LostSamples)
+		r.Infof("the perf event buffer for pod egress is full, so %v samples were dropped", record.LostSamples)
 		return nil
 	}
 	sendCtx, cancel := context.WithTimeout(ctx, defaultSendTimeout)
