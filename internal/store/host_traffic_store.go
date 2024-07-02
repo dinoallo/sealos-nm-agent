@@ -42,7 +42,7 @@ func (s *HostTrafficStore) Start(ctx context.Context) error {
 	timeSeriesOpts := common.TimeSeriesOpts{
 		TimeField:   structs.HostTrafficTimeField,
 		MetaField:   structs.HostTrafficMetaField,
-		ExpireAfter: 1800, // TODO: make this configurable
+		ExpireAfter: 129600, // TODO: make this configurable
 	}
 	if err := s.CreateTimeSeriesColl(ctx, s.DefaultColl, timeSeriesOpts); err != nil {
 		if err == common.ErrCollectionAlreadyExists {
