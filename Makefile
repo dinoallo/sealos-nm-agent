@@ -57,7 +57,7 @@ oci-build-debug: generate
 	nerdctl build -t ${DEBUG_TAG} -f ./build/docker/main/Dockerfile.debug --output=type=image,oci-mediatypes=true .
 	
 .PHONY: oci-push-debug
-oci-push-debug: ## Push docker image with the agent.
+oci-push-debug: oci-build-debug ## Push docker image with the agent.
 	nerdctl push ${DEBUG_TAG}
 
 .PHONY: oci-publish-debug
@@ -69,3 +69,9 @@ oci-publish-debug: oci-build-debug
 oci-build-test: generate
 	nerdctl build -t ${TEST_TAG} -f ./build/docker/test/Dockerfile --output=type=image,oci-mediatypes=true .
 	nerdctl push ${TEST_TAG}
+
+# TODO: merge this into `make generate`
+protoc:
+	@echo "Generating Go files"
+	cd api/proto && protoc --go_out=. --go-grpc_out=. \
+		--go-grpc_opt=paths=source_relative --go_opt=paths=source_relative *.proto
