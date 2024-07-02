@@ -47,11 +47,13 @@ type HostTrafficMetric struct {
 	RecvBytes uint64 `bson:"recv_bytes"`
 }
 
+// TODO: merge this with PodTrafficMeta
 type PodMeta struct {
 	Name      string
 	Namespace string
 	Type      int
 	TypeName  string
+	Node      string
 }
 
 type PodMetric struct {
@@ -66,6 +68,7 @@ type PodTrafficMeta struct {
 	TrafficTag   string `bson:"traffic_tag"`
 	PodType      int    `bson:"pod_type"`
 	PodTypeName  string `bson:"pod_type_name"`
+	Node         string `bson:"node"`
 }
 
 type PodTraffic struct {

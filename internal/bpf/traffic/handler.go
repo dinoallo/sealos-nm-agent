@@ -215,6 +215,7 @@ func (h *TrafficEventHandler) getPodTrafficMeta(addr string, tag taglib.Tag, _me
 		TrafficTag:   tag.String,
 		PodType:      _meta.Type,
 		PodTypeName:  _meta.TypeName,
+		Node:         _meta.Node,
 	}
 }
 

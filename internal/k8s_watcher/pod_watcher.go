@@ -86,6 +86,7 @@ func (w *PodWatcher) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		Namespace: pod.Namespace,
 		Type:      int(podType),
 		TypeName:  podTypeName,
+		Node:      pod.Status.HostIP,
 	}
 	newPAT := newPodAddrTable()
 	pat, loaded := w.podAddrTables.LoadOrStore(podHash, newPAT)
