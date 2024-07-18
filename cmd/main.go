@@ -12,12 +12,9 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/classifier"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/k8s_watcher"
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/node/cilium_ccm"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/store"
 	"github.com/dinoallo/sealos-networkmanager-agent/mock"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
-	bpfcommon "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/bpf/common"
-	ciliumbpffs "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/bpf/fs"
 	dblib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/db"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/db/mongo"
 	loglib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
@@ -104,11 +101,6 @@ func main() {
 		return
 	}
 	defer closeTF()
-	// initialize and start the cep watcher if WatchCiliumEndpoint is set to true
-	// if err := startCCMWatcher(mainCtx); err != nil {
-	// 	printErr(err)
-	// 	return
-	// }
 	// init the main ctrl manager
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:         scheme,
@@ -200,24 +192,6 @@ func startCEPWatcher(ctx context.Context) error {
 	}
 	if err := cepw.SetupWithManager(mainMgr); err != nil {
 		return errors.Join(err, ErrStartingCepWatcher)
-	}
-	return nil
-}
-
-func startCCMWatcher(ctx context.Context) error {
-	ciliumBPFFS := ciliumbpffs.NewCiliumBPFFS(bpfcommon.DefaultCiliumTCRoot)
-	p := cilium_ccm.CiliumCCMWatcherParams{
-		ParentLogger:           mainLogger,
-		CiliumCCMWatcherConfig: globalConfig.CiliumCCMWatcherConfig,
-		BPFTrafficFactory:      mainTrafficFactory,
-		CiliumBPFFS_:           ciliumBPFFS,
-	}
-	ccmw, err := cilium_ccm.NewCiliumCCMWatcher(p)
-	if err != nil {
-		return errors.Join(err, ErrStartingCCMWatcher)
-	}
-	if err := ccmw.Start(ctx); err != nil {
-		return errors.Join(err, ErrStartingCCMWatcher)
 	}
 	return nil
 }

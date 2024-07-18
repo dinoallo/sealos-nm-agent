@@ -76,16 +76,6 @@ func NewPodTrafficStoreConfig() PodTrafficStoreConfig {
 	}
 }
 
-type CiliumCCMWatcherConfig struct { // envPrefix: CCMW_
-	WatchPeriod time.Duration `env:"WATCH_PERIOD"`
-}
-
-func NewCiliumCCMWatcherConfig() CiliumCCMWatcherConfig {
-	return CiliumCCMWatcherConfig{
-		WatchPeriod: time.Second * 10,
-	}
-}
-
 type CepWatcherConfig struct {
 	Host      string `env:"HOST"`
 	MaxWorker int    `env:"MAX_WORKER"`
@@ -122,7 +112,6 @@ type GlobalConfig struct {
 	DBConfig                `envPrefix:"DB_"`
 	BPFTrafficFactoryConfig `envPrefix:"TF_"`
 	CepWatcherConfig        `envPrefix:"CEPW_"`
-	CiliumCCMWatcherConfig  `envPrefix:"CCMW_"`
 	MockConfig              `envPrefix:"MOCK_"`
 }
 
@@ -132,7 +121,6 @@ func NewGlobalConfig() *GlobalConfig {
 		PodTrafficStoreConfig:   NewPodTrafficStoreConfig(),
 		DBConfig:                NewDBConfig(),
 		BPFTrafficFactoryConfig: NewBPFTrafficFactoryConfig(),
-		CiliumCCMWatcherConfig:  NewCiliumCCMWatcherConfig(),
 		CepWatcherConfig:        NewCepWatcherConfig(),
 		MockConfig:              NewMockConfig(),
 	}
