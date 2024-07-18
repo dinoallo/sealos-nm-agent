@@ -89,3 +89,7 @@ func GetServiceHash(svcName, svcNamespace string) string {
 func GetPodHash(podName, podNamespace string) string {
 	return fmt.Sprintf("%s/%s", podNamespace, podName)
 }
+
+func GetCepHash(cepName, cepNamespace string) string {
+	return fmt.Sprintf("%s/%s", cepName, cepNamespace)
+}

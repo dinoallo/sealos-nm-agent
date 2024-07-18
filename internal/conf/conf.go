@@ -86,6 +86,18 @@ func NewCiliumCCMWatcherConfig() CiliumCCMWatcherConfig {
 	}
 }
 
+type CepWatcherConfig struct {
+	Host      string `env:"HOST"`
+	MaxWorker int    `env:"MAX_WORKER"`
+}
+
+func NewCepWatcherConfig() CepWatcherConfig {
+	return CepWatcherConfig{
+		Host:      "",
+		MaxWorker: 5,
+	}
+}
+
 type MockConfig struct { // envPrefix: MOCK_
 	TrackedPodIP       string `env:"TRACKED_POD_IP"`
 	TrackedHostIP      string `env:"TRACKED_HOST_IP"`
@@ -105,27 +117,23 @@ func NewMockConfig() MockConfig {
 }
 
 type GlobalConfig struct {
-	// if this option is set to true, the agent will watch the cilium endpoints' custom call maps
-	// instead of their lxc devices, which also means the agent will receive traffic events by
-	// cilium tail-calling our programs via custom call maps
-	// this feature requires using cilium as cni and enable custom call hook
-	WatchCiliumEndpoint     bool `env:"WATCH_CILIUM_ENDPOINT"`
 	ClassifierConfig        `envPrefix:"CLS_"`
 	PodTrafficStoreConfig   `envPrefix:"PTS_"`
 	DBConfig                `envPrefix:"DB_"`
 	BPFTrafficFactoryConfig `envPrefix:"TF_"`
+	CepWatcherConfig        `envPrefix:"CEPW_"`
 	CiliumCCMWatcherConfig  `envPrefix:"CCMW_"`
 	MockConfig              `envPrefix:"MOCK_"`
 }
 
 func NewGlobalConfig() *GlobalConfig {
 	return &GlobalConfig{
-		WatchCiliumEndpoint:     true,
 		ClassifierConfig:        NewClassifierConfig(),
 		PodTrafficStoreConfig:   NewPodTrafficStoreConfig(),
 		DBConfig:                NewDBConfig(),
 		BPFTrafficFactoryConfig: NewBPFTrafficFactoryConfig(),
 		CiliumCCMWatcherConfig:  NewCiliumCCMWatcherConfig(),
+		CepWatcherConfig:        NewCepWatcherConfig(),
 		MockConfig:              NewMockConfig(),
 	}
 }

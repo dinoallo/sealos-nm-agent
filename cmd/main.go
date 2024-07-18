@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	cv2 "github.com/cilium/cilium/pkg/k8s/apis/cilium.io/v2"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/bpf/traffic"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/classifier"
@@ -24,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -48,6 +50,7 @@ var (
 	ErrCreatingCtrlManager     = errors.New("failed to create the ctrl manager")
 	ErrStartingPodWatcher      = errors.New("failed to start the pod watcher")
 	ErrStartingEpWatcher       = errors.New("failed to start the ep watcher")
+	ErrStartingCepWatcher      = errors.New("failed to start the cep watcher")
 	ErrStartingIngressWatcher  = errors.New("failed to start the ingress watcher")
 
 	scheme = runtime.NewScheme()
@@ -55,6 +58,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(cv2.AddToScheme(scheme))
 }
 
 func main() {
@@ -101,10 +105,10 @@ func main() {
 	}
 	defer closeTF()
 	// initialize and start the cep watcher if WatchCiliumEndpoint is set to true
-	if err := startCCMWatcher(mainCtx); err != nil {
-		printErr(err)
-		return
-	}
+	// if err := startCCMWatcher(mainCtx); err != nil {
+	// 	printErr(err)
+	// 	return
+	// }
 	// init the main ctrl manager
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:         scheme,
@@ -115,6 +119,10 @@ func main() {
 		return
 	}
 	mainMgr = mgr
+	if err := startCEPWatcher(mainCtx); err != nil {
+		printErr(err)
+		return
+	}
 	// start the port exposure checker
 	if err := startPortExposureChecker(); err != nil {
 		printErr(err)
@@ -178,12 +186,29 @@ func startTrafficFactory(ctx context.Context) (error, func()) {
 	return nil, closeTF
 }
 
+func startCEPWatcher(ctx context.Context) error {
+	params := k8s_watcher.CepWatcherParams{
+		Client:            mainMgr.GetClient(),
+		Scheme:            mainMgr.GetScheme(),
+		ParentLogger:      mainLogger,
+		BPFTrafficFactory: mainTrafficFactory,
+		CepWatcherConfig:  globalConfig.CepWatcherConfig,
+	}
+	cepw, err := k8s_watcher.NewCepWatcher(params)
+	if err != nil {
+		return err
+	}
+	if err := cepw.SetupWithManager(mainMgr); err != nil {
+		return errors.Join(err, ErrStartingCepWatcher)
+	}
+	return nil
+}
+
 func startCCMWatcher(ctx context.Context) error {
 	ciliumBPFFS := ciliumbpffs.NewCiliumBPFFS(bpfcommon.DefaultCiliumTCRoot)
 	p := cilium_ccm.CiliumCCMWatcherParams{
 		ParentLogger:           mainLogger,
 		CiliumCCMWatcherConfig: globalConfig.CiliumCCMWatcherConfig,
-		Enabled:                globalConfig.WatchCiliumEndpoint,
 		BPFTrafficFactory:      mainTrafficFactory,
 		CiliumBPFFS_:           ciliumBPFFS,
 	}
