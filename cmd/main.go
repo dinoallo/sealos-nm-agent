@@ -12,7 +12,6 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/k8s_watcher"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/node/cilium_ccm"
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/node/network_device"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/store"
 	"github.com/dinoallo/sealos-networkmanager-agent/mock"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
@@ -22,7 +21,6 @@ import (
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/db/mongo"
 	loglib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
 	zaplog "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log/zap"
-	netlib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/net"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -33,7 +31,6 @@ var (
 	mainDB                  dblib.DB
 	mainClassifier          modules.Classifier
 	mainPodTrafficStore     modules.PodTrafficStore
-	mainHostTrafficStore    modules.HostTrafficStore
 	mainTrafficFactory      modules.BPFTrafficFactory
 	mainPortExposureChecker modules.PortExposureChecker
 
@@ -41,19 +38,17 @@ var (
 	mainMgr      ctrl.Manager
 	globalConfig *conf.GlobalConfig
 
-	ErrInitingGlobalConfig          = errors.New("failed to init the global config")
-	ErrStartingDB                   = errors.New("failed to start the database")
-	ErrStartingTrafficFactory       = errors.New("failed to start the traffic factory")
-	ErrStartingNetworkDeviceWatcher = errors.New("failed to start the network device watcher")
-	ErrStartingCCMWatcher           = errors.New("failed to start the cilium ccm watcher")
-	ErrStartingClassifier           = errors.New("failed to start the classifier")
-	ErrStartingPodTrafficStore      = errors.New("failed to start the pod traffic store")
-	ErrStartingHostTrafficStore     = errors.New("failed to start the host traffic store")
-	ErrStartingCtrlManager          = errors.New("failed to start the ctrl manager")
-	ErrCreatingCtrlManager          = errors.New("failed to create the ctrl manager")
-	ErrStartingPodWatcher           = errors.New("failed to start the pod watcher")
-	ErrStartingEpWatcher            = errors.New("failed to start the ep watcher")
-	ErrStartingIngressWatcher       = errors.New("failed to start the ingress watcher")
+	ErrInitingGlobalConfig     = errors.New("failed to init the global config")
+	ErrStartingDB              = errors.New("failed to start the database")
+	ErrStartingTrafficFactory  = errors.New("failed to start the traffic factory")
+	ErrStartingCCMWatcher      = errors.New("failed to start the cilium ccm watcher")
+	ErrStartingClassifier      = errors.New("failed to start the classifier")
+	ErrStartingPodTrafficStore = errors.New("failed to start the pod traffic store")
+	ErrStartingCtrlManager     = errors.New("failed to start the ctrl manager")
+	ErrCreatingCtrlManager     = errors.New("failed to create the ctrl manager")
+	ErrStartingPodWatcher      = errors.New("failed to start the pod watcher")
+	ErrStartingEpWatcher       = errors.New("failed to start the ep watcher")
+	ErrStartingIngressWatcher  = errors.New("failed to start the ingress watcher")
 
 	scheme = runtime.NewScheme()
 )
@@ -84,11 +79,6 @@ func main() {
 		printErr(err)
 		return
 	}
-	// start the host traffic store
-	if err := startHostTrafficStore(mainCtx); err != nil {
-		printErr(err)
-		return
-	}
 	// start the pod traffic store
 	if err := startPodTrafficStore(mainCtx); err != nil {
 		printErr(err)
@@ -110,11 +100,6 @@ func main() {
 		return
 	}
 	defer closeTF()
-	// initialize and start the network device watcher
-	if err := startNetworkDeviceWatcher(mainCtx); err != nil {
-		printErr(err)
-		return
-	}
 	// initialize and start the cep watcher if WatchCiliumEndpoint is set to true
 	if err := startCCMWatcher(mainCtx); err != nil {
 		printErr(err)
@@ -178,8 +163,6 @@ func startTrafficFactory(ctx context.Context) (error, func()) {
 	p := traffic.TrafficFactoryParams{
 		ParentLogger:            mainLogger,
 		BPFTrafficFactoryConfig: globalConfig.BPFTrafficFactoryConfig,
-		UseCiliumCCM:            globalConfig.WatchCiliumEndpoint,
-		HostTrafficStore:        mainHostTrafficStore,
 		PodTrafficStore:         mainPodTrafficStore,
 		Classifier:              mainClassifier,
 	}
@@ -193,26 +176,6 @@ func startTrafficFactory(ctx context.Context) (error, func()) {
 	}
 	mainTrafficFactory = tf
 	return nil, closeTF
-}
-
-func startNetworkDeviceWatcher(ctx context.Context) error {
-	nmNetLib := netlib.NewNMNetLib()
-	p := network_device.NetworkDeviceWatcherParams{
-		ParentLogger:               mainLogger,
-		WatchPodDevice:             !globalConfig.WatchCiliumEndpoint,
-		WatchHostDevice:            globalConfig.WatchHost,
-		NetworkDeviceWatcherConfig: globalConfig.NetworkDeviceWatcherConfig,
-		BPFTrafficFactory:          mainTrafficFactory,
-		NetLib:                     nmNetLib,
-	}
-	dw, err := network_device.NewNetworkDeviceWatcher(p)
-	if err != nil {
-		return errors.Join(err, ErrStartingNetworkDeviceWatcher)
-	}
-	if err := dw.Start(ctx); err != nil {
-		return errors.Join(err, ErrStartingNetworkDeviceWatcher)
-	}
-	return nil
 }
 
 func startCCMWatcher(ctx context.Context) error {
@@ -279,29 +242,6 @@ func startPodTrafficStore(ctx context.Context) error {
 		mockConfig := globalConfig.MockConfig
 		s := mock.NewDummyPodTrafficStore(mockConfig.TrackedPodIP)
 		mainPodTrafficStore = s
-	}
-	return nil
-}
-
-func startHostTrafficStore(ctx context.Context) error {
-	config := globalConfig.HostTrafficStoreConfig
-	params := store.HostTrafficStoreParams{
-		DB:                     mainDB,
-		HostTrafficStoreConfig: config,
-	}
-	if config.Enabled {
-		s, err := store.NewHostTrafficStore(params)
-		if err != nil {
-			return errors.Join(err, ErrStartingHostTrafficStore)
-		}
-		mainHostTrafficStore = s
-		if err := s.Start(ctx); err != nil {
-			return errors.Join(err, ErrStartingHostTrafficStore)
-		}
-	} else {
-		mockConfig := globalConfig.MockConfig
-		s := mock.NewDummyHostTrafficStore(mockConfig.TrackedHostIP)
-		mainHostTrafficStore = s
 	}
 	return nil
 }

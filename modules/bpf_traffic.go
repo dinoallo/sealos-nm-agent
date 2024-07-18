@@ -3,11 +3,7 @@ package modules
 import "errors"
 
 type BPFTrafficFactory interface {
-	SubscribeToPodDevice(ifaceName string) error
-	SubscribeToHostDevice(ifaceName string) error
 	SubscribeToCep(eid int64) error
-	UnsubscribeFromPodDevice(ifaceName string) error
-	UnsubscribeFromHostDevice(ifaceName string) error
 	UnsubscribeFromCep(eid int64) error
 }
 

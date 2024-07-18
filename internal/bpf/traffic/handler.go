@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/cilium/ebpf/perf"
@@ -28,12 +27,10 @@ type TrafficEventHandlerConfig struct {
 }
 
 type TrafficEventHandlerParams struct {
-	ParentLogger            log.Logger
-	HostEgressTrafficEvents chan *perf.Record
-	PodEgressTrafficEvents  chan *perf.Record
+	ParentLogger           log.Logger
+	PodEgressTrafficEvents chan *perf.Record
 	TrafficEventHandlerConfig
 	modules.PodTrafficStore
-	modules.HostTrafficStore
 	modules.Classifier
 }
 
@@ -45,7 +42,6 @@ type TrafficEventHandler struct {
 
 func (h *TrafficEventHandler) Start(ctx context.Context) {
 	h.doHandling(ctx, h.MaxWorker, h.handlePodEgress)
-	h.doHandling(ctx, h.MaxWorker, h.handleHostEgress)
 }
 
 func NewTrafficEventHandler(params TrafficEventHandlerParams) (*TrafficEventHandler, error) {
@@ -99,41 +95,6 @@ func (h *TrafficEventHandler) handlePodEgress(ctx context.Context) error {
 	return nil
 }
 
-func (h *TrafficEventHandler) handleHostEgress(ctx context.Context) error {
-	select {
-	case <-ctx.Done():
-		return nil
-	case record := <-h.HostEgressTrafficEvents:
-		var e trafficEventT
-		if err := binary.Read(bytes.NewBuffer(record.RawSample), h.nativeEndian, &e); err != nil {
-			return errors.Join(err, modules.ErrReadingFromRawSample)
-		}
-		if e.Len <= 0 {
-			return nil
-		}
-		item := e.convertToRawTraffic()
-		srcAddr := item.Meta.Src.IP
-		dstAddr := item.Meta.Dst.IP
-		srcAddrType, err := h.GetAddrType(srcAddr)
-		if err != nil {
-			return err
-		}
-		dstAddrType, err := h.GetAddrType(dstAddr)
-		if err != nil {
-			return err
-		}
-		if checkSkipped(srcAddrType, dstAddrType) {
-			return nil
-		}
-		if srcAddrType == modules.AddrTypeHost && dstAddrType == modules.AddrTypeWorld {
-			if err := h.handleOutBoundTrafficFromHost(ctx, item.Meta.Src, &item); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
 func (h *TrafficEventHandler) handleOutboundTrafficFromPod(ctx context.Context, addrInfo structsapi.RawTrafficAddrInfo, dstAddrType modules.AddrType, item *structsapi.RawTraffic) error {
 	podAddr := addrInfo.IP
 	podPort := addrInfo.Port
@@ -164,22 +125,6 @@ func (h *TrafficEventHandler) handleOutboundTrafficFromPod(ctx context.Context, 
 		if err := h.updatePodMetric(ctx, podAddr, *tag, podMeta, podMetric); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func (h *TrafficEventHandler) handleOutBoundTrafficFromHost(ctx context.Context, addrInfo structsapi.RawTrafficAddrInfo, item *structsapi.RawTraffic) error {
-	hostMetric := structsapi.HostTrafficMetric{
-		SentBytes: uint64(item.DataBytes),
-		RecvBytes: 0,
-	}
-	hostTrafficMeta := structsapi.HostTrafficMeta{
-		IP:   addrInfo.IP,
-		Port: addrInfo.Port,
-	}
-	hash := fmt.Sprintf("[%v]:%v", addrInfo.IP, addrInfo.Port)
-	if err := h.HostTrafficStore.Update(ctx, hash, hostTrafficMeta, hostMetric); err != nil {
-		return err
 	}
 	return nil
 }

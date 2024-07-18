@@ -76,42 +76,6 @@ func NewPodTrafficStoreConfig() PodTrafficStoreConfig {
 	}
 }
 
-type HostTrafficStoreConfig struct { // envPrefix: HTS_
-	Enabled               bool          `env:"ENABLED"`
-	DefaultColl           string        `env:"DEFAULT_COLL"`
-	MaxWorkerCount        int           `env:"MAX_WORKER_COUNT"`
-	FlushTimeout          time.Duration `env:"FLUSH_TIMEOUT"`
-	GetBatchTimeout       time.Duration `env:"GET_BATCH_TIMEOUT"`
-	BatchSize             int           `env:"BATCH_SIZE"`
-	CacheEntryTTL         time.Duration `env:"CACHE_ENTRY_TTL"`
-	CacheExpiredEntrySize int           `env:"CACHE_EXPIRED_ENTRY_SIZE"`
-	CacheEntrySize        int           `env:"CACHE_ENTRY_SIZE"`
-}
-
-func NewHostTrafficStoreConfig() HostTrafficStoreConfig {
-	return HostTrafficStoreConfig{
-		Enabled:               true,
-		DefaultColl:           "host_traffic",
-		MaxWorkerCount:        5,
-		FlushTimeout:          time.Second * 5,
-		GetBatchTimeout:       time.Second * 5,
-		BatchSize:             100,
-		CacheEntryTTL:         time.Second * 60,
-		CacheExpiredEntrySize: 1e4,
-		CacheEntrySize:        1e6,
-	}
-}
-
-type NetworkDeviceWatcherConfig struct { // envPrefix: NDW_
-	WatchPeriod time.Duration `env:"WATCH_PERIOD"`
-}
-
-func NewNetworkDeviceWatcherConfig() NetworkDeviceWatcherConfig {
-	return NetworkDeviceWatcherConfig{
-		WatchPeriod: 10 * time.Second,
-	}
-}
-
 type CiliumCCMWatcherConfig struct { // envPrefix: CCMW_
 	WatchPeriod time.Duration `env:"WATCH_PERIOD"`
 }
@@ -145,30 +109,24 @@ type GlobalConfig struct {
 	// instead of their lxc devices, which also means the agent will receive traffic events by
 	// cilium tail-calling our programs via custom call maps
 	// this feature requires using cilium as cni and enable custom call hook
-	WatchCiliumEndpoint        bool `env:"WATCH_CILIUM_ENDPOINT"`
-	WatchHost                  bool `env:"WATCH_HOST"`
-	ClassifierConfig           `envPrefix:"CLS_"`
-	PodTrafficStoreConfig      `envPrefix:"PTS_"`
-	HostTrafficStoreConfig     `envPrefix:"HTS_"`
-	DBConfig                   `envPrefix:"DB_"`
-	BPFTrafficFactoryConfig    `envPrefix:"TF_"`
-	NetworkDeviceWatcherConfig `envPrefix:"NDW_"`
-	CiliumCCMWatcherConfig     `envPrefix:"CCMW_"`
-	MockConfig                 `envPrefix:"MOCK_"`
+	WatchCiliumEndpoint     bool `env:"WATCH_CILIUM_ENDPOINT"`
+	ClassifierConfig        `envPrefix:"CLS_"`
+	PodTrafficStoreConfig   `envPrefix:"PTS_"`
+	DBConfig                `envPrefix:"DB_"`
+	BPFTrafficFactoryConfig `envPrefix:"TF_"`
+	CiliumCCMWatcherConfig  `envPrefix:"CCMW_"`
+	MockConfig              `envPrefix:"MOCK_"`
 }
 
 func NewGlobalConfig() *GlobalConfig {
 	return &GlobalConfig{
-		WatchCiliumEndpoint:        true,
-		WatchHost:                  true,
-		ClassifierConfig:           NewClassifierConfig(),
-		PodTrafficStoreConfig:      NewPodTrafficStoreConfig(),
-		HostTrafficStoreConfig:     NewHostTrafficStoreConfig(),
-		DBConfig:                   NewDBConfig(),
-		BPFTrafficFactoryConfig:    NewBPFTrafficFactoryConfig(),
-		NetworkDeviceWatcherConfig: NewNetworkDeviceWatcherConfig(),
-		CiliumCCMWatcherConfig:     NewCiliumCCMWatcherConfig(),
-		MockConfig:                 NewMockConfig(),
+		WatchCiliumEndpoint:     true,
+		ClassifierConfig:        NewClassifierConfig(),
+		PodTrafficStoreConfig:   NewPodTrafficStoreConfig(),
+		DBConfig:                NewDBConfig(),
+		BPFTrafficFactoryConfig: NewBPFTrafficFactoryConfig(),
+		CiliumCCMWatcherConfig:  NewCiliumCCMWatcherConfig(),
+		MockConfig:              NewMockConfig(),
 	}
 }
 
