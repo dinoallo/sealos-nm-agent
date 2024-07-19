@@ -8,46 +8,65 @@ char __license[] SEC("license") = "Dual MIT/GPL";
 const struct event_t *unused_cep_traffic_event __attribute__((unused));
 
 struct {
-  __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-  __uint(key_size, sizeof(u32));
-  __uint(value_size, sizeof(u32));
+  __uint(type, BPF_MAP_TYPE_RINGBUF);
+  __uint(max_entries, 256 * 1024); // 256KB
 } egress_cep_traffic_events SEC(".maps");
 
 struct {
-  __uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-  __uint(key_size, sizeof(u32));
-  __uint(value_size, sizeof(u32));
+  __uint(type, BPF_MAP_TYPE_RINGBUF);
+  __uint(max_entries, 256 * 1024);
 } ingress_cep_traffic_events SEC(".maps");
 
 static __always_inline void submit_egress_traffic(struct __sk_buff *ctx,
                                                   u32 identity) {
-  struct event_t event = {};
-  event.len = ctx->len;
-  event.identity = identity;
-  event.protocol = ctx->protocol;
+
   struct bpf_sock *sk = ctx->sk;
   if (!sk) {
     return;
   }
   sk = bpf_sk_fullsock(sk);
-  marshal(&event, sk);
-  bpf_perf_event_output(ctx, &egress_cep_traffic_events, BPF_F_CURRENT_CPU,
-                        &event, sizeof(struct event_t));
+  if (!sk) {
+    return;
+  }
+
+  struct event_t *e = bpf_ringbuf_reserve(&egress_cep_traffic_events,
+                                          sizeof(struct event_t), 0);
+  if (!e)
+    return;
+  // From now on, if we need to return early before `bpf_ringbuf_submit`, we
+  // need to explicitly call `bpf_ringbuf_discard`
+  e->len = ctx->len;
+  e->identity = identity;
+  e->protocol = ctx->protocol;
+
+  marshal(e, sk);
+
+  bpf_ringbuf_submit(e, 0);
+  return;
 }
 static __always_inline void submit_ingress_traffic(struct __sk_buff *ctx,
                                                    u32 identity) {
-  struct event_t event = {};
-  event.len = ctx->len;
-  event.identity = identity;
-  event.protocol = ctx->protocol;
   struct bpf_sock *sk = ctx->sk;
   if (!sk) {
     return;
   }
   sk = bpf_sk_fullsock(sk);
-  marshal(&event, sk);
-  bpf_perf_event_output(ctx, &ingress_cep_traffic_events, BPF_F_CURRENT_CPU,
-                        &event, sizeof(struct event_t));
+  if (!sk) {
+    return;
+  }
+
+  struct event_t *e = bpf_ringbuf_reserve(&ingress_cep_traffic_events,
+                                          sizeof(struct event_t), 0);
+  if (!e)
+    return;
+  e->len = ctx->len;
+  e->identity = identity;
+  e->protocol = ctx->protocol;
+
+  marshal(e, sk);
+
+  bpf_ringbuf_submit(e, 0);
+  return;
 }
 
 SEC("classifier")

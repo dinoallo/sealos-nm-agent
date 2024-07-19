@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/ringbuf"
 	structsapi "github.com/dinoallo/sealos-networkmanager-agent/api/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
@@ -27,8 +27,8 @@ type TrafficEventHandlerConfig struct {
 }
 
 type TrafficEventHandlerParams struct {
-	ParentLogger           log.Logger
-	PodEgressTrafficEvents chan *perf.Record
+	ParentLogger            log.Logger
+	PodEgressTrafficRecords chan *ringbuf.Record
 	TrafficEventHandlerConfig
 	modules.PodTrafficStore
 	modules.Classifier
@@ -64,7 +64,7 @@ func (h *TrafficEventHandler) handlePodEgress(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return nil
-	case record := <-h.PodEgressTrafficEvents:
+	case record := <-h.PodEgressTrafficRecords:
 		var e trafficEventT
 		if err := binary.Read(bytes.NewBuffer(record.RawSample), h.nativeEndian, &e); err != nil {
 			return errors.Join(err, modules.ErrReadingFromRawSample)

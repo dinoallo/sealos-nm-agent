@@ -7,6 +7,8 @@ import (
 	"os"
 
 	cv2 "github.com/cilium/cilium/pkg/k8s/apis/cilium.io/v2"
+	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/features"
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/bpf/traffic"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/classifier"
@@ -60,6 +62,11 @@ func init() {
 
 func main() {
 	mainCtx := ctrl.SetupSignalHandler()
+	err := preCheck()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "prechecking failed: %v", err)
+		os.Exit(1)
+	}
 	// init the main logger
 	logger, err := zaplog.NewZap(true)
 	if err != nil {
@@ -139,6 +146,17 @@ func main() {
 	if err := mainMgr.Start(mainCtx); err != nil {
 		printErr(errors.Join(err, ErrStartingCtrlManager))
 		return
+	}
+}
+
+func preCheck() error {
+	err := features.HaveMapType(ebpf.RingBuf)
+	if err == nil {
+		return nil
+	} else if err == ebpf.ErrNotSupported {
+		return fmt.Errorf("the kernel doesn't support bpf ringbuf so the agent cannot start: %v. maybe try upgrading kernel to at least 5.8", err)
+	} else {
+		return fmt.Errorf("failed to probe for ringbuf feature: %v", err)
 	}
 }
 

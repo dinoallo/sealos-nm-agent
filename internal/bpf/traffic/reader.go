@@ -3,12 +3,13 @@ package traffic
 import (
 	"context"
 	"errors"
+	"os"
 	"time"
 
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
 
 	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/ringbuf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"golang.org/x/sync/errgroup"
 )
@@ -18,20 +19,20 @@ const (
 )
 
 type TrafficEventReaderConfig struct {
-	MaxWorker           int
-	PerfEventBufferSize int
+	MaxWorker      int
+	ReadingTimeout time.Duration
 }
 
 type TrafficEventReaderParams struct {
-	ParentLogger        log.Logger
-	PodEgressPerfEvents *ebpf.Map
-	PodEgressEvents     chan *perf.Record
+	ParentLogger     log.Logger
+	PodEgressEvents  *ebpf.Map
+	PodEgressRecords chan *ringbuf.Record
 	TrafficEventReaderConfig
 }
 
 type TrafficEventReader struct {
 	log.Logger
-	podEgressPerfEventReader *perf.Reader //TODO: implement ringbuf reader
+	podEgressEventReader *ringbuf.Reader
 	TrafficEventReaderParams
 }
 
@@ -40,56 +41,30 @@ func NewTrafficEventReader(params TrafficEventReaderParams) (*TrafficEventReader
 	if err != nil {
 		return nil, errors.Join(err, modules.ErrCreatingLogger)
 	}
-	podEgressPerfEventReader, err := perf.NewReader(params.PodEgressPerfEvents, params.PerfEventBufferSize)
+	podEgressEventReader, err := ringbuf.NewReader(params.PodEgressEvents)
 	if err != nil {
-		return nil, errors.Join(err, modules.ErrCreatingPodEgressPerfEventReader)
+		return nil, errors.Join(err, modules.ErrCreatingPodEgressEventRingBufReader)
 	}
 	return &TrafficEventReader{
 		Logger:                   logger,
-		podEgressPerfEventReader: podEgressPerfEventReader,
+		podEgressEventReader:     podEgressEventReader,
 		TrafficEventReaderParams: params,
 	}, nil
 }
 
 func (r *TrafficEventReader) Start(ctx context.Context) {
-	doReading(ctx, r.MaxWorker, r.readPodEgress, r.Logger)
-}
-
-func (r *TrafficEventReader) readPodEgress(ctx context.Context) error {
-	record, err := r.podEgressPerfEventReader.Read()
-	if errors.Is(err, perf.ErrClosed) {
-		r.Infof("the reader is closed for pod egress perf events")
-		return nil
-	} else if err != nil {
-		return errors.Join(err, modules.ErrReadingFromPerfEventReader)
-	}
-	//TODO: keep track of this
-	if record.LostSamples != 0 {
-		r.Infof("the perf event buffer for pod egress is full, so %v samples were dropped", record.LostSamples)
-		return nil
-	}
-	sendCtx, cancel := context.WithTimeout(ctx, defaultSendTimeout)
-	defer cancel()
-	select {
-	case <-sendCtx.Done():
-		return nil
-	case r.PodEgressEvents <- &record:
-		return nil
-	}
-}
-
-func doReading(ctx context.Context, workerCount int, readFunc func(context.Context) error, logger log.Logger) {
 	wg := errgroup.Group{}
-	wg.SetLimit(workerCount)
+	wg.SetLimit(r.MaxWorker)
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
+				r.podEgressEventReader.Close()
 				return
 			default:
 				wg.Go(func() error {
-					if err := readFunc(ctx); err != nil {
-						logger.Error("failed to read: %v", err)
+					if err := r.readPodEgress(ctx); err != nil {
+						r.Error("failed to read: %v", err)
 						return err
 					}
 					return nil
@@ -97,4 +72,27 @@ func doReading(ctx context.Context, workerCount int, readFunc func(context.Conte
 			}
 		}
 	}()
+}
+
+func (r *TrafficEventReader) readPodEgress(ctx context.Context) error {
+	r.podEgressEventReader.SetDeadline(time.Now().Add(r.ReadingTimeout))
+	record, err := r.podEgressEventReader.Read()
+	if errors.Is(err, ringbuf.ErrClosed) {
+		r.Infof("the reader is closed for pod egress events")
+		return nil
+	} else if errors.Is(err, os.ErrDeadlineExceeded) {
+		r.Errorf("timeout getting a pod egress record")
+		return nil
+	} else if err != nil {
+		return errors.Join(err, modules.ErrReadingFromEventRingBufReader)
+	}
+	//TODO: keep track of record.Remaining
+	sendCtx, cancel := context.WithTimeout(ctx, defaultSendTimeout)
+	defer cancel()
+	select {
+	case <-sendCtx.Done():
+		return nil
+	case r.PodEgressRecords <- &record:
+		return nil
+	}
 }

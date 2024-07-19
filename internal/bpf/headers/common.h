@@ -24,7 +24,7 @@ struct event_t {
 
 static __always_inline void marshal(struct event_t *event,
                                     const struct bpf_sock *sk) {
-  if (!sk) {
+  if (!sk || !event) {
     return;
   }
   event->sk_protocol = sk->protocol;

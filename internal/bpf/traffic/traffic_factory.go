@@ -3,9 +3,10 @@ package traffic
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/cilium/ebpf"
-	"github.com/cilium/ebpf/perf"
+	"github.com/cilium/ebpf/ringbuf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"github.com/puzpuzpuz/xsync"
@@ -45,13 +46,13 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 	if err := loadCep_trafficObjects(&cepTrafficObjs, nil); err != nil {
 		return nil, errors.Join(err, modules.ErrLoadingCepTrafficObjs)
 	}
-	podEgressTrafficEvents := make(chan *perf.Record)
+	podEgressTrafficRecords := make(chan *ringbuf.Record)
 	handlerConfig := TrafficEventHandlerConfig{
 		MaxWorker: params.HandlerMaxWorker,
 	}
 	handlerParams := TrafficEventHandlerParams{
 		ParentLogger:              logger,
-		PodEgressTrafficEvents:    podEgressTrafficEvents,
+		PodEgressTrafficRecords:   podEgressTrafficRecords,
 		TrafficEventHandlerConfig: handlerConfig,
 		PodTrafficStore:           params.PodTrafficStore,
 		Classifier:                params.Classifier,
@@ -61,14 +62,14 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 		return nil, errors.Join(err, modules.ErrCreatingTrafficEventHandler)
 	}
 	readerConfig := TrafficEventReaderConfig{
-		MaxWorker:           params.ReaderMaxWorker,
-		PerfEventBufferSize: (32 << 10), // 32KB
+		MaxWorker:      params.ReaderMaxWorker,
+		ReadingTimeout: 1 * time.Second, // TODO: make this configurable
 	}
-	var egressPodTrafficPerfEvents *ebpf.Map
-	egressPodTrafficPerfEvents = cepTrafficObjs.EgressCepTrafficEvents
+	var podEgressTrafficEvents *ebpf.Map
+	podEgressTrafficEvents = cepTrafficObjs.EgressCepTrafficEvents
 	readerParams := TrafficEventReaderParams{
 		ParentLogger:             logger,
-		PodEgressPerfEvents:      egressPodTrafficPerfEvents,
+		PodEgressRecords:         podEgressTrafficRecords,
 		PodEgressEvents:          podEgressTrafficEvents,
 		TrafficEventReaderConfig: readerConfig,
 	}
