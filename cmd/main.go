@@ -13,6 +13,7 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/bpf/traffic"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/classifier"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/debug"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/k8s_watcher"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/store"
 	"github.com/dinoallo/sealos-networkmanager-agent/mock"
@@ -139,6 +140,10 @@ func main() {
 	}
 	// start the ingress watcher
 	if err := startIngressWatcher(); err != nil {
+		printErr(err)
+		return
+	}
+	if err := startDebugService(); err != nil {
 		printErr(err)
 		return
 	}
@@ -317,6 +322,21 @@ func startPortExposureChecker() error {
 	}
 	pec := k8s_watcher.NewPortExposureChecker(params)
 	mainPortExposureChecker = pec
+	return nil
+}
+
+func startDebugService() error {
+	params := debug.DebugServiceParams{
+		ParentLogger:       mainLogger,
+		DebugServiceConfig: globalConfig.DebugServiceConfig,
+	}
+	debugService, err := debug.NewDebugService(params)
+	if err != nil {
+		return err
+	}
+	if err := debugService.Start(); err != nil {
+		return err
+	}
 	return nil
 }
 

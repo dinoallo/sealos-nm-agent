@@ -136,6 +136,20 @@ func NewMockConfig() MockConfig {
 	}
 }
 
+type DebugServiceConfig struct {
+	Enabled bool   `env:"ENABLED"`
+	Addr    string `env:"ADDR"`
+	Pprof   bool   `env:"PPROF"`
+}
+
+func NewDebugServiceConfig() DebugServiceConfig {
+	return DebugServiceConfig{
+		Enabled: false,
+		Addr:    "0.0.0.0:6060",
+		Pprof:   true,
+	}
+}
+
 type GlobalConfig struct {
 	ClassifierConfig        `envPrefix:"CLS_"`
 	PodTrafficStoreConfig   `envPrefix:"PTS_"`
@@ -145,6 +159,7 @@ type GlobalConfig struct {
 	EpWatcherConfig         `envPrefix:"EPW_"`
 	PodWatcherConfig        `envPrefix:"PODW_"`
 	IngressWatcherConfig    `envPrefix:"INGW_"`
+	DebugServiceConfig      `envPrefix:"DEBUG_"`
 	MockConfig              `envPrefix:"MOCK_"`
 }
 
@@ -155,6 +170,10 @@ func NewGlobalConfig() *GlobalConfig {
 		DBConfig:                NewDBConfig(),
 		BPFTrafficFactoryConfig: NewBPFTrafficFactoryConfig(),
 		CepWatcherConfig:        NewCepWatcherConfig(),
+		EpWatcherConfig:         NewEpWatcherConfig(),
+		PodWatcherConfig:        NewPodWatcherConfig(),
+		IngressWatcherConfig:    NewIngressWatcherConfig(),
+		DebugServiceConfig:      NewDebugServiceConfig(),
 		MockConfig:              NewMockConfig(),
 	}
 }
