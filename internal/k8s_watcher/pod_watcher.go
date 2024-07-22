@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/api/structs"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"github.com/puzpuzpuz/xsync"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
@@ -12,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -34,6 +36,7 @@ type PodWatcherParams struct {
 	client.Client
 	*runtime.Scheme
 	modules.Classifier
+	conf.PodWatcherConfig
 }
 
 type PodWatcher struct {
@@ -114,5 +117,6 @@ func (w *PodWatcher) SetupWithManager(mgr ctrl.Manager) error {
 				return false
 			},
 		}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: w.MaxWorker}).
 		Complete(w)
 }

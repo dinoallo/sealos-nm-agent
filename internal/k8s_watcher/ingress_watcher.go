@@ -3,6 +3,7 @@ package k8s_watcher
 import (
 	"context"
 
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	networkingv1 "k8s.io/api/networking/v1"
 
@@ -10,12 +11,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
 type IngressWatcherParams struct {
 	client.Client
 	*runtime.Scheme
 	modules.PortExposureChecker
+	conf.IngressWatcherConfig
 }
 
 type IngressWatcher struct {
@@ -51,5 +54,6 @@ func (w *IngressWatcher) SetupWithManager(mgr ctrl.Manager) error {
 	//TODO: configure the event filter
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&networkingv1.Ingress{}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: w.MaxWorker}).
 		Complete(w)
 }

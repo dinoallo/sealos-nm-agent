@@ -265,10 +265,11 @@ func startPodTrafficStore(ctx context.Context) error {
 
 func startPodWatcher() error {
 	p := k8s_watcher.PodWatcherParams{
-		ParentLogger: mainLogger,
-		Client:       mainMgr.GetClient(),
-		Scheme:       mainMgr.GetScheme(),
-		Classifier:   mainClassifier,
+		ParentLogger:     mainLogger,
+		Client:           mainMgr.GetClient(),
+		Scheme:           mainMgr.GetScheme(),
+		Classifier:       mainClassifier,
+		PodWatcherConfig: globalConfig.PodWatcherConfig,
 	}
 	w, err := k8s_watcher.NewPodWatcher(p)
 	if err != nil {
@@ -285,6 +286,7 @@ func startEpWatcher() error {
 		Client:              mainMgr.GetClient(),
 		Scheme:              mainMgr.GetScheme(),
 		PortExposureChecker: mainPortExposureChecker,
+		EpWatcherConfig:     globalConfig.EpWatcherConfig,
 	}
 	ew := k8s_watcher.NewEpWatcher(params)
 	if err := ew.SetupWithManager(mainMgr); err != nil {
@@ -295,9 +297,10 @@ func startEpWatcher() error {
 
 func startIngressWatcher() error {
 	params := k8s_watcher.IngressWatcherParams{
-		Client:              mainMgr.GetClient(),
-		Scheme:              mainMgr.GetScheme(),
-		PortExposureChecker: mainPortExposureChecker,
+		Client:               mainMgr.GetClient(),
+		Scheme:               mainMgr.GetScheme(),
+		PortExposureChecker:  mainPortExposureChecker,
+		IngressWatcherConfig: globalConfig.IngressWatcherConfig,
 	}
 	iw := k8s_watcher.NewIngressWatcher(params)
 	if err := iw.SetupWithManager(mainMgr); err != nil {

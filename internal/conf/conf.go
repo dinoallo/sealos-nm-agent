@@ -88,6 +88,36 @@ func NewCepWatcherConfig() CepWatcherConfig {
 	}
 }
 
+type EpWatcherConfig struct {
+	MaxWorker int `env:"MAX_WORKER"`
+}
+
+func NewEpWatcherConfig() EpWatcherConfig {
+	return EpWatcherConfig{
+		MaxWorker: 5,
+	}
+}
+
+type IngressWatcherConfig struct {
+	MaxWorker int `env:"MAX_WORKER"`
+}
+
+func NewIngressWatcherConfig() IngressWatcherConfig {
+	return IngressWatcherConfig{
+		MaxWorker: 5,
+	}
+}
+
+type PodWatcherConfig struct {
+	MaxWorker int `env:"MAX_WORKER"`
+}
+
+func NewPodWatcherConfig() PodWatcherConfig {
+	return PodWatcherConfig{
+		MaxWorker: 5,
+	}
+}
+
 type MockConfig struct { // envPrefix: MOCK_
 	TrackedPodIP       string `env:"TRACKED_POD_IP"`
 	TrackedHostIP      string `env:"TRACKED_HOST_IP"`
@@ -112,6 +142,9 @@ type GlobalConfig struct {
 	DBConfig                `envPrefix:"DB_"`
 	BPFTrafficFactoryConfig `envPrefix:"TF_"`
 	CepWatcherConfig        `envPrefix:"CEPW_"`
+	EpWatcherConfig         `envPrefix:"EPW_"`
+	PodWatcherConfig        `envPrefix:"PODW_"`
+	IngressWatcherConfig    `envPrefix:"INGW_"`
 	MockConfig              `envPrefix:"MOCK_"`
 }
 
