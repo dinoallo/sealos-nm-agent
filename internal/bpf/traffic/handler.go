@@ -5,13 +5,13 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
 	structsapi "github.com/dinoallo/sealos-networkmanager-agent/api/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
-	hashlib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/encoding/hash"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/host"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
 	taglib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/tag"
@@ -140,16 +140,15 @@ func submitWithTimeout(ctx context.Context, event structs.RawTrafficEvent, timeo
 
 func (h *TrafficEventHandler) updatePodMetric(ctx context.Context, podAddr string, tag taglib.Tag, podMeta structsapi.PodMeta, podMetric structsapi.PodMetric) error {
 	podTrafficMeta := h.getPodTrafficMeta(podAddr, tag, podMeta)
-	at := hashlib.NewAT(podAddr, tag.TID)
-	atCode, err := at.Encode()
-	if err != nil {
-		return err
-	}
-	hash := atCode.String()
+	hash := getPodMetaHash(podAddr, tag)
 	if err := h.PodTrafficStore.Update(ctx, hash, podTrafficMeta, podMetric); err != nil {
 		return err
 	}
 	return nil
+}
+
+func getPodMetaHash(podAddr string, tag taglib.Tag) string {
+	return fmt.Sprintf("%s/%s", podAddr, tag.String)
 }
 
 func (h *TrafficEventHandler) getPodTrafficMeta(addr string, tag taglib.Tag, _meta structsapi.PodMeta) structsapi.PodTrafficMeta {
