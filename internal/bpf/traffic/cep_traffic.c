@@ -19,7 +19,7 @@ struct {
 
 struct {
   __uint(type, BPF_MAP_TYPE_RINGBUF);
-  __uint(max_entries, 1024); // 1KB
+  __uint(max_entries, 4096); // 4K
 } egress_submit_errors_notifications SEC(".maps");
 
 static __always_inline void submit_egress_traffic(struct __sk_buff *ctx,
