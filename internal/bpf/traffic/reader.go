@@ -91,6 +91,7 @@ func (r *TrafficEventReader) readPodEgress(ctx context.Context) error {
 	defer cancel()
 	select {
 	case <-sendCtx.Done():
+		r.Infof("timeout sending a pod egress record. drop this record")
 		return nil
 	case r.PodEgressRecords <- &record:
 		return nil

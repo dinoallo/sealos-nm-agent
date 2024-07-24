@@ -9,12 +9,12 @@ const struct event_t *unused_cep_traffic_event __attribute__((unused));
 
 struct {
   __uint(type, BPF_MAP_TYPE_RINGBUF);
-  __uint(max_entries, 131072 * 1024); // 128M
+  __uint(max_entries, 524288 * 1024); // 512M
 } egress_cep_traffic_events SEC(".maps");
 
 struct {
   __uint(type, BPF_MAP_TYPE_RINGBUF);
-  __uint(max_entries, 131072 * 1024); // 128M
+  __uint(max_entries, 524288 * 1024); // 512M
 } ingress_cep_traffic_events SEC(".maps");
 
 static __always_inline void submit_egress_traffic(struct __sk_buff *ctx,
