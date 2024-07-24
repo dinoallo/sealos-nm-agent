@@ -61,8 +61,9 @@ type cep_trafficProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type cep_trafficMapSpecs struct {
-	EgressCepTrafficEvents  *ebpf.MapSpec `ebpf:"egress_cep_traffic_events"`
-	IngressCepTrafficEvents *ebpf.MapSpec `ebpf:"ingress_cep_traffic_events"`
+	EgressCepTrafficEvents          *ebpf.MapSpec `ebpf:"egress_cep_traffic_events"`
+	EgressSubmitErrorsNotifications *ebpf.MapSpec `ebpf:"egress_submit_errors_notifications"`
+	IngressCepTrafficEvents         *ebpf.MapSpec `ebpf:"ingress_cep_traffic_events"`
 }
 
 // cep_trafficObjects contains all objects after they have been loaded into the kernel.
@@ -84,13 +85,15 @@ func (o *cep_trafficObjects) Close() error {
 //
 // It can be passed to loadCep_trafficObjects or ebpf.CollectionSpec.LoadAndAssign.
 type cep_trafficMaps struct {
-	EgressCepTrafficEvents  *ebpf.Map `ebpf:"egress_cep_traffic_events"`
-	IngressCepTrafficEvents *ebpf.Map `ebpf:"ingress_cep_traffic_events"`
+	EgressCepTrafficEvents          *ebpf.Map `ebpf:"egress_cep_traffic_events"`
+	EgressSubmitErrorsNotifications *ebpf.Map `ebpf:"egress_submit_errors_notifications"`
+	IngressCepTrafficEvents         *ebpf.Map `ebpf:"ingress_cep_traffic_events"`
 }
 
 func (m *cep_trafficMaps) Close() error {
 	return _Cep_trafficClose(
 		m.EgressCepTrafficEvents,
+		m.EgressSubmitErrorsNotifications,
 		m.IngressCepTrafficEvents,
 	)
 }

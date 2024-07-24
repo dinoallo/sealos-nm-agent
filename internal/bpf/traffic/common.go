@@ -72,6 +72,10 @@ func (_event *trafficEventT) convertToRawTraffic() structsapi.RawTraffic {
 	return e
 }
 
+type notificationT struct {
+	Error uint32
+}
+
 // func (_event *trafficEventT) convertToRawTrafficEvent() structs.RawTrafficEvent {
 // 	//TODO: check ipv6
 // 	e := structs.RawTrafficEvent{

@@ -22,6 +22,11 @@ struct event_t {
   __u32 identity;
 };
 
+#define ERR_BUF_FULL 1 
+struct notification_t {
+  __u32 error;
+};
+
 static __always_inline void marshal(struct event_t *event,
                                     const struct bpf_sock *sk) {
   if (!sk || !event) {

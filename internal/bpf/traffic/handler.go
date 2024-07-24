@@ -29,6 +29,7 @@ type TrafficEventHandlerConfig struct {
 type TrafficEventHandlerParams struct {
 	ParentLogger            log.Logger
 	PodEgressTrafficRecords chan *ringbuf.Record
+	EgressErrorRecords      chan *ringbuf.Record
 	TrafficEventHandlerConfig
 	modules.PodTrafficStore
 	modules.Classifier
@@ -90,6 +91,22 @@ func (h *TrafficEventHandler) handlePodEgress(ctx context.Context) error {
 			if err := h.handleOutboundTrafficFromPod(ctx, item.Meta.Src, dstAddrType, &item); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+func (h *TrafficEventHandler) handleEgressErrors(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case record := <-h.EgressErrorRecords:
+		var notification notificationT
+		if err := binary.Read(bytes.NewBuffer(record.RawSample), h.nativeEndian, &notification); err != nil {
+			return errors.Join(err, modules.ErrReadingFromRawSample)
+		}
+		if notification.Error == uint32(1) {
+			h.Error("failed to reserve space for egress traffic since the bpf ringbuffer is full. maybe you need to increase the buffer size")
 		}
 	}
 	return nil

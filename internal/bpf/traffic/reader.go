@@ -24,15 +24,18 @@ type TrafficEventReaderConfig struct {
 }
 
 type TrafficEventReaderParams struct {
-	ParentLogger     log.Logger
-	PodEgressEvents  *ebpf.Map
-	PodEgressRecords chan *ringbuf.Record
+	ParentLogger       log.Logger
+	PodEgressEvents    *ebpf.Map
+	EgressErrors       *ebpf.Map
+	PodEgressRecords   chan *ringbuf.Record
+	EgressErrorRecords chan *ringbuf.Record
 	TrafficEventReaderConfig
 }
 
 type TrafficEventReader struct {
 	log.Logger
 	podEgressEventReader *ringbuf.Reader
+	egressErrorsReader   *ringbuf.Reader
 	TrafficEventReaderParams
 }
 
@@ -45,9 +48,14 @@ func NewTrafficEventReader(params TrafficEventReaderParams) (*TrafficEventReader
 	if err != nil {
 		return nil, errors.Join(err, modules.ErrCreatingPodEgressEventRingBufReader)
 	}
+	egressErrorsReader, err := ringbuf.NewReader(params.EgressErrors)
+	if err != nil {
+		return nil, errors.Join(err, modules.ErrCreatingEgressErrorEventRingBufReader)
+	}
 	return &TrafficEventReader{
 		Logger:                   logger,
 		podEgressEventReader:     podEgressEventReader,
+		egressErrorsReader:       egressErrorsReader,
 		TrafficEventReaderParams: params,
 	}, nil
 }
@@ -72,6 +80,19 @@ func (r *TrafficEventReader) Start(ctx context.Context) {
 			}
 		}
 	}()
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				r.egressErrorsReader.Close()
+				return
+			default:
+				if err := r.readEgressErrors(ctx); err != nil {
+					r.Error("failed to read error: %v", err)
+				}
+			}
+		}
+	}()
 }
 
 func (r *TrafficEventReader) readPodEgress(ctx context.Context) error {
@@ -86,14 +107,35 @@ func (r *TrafficEventReader) readPodEgress(ctx context.Context) error {
 	} else if err != nil {
 		return errors.Join(err, modules.ErrReadingFromEventRingBufReader)
 	}
-	//TODO: keep track of record.Remaining
 	sendCtx, cancel := context.WithTimeout(ctx, defaultSendTimeout)
 	defer cancel()
 	select {
 	case <-sendCtx.Done():
-		r.Infof("timeout sending a pod egress record. drop this record")
+		r.Infof("timeout sending this pod egress record to the handler. drop this record")
 		return nil
 	case r.PodEgressRecords <- &record:
+		return nil
+	}
+}
+
+func (r *TrafficEventReader) readEgressErrors(ctx context.Context) error {
+	r.egressErrorsReader.SetDeadline(time.Now().Add(r.ReadingTimeout))
+	record, err := r.egressErrorsReader.Read()
+	if errors.Is(err, ringbuf.ErrClosed) {
+		r.Infof("the reader is closed for egress error eventts")
+		return nil
+	} else if errors.Is(err, os.ErrDeadlineExceeded) {
+		return nil
+	} else if err != nil {
+		return errors.Join(err, modules.ErrReadingFromErrorRingBufReader)
+	}
+	sendCtx, cancel := context.WithTimeout(ctx, defaultSendTimeout)
+	defer cancel()
+	select {
+	case <-sendCtx.Done():
+		r.Infof("timeout sending this error record to the handler. drop this record")
+		return nil
+	case r.EgressErrorRecords <- &record:
 		return nil
 	}
 }

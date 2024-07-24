@@ -17,6 +17,11 @@ struct {
   __uint(max_entries, 524288 * 1024); // 512M
 } ingress_cep_traffic_events SEC(".maps");
 
+struct {
+  __uint(type, BPF_MAP_TYPE_RINGBUF);
+  __uint(max_entries, 1024); // 1KB
+} egress_submit_errors_notifications SEC(".maps");
+
 static __always_inline void submit_egress_traffic(struct __sk_buff *ctx,
                                                   u32 identity) {
 
@@ -31,8 +36,16 @@ static __always_inline void submit_egress_traffic(struct __sk_buff *ctx,
 
   struct event_t *e = bpf_ringbuf_reserve(&egress_cep_traffic_events,
                                           sizeof(struct event_t), 0);
-  if (!e)
+  if (!e) {
+    struct notification_t *notif = bpf_ringbuf_reserve(
+        &egress_submit_errors_notifications, sizeof(struct notification_t), 0);
+    if (!notif) {
+      return;
+    }
+    notif->error = ERR_BUF_FULL;
+    bpf_ringbuf_submit(notif, 0);
     return;
+  }
   // From now on, if we need to return early before `bpf_ringbuf_submit`, we
   // need to explicitly call `bpf_ringbuf_discard`
   e->len = ctx->len;
