@@ -47,12 +47,14 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 		return nil, errors.Join(err, modules.ErrLoadingCepTrafficObjs)
 	}
 	podEgressTrafficRecords := make(chan *ringbuf.Record)
+	egressErrorRecords := make(chan *ringbuf.Record)
 	handlerConfig := TrafficEventHandlerConfig{
 		MaxWorker: params.HandlerMaxWorker,
 	}
 	handlerParams := TrafficEventHandlerParams{
 		ParentLogger:              logger,
 		PodEgressTrafficRecords:   podEgressTrafficRecords,
+		EgressErrorRecords:        egressErrorRecords,
 		TrafficEventHandlerConfig: handlerConfig,
 		PodTrafficStore:           params.PodTrafficStore,
 		Classifier:                params.Classifier,
@@ -66,11 +68,15 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 		ReadingTimeout: 1 * time.Second, // TODO: make this configurable
 	}
 	var podEgressTrafficEvents *ebpf.Map
+	var egressErrors *ebpf.Map
 	podEgressTrafficEvents = cepTrafficObjs.EgressCepTrafficEvents
+	egressErrors = cepTrafficObjs.EgressSubmitErrorsNotifications
 	readerParams := TrafficEventReaderParams{
 		ParentLogger:             logger,
 		PodEgressRecords:         podEgressTrafficRecords,
+		EgressErrorRecords:       egressErrorRecords,
 		PodEgressEvents:          podEgressTrafficEvents,
+		EgressErrors:             egressErrors,
 		TrafficEventReaderConfig: readerConfig,
 	}
 	reader, err := NewTrafficEventReader(readerParams)

@@ -43,6 +43,7 @@ type TrafficEventHandler struct {
 
 func (h *TrafficEventHandler) Start(ctx context.Context) {
 	h.doHandling(ctx, h.MaxWorker, h.handlePodEgress)
+	h.doHandling(ctx, h.MaxWorker, h.handleEgressErrors)
 }
 
 func NewTrafficEventHandler(params TrafficEventHandlerParams) (*TrafficEventHandler, error) {
