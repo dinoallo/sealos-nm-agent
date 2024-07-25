@@ -11,6 +11,7 @@ type DummyClassifierConfig struct {
 	PodAddr     string
 	HostAddr    string
 	WorldAddr   string
+	NodeAddr    string
 	SkippedAddr string
 	PodPort     uint32 // only useful if PodAddr is set
 }
@@ -63,6 +64,22 @@ func (c *DummyClassifier) UnregisterExposedPort(podAddr string, podPort uint32) 
 	return nil
 }
 
+func (c *DummyClassifier) RegisterHostAddr(hostAddr string) error {
+	if hostAddr != c.HostAddr {
+		return nil
+	}
+	log.Printf("register host addr %v", hostAddr)
+	return nil
+}
+
+func (c *DummyClassifier) UnregisterHostAddr(hostAddr string) error {
+	if hostAddr != c.HostAddr {
+		return nil
+	}
+	log.Printf("unregister host addr %v", hostAddr)
+	return nil
+}
+
 func (c *DummyClassifier) GetPodMeta(addr string) (structs.PodMeta, bool) {
 	return structs.PodMeta{}, false
 }
@@ -83,6 +100,13 @@ func (c *DummyClassifier) IsHostAddr(addr string) (bool, error) {
 
 func (c *DummyClassifier) IsSkippedAddr(addr string) (bool, error) {
 	if addr == c.SkippedAddr {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (c *DummyClassifier) IsNodeAddr(addr string) (bool, error) {
+	if addr == c.NodeAddr {
 		return true, nil
 	}
 	return false, nil

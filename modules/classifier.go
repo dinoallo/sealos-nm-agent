@@ -10,10 +10,13 @@ type Classifier interface {
 	UnregisterPod(addr string) error
 	RegisterExposedPort(podAddr string, podPort uint32) error
 	UnregisterExposedPort(podAddr string, podPort uint32) error
+	RegisterHostAddr(hostAddr string) error
+	UnregisterHostAddr(hostAddr string) error
 	GetPodMeta(addr string) (structs.PodMeta, bool)
 	IsPodAddr(addr string) (bool, error)
 	IsHostAddr(addr string) (bool, error)
 	IsSkippedAddr(addr string) (bool, error)
+	IsNodeAddr(addr string) (bool, error)
 	IsWorldAddr(addr string) (bool, error)
 	IsPortExposed(podAddr string, podPort uint32) (bool, error)
 	GetAddrType(addr string) (AddrType, error)
@@ -31,6 +34,7 @@ const (
 	AddrTypePod
 	AddrTypeSkipped
 	AddrTypeHost
+	AddrTypeNode
 	AddrTypeWorld
 )
 
@@ -42,6 +46,8 @@ func (t AddrType) String() string {
 		return "skipped"
 	case AddrTypeHost:
 		return "host"
+	case AddrTypeNode:
+		return "node"
 	case AddrTypeWorld:
 		return "world"
 	default:

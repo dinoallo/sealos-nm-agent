@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
@@ -24,14 +23,15 @@ const (
 type TrafficFactoryParams struct {
 	ParentLogger log.Logger
 	conf.BPFTrafficFactoryConfig
-	modules.PodTrafficStore
+	modules.TrafficStore
 	modules.Classifier
 }
 
 type TrafficFactory struct {
 	log.Logger
-	cepTrafficObjs      cep_trafficObjects
+	trafficObjs         trafficObjects
 	cepHookers          *xsync.MapOf[int64, *hooker.CiliumCCMHooker]
+	hostDevHookers      *xsync.MapOf[string, *hooker.DeviceHooker]
 	trafficEventReader  *TrafficEventReader
 	trafficEventHandler *TrafficEventHandler
 	TrafficFactoryParams
@@ -42,21 +42,25 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 	if err != nil {
 		return nil, errors.Join(err, modules.ErrCreatingLogger)
 	}
-	cepTrafficObjs := cep_trafficObjects{}
-	if err := loadCep_trafficObjects(&cepTrafficObjs, nil); err != nil {
+	trafficObjs := trafficObjects{}
+	if err := loadTrafficObjects(&trafficObjs, nil); err != nil {
 		return nil, errors.Join(err, modules.ErrLoadingCepTrafficObjs)
 	}
-	podEgressTrafficRecords := make(chan *ringbuf.Record)
-	egressErrorRecords := make(chan *ringbuf.Record)
+	egressPodTrafficRecords := make(chan *ringbuf.Record)
+	egressPodNotiRecords := make(chan *ringbuf.Record)
+	egressHostTrafficRecords := make(chan *ringbuf.Record)
+	egressHostNotiRecords := make(chan *ringbuf.Record)
 	handlerConfig := TrafficEventHandlerConfig{
 		MaxWorker: params.HandlerMaxWorker,
 	}
 	handlerParams := TrafficEventHandlerParams{
 		ParentLogger:              logger,
-		PodEgressTrafficRecords:   podEgressTrafficRecords,
-		EgressErrorRecords:        egressErrorRecords,
+		EgressPodTrafficRecords:   egressPodTrafficRecords,
+		EgressPodNotiRecords:      egressPodNotiRecords,
+		EgressHostTrafficRecords:  egressHostTrafficRecords,
+		EgressHostNotiRecords:     egressHostNotiRecords,
 		TrafficEventHandlerConfig: handlerConfig,
-		PodTrafficStore:           params.PodTrafficStore,
+		TrafficStore:              params.TrafficStore,
 		Classifier:                params.Classifier,
 	}
 	handler, err := NewTrafficEventHandler(handlerParams)
@@ -67,16 +71,13 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 		MaxWorker:      params.ReaderMaxWorker,
 		ReadingTimeout: 1 * time.Second, // TODO: make this configurable
 	}
-	var podEgressTrafficEvents *ebpf.Map
-	var egressErrors *ebpf.Map
-	podEgressTrafficEvents = cepTrafficObjs.EgressCepTrafficEvents
-	egressErrors = cepTrafficObjs.EgressSubmitErrorsNotifications
 	readerParams := TrafficEventReaderParams{
 		ParentLogger:             logger,
-		PodEgressRecords:         podEgressTrafficRecords,
-		EgressErrorRecords:       egressErrorRecords,
-		PodEgressEvents:          podEgressTrafficEvents,
-		EgressErrors:             egressErrors,
+		TrafficObjs:              &trafficObjs,
+		EgressPodTrafficRecords:  egressPodTrafficRecords,
+		EgressPodNotiRecords:     egressPodNotiRecords,
+		EgressHostTrafficRecords: egressHostTrafficRecords,
+		EgressHostNotiRecords:    egressHostNotiRecords,
 		TrafficEventReaderConfig: readerConfig,
 	}
 	reader, err := NewTrafficEventReader(readerParams)
@@ -85,8 +86,9 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 	}
 	return &TrafficFactory{
 		Logger:               logger,
-		cepTrafficObjs:       cepTrafficObjs,
+		trafficObjs:          trafficObjs,
 		cepHookers:           xsync.NewIntegerMapOf[int64, *hooker.CiliumCCMHooker](),
+		hostDevHookers:       xsync.NewMapOf[*hooker.DeviceHooker](),
 		trafficEventHandler:  handler,
 		trafficEventReader:   reader,
 		TrafficFactoryParams: params,
@@ -96,7 +98,7 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 func (f *TrafficFactory) SubscribeToCep(eid int64) error {
 	newCepHooker := hooker.NewCiliumCCMHooker(eid)
 	cepHooker, _ := f.cepHookers.LoadOrStore(eid, newCepHooker)
-	if err := cepHooker.AttachV4EgressHook(f.cepTrafficObjs.EgressCepTrafficHook); err != nil {
+	if err := cepHooker.AttachV4EgressHook(f.trafficObjs.EgressCepTrafficHook); err != nil {
 		if errors.Is(err, hooker.ErrCiliumCCMNotExists) {
 			return errors.Join(err, modules.ErrCepNotFound)
 		}
@@ -124,15 +126,48 @@ func (f *TrafficFactory) Start(ctx context.Context) error {
 	return nil
 }
 
+func (f *TrafficFactory) SubscribeToHostDev(iface string) error {
+	newDevHooker, err := hooker.NewDeviceHooker(iface, false)
+	if err != nil {
+		return err
+	}
+	devHooker, _ := f.hostDevHookers.LoadOrStore(iface, newDevHooker)
+	hookFD := f.trafficObjs.EgressHostTrafficHook.FD()
+	if err := devHooker.AddFilterToEgressQdisc(egressFilterNameForHostDev, hookFD); err != nil {
+		return err
+	}
+	f.Debugf("host device: %v has been subscribed to", iface)
+	return nil
+}
+
+func (f *TrafficFactory) UnsubscribeFromHostDev(iface string) error {
+	devHooker, loaded := f.hostDevHookers.LoadAndDelete(iface)
+	if !loaded {
+		return nil
+	}
+	if err := devHooker.Close(); err != nil {
+		return err
+	}
+	f.Debugf("hostdev %v has been unsubscribed from", iface)
+	return nil
+}
+
 func (f *TrafficFactory) Close() {
-	detachHook := func(eid int64, cepHooker *hooker.CiliumCCMHooker) bool {
+	detachCepHook := func(eid int64, cepHooker *hooker.CiliumCCMHooker) bool {
 		if err := f.detachAllHooks(cepHooker); err != nil {
 			f.Error(err)
 		}
 		return true
 	}
-	f.cepHookers.Range(detachHook)
-	f.cepTrafficObjs.Close()
+	detachDevHook := func(devName string, devHooker *hooker.DeviceHooker) bool {
+		if err := devHooker.Close(); err != nil {
+			f.Error(err)
+		}
+		return true
+	}
+	f.cepHookers.Range(detachCepHook)
+	f.hostDevHookers.Range(detachDevHook)
+	f.trafficObjs.Close()
 }
 
 func (f *TrafficFactory) detachAllHooks(cepHooker *hooker.CiliumCCMHooker) error {

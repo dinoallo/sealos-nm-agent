@@ -27,11 +27,13 @@ type TrafficEventHandlerConfig struct {
 }
 
 type TrafficEventHandlerParams struct {
-	ParentLogger            log.Logger
-	PodEgressTrafficRecords chan *ringbuf.Record
-	EgressErrorRecords      chan *ringbuf.Record
+	ParentLogger             log.Logger
+	EgressPodTrafficRecords  chan *ringbuf.Record
+	EgressPodNotiRecords     chan *ringbuf.Record
+	EgressHostTrafficRecords chan *ringbuf.Record
+	EgressHostNotiRecords    chan *ringbuf.Record
 	TrafficEventHandlerConfig
-	modules.PodTrafficStore
+	modules.TrafficStore
 	modules.Classifier
 }
 
@@ -43,7 +45,9 @@ type TrafficEventHandler struct {
 
 func (h *TrafficEventHandler) Start(ctx context.Context) {
 	h.doHandling(ctx, h.MaxWorker, h.handlePodEgress)
-	h.doHandling(ctx, h.MaxWorker, h.handleEgressErrors)
+	h.doHandling(ctx, h.MaxWorker, h.handlePodEgressNotis)
+	h.doHandling(ctx, h.MaxWorker, h.handleHostEgress)
+	h.doHandling(ctx, h.MaxWorker, h.handleHostEgressNotis)
 }
 
 func NewTrafficEventHandler(params TrafficEventHandlerParams) (*TrafficEventHandler, error) {
@@ -66,7 +70,7 @@ func (h *TrafficEventHandler) handlePodEgress(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return nil
-	case record := <-h.PodEgressTrafficRecords:
+	case record := <-h.EgressPodTrafficRecords:
 		var e trafficEventT
 		if err := binary.Read(bytes.NewBuffer(record.RawSample), h.nativeEndian, &e); err != nil {
 			return errors.Join(err, modules.ErrReadingFromRawSample)
@@ -97,17 +101,69 @@ func (h *TrafficEventHandler) handlePodEgress(ctx context.Context) error {
 	return nil
 }
 
-func (h *TrafficEventHandler) handleEgressErrors(ctx context.Context) error {
+func (h *TrafficEventHandler) handlePodEgressNotis(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return nil
-	case record := <-h.EgressErrorRecords:
+	case record := <-h.EgressPodNotiRecords:
 		var notification notificationT
 		if err := binary.Read(bytes.NewBuffer(record.RawSample), h.nativeEndian, &notification); err != nil {
 			return errors.Join(err, modules.ErrReadingFromRawSample)
 		}
 		if notification.Error == uint32(1) {
-			h.Error("failed to reserve space for egress traffic since the bpf ringbuffer is full. maybe you need to increase the buffer size")
+			h.Error("failed to reserve space for %v since the bpf ringbuffer is full. maybe you need to increase the buffer size", "pod egress")
+		}
+	}
+	return nil
+}
+
+func (h *TrafficEventHandler) handleHostEgressNotis(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case record := <-h.EgressHostNotiRecords:
+		var notification notificationT
+		if err := binary.Read(bytes.NewBuffer(record.RawSample), h.nativeEndian, &notification); err != nil {
+			return errors.Join(err, modules.ErrReadingFromRawSample)
+		}
+		if notification.Error == uint32(1) {
+			h.Error("failed to reserve space for %v since the bpf ringbuffer is full. maybe you need to increase the buffer size", "host egress")
+		}
+	}
+	return nil
+}
+
+func (h *TrafficEventHandler) handleHostEgress(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case record := <-h.EgressHostTrafficRecords:
+		var e trafficEventT
+		if err := binary.Read(bytes.NewBuffer(record.RawSample), h.nativeEndian, &e); err != nil {
+			return errors.Join(err, modules.ErrReadingFromRawSample)
+		}
+		if e.Len <= 0 {
+			return nil
+		}
+		item := e.convertToRawTraffic()
+		srcAddr := item.Meta.Src.IP
+		dstAddr := item.Meta.Dst.IP
+		srcAddrType, err := h.GetAddrType(srcAddr)
+		if err != nil {
+			return err
+		}
+		dstAddrType, err := h.GetAddrType(dstAddr)
+		if err != nil {
+			return err
+		}
+		if checkSkipped(srcAddrType, dstAddrType) {
+			return nil
+		}
+		// if this traffic isn't originate from the local host, ignore it
+		if srcAddrType == modules.AddrTypeHost {
+			if err := h.handleOutboundTrafficFromHost(ctx, item.Meta.Src, dstAddrType, &item); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -147,6 +203,28 @@ func (h *TrafficEventHandler) handleOutboundTrafficFromPod(ctx context.Context, 
 	return nil
 }
 
+func (h *TrafficEventHandler) handleOutboundTrafficFromHost(ctx context.Context, addrInfo structsapi.RawTrafficAddrInfo, dstAddrType modules.AddrType, item *structsapi.RawTraffic) error {
+	localPort := addrInfo.Port
+	remoteIP := item.Meta.Dst.IP
+	hostMetric := structsapi.HostTrafficMetric{
+		SentBytes: uint64(item.DataBytes),
+		RecvBytes: 0,
+	}
+	// check if the outbound traffic is sent to world
+	if dstAddrType == modules.AddrTypeWorld {
+		tag := taglib.GetTagSrcPortN(localPort)
+		hostMeta := structsapi.HostTrafficMeta{
+			LocalPort: localPort,
+			RemoteIP:  item.Meta.Dst.IP,
+		}
+		if err := h.updateHostMetric(ctx, remoteIP, *tag, hostMeta, hostMetric); err != nil {
+			return err
+		}
+		return nil
+	}
+	return nil
+}
+
 func submitWithTimeout(ctx context.Context, event structs.RawTrafficEvent, timeout time.Duration, submitFunc func(context.Context, structs.RawTrafficEvent) error) error {
 	submitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -159,14 +237,26 @@ func submitWithTimeout(ctx context.Context, event structs.RawTrafficEvent, timeo
 func (h *TrafficEventHandler) updatePodMetric(ctx context.Context, podAddr string, tag taglib.Tag, podMeta structsapi.PodMeta, podMetric structsapi.PodMetric) error {
 	podTrafficMeta := h.getPodTrafficMeta(podAddr, tag, podMeta)
 	hash := getPodMetaHash(podAddr, tag)
-	if err := h.PodTrafficStore.Update(ctx, hash, podTrafficMeta, podMetric); err != nil {
+	if err := h.TrafficStore.UpdatePodTraffic(ctx, hash, podTrafficMeta, podMetric); err != nil {
 		return err
 	}
 	return nil
 }
 
+func (h *TrafficEventHandler) updateHostMetric(ctx context.Context, remoteIP string, tag taglib.Tag, hostMeta structsapi.HostTrafficMeta, hostMetric structsapi.HostTrafficMetric) error {
+	hash := getHostMetaHash(tag, remoteIP)
+	if err := h.TrafficStore.UpdateHostTraffic(ctx, hash, hostMeta, hostMetric); err != nil {
+		return err
+	}
+	return nil
+}
 func getPodMetaHash(podAddr string, tag taglib.Tag) string {
 	return fmt.Sprintf("%s/%s", podAddr, tag.String)
+}
+
+func getHostMetaHash(tag taglib.Tag, remoteIP string) string {
+	return fmt.Sprintf("%s/%s", tag.String, remoteIP)
+
 }
 
 func (h *TrafficEventHandler) getPodTrafficMeta(addr string, tag taglib.Tag, _meta structsapi.PodMeta) structsapi.PodTrafficMeta {

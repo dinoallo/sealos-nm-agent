@@ -34,8 +34,8 @@ func NewBPFTrafficFactoryConfig() BPFTrafficFactoryConfig {
 
 type ClassifierConfig struct { // envPrefix: CLS_
 	Enabled         bool     `env:"ENABLED"`
-	V4DNSService    string   `env:"V4_DNS_SERVICE"`
 	HostCIDRList    []string `env:"HOST_CIDR_LIST"`
+	NodeCIDRList    []string `env:"NODE_CIDR_LIST"`
 	SkippedCIDRList []string `env:"SKIPPED_CIDR_LIST"`
 	PodCIDRList     []string `env:"POD_CIDR_LIST"`
 }
@@ -43,8 +43,8 @@ type ClassifierConfig struct { // envPrefix: CLS_
 func NewClassifierConfig() ClassifierConfig {
 	return ClassifierConfig{
 		Enabled:         true,
-		V4DNSService:    "kube-dns.kube-system.svc.cluster.local:53",
 		HostCIDRList:    make([]string, 0),
+		NodeCIDRList:    make([]string, 0),
 		SkippedCIDRList: make([]string, 0),
 		PodCIDRList:     make([]string, 0),
 	}
@@ -66,6 +66,34 @@ func NewPodTrafficStoreConfig() PodTrafficStoreConfig {
 	return PodTrafficStoreConfig{
 		Enabled:               true,
 		DefaultColl:           "traffic",
+		MaxWorkerCount:        5,
+		FlushTimeout:          time.Second * 5,
+		GetBatchTimeout:       time.Second * 5,
+		BatchSize:             100,
+		CacheEntryTTL:         time.Second * 60,
+		CacheExpiredEntrySize: 1e4,
+		CacheEntrySize:        1e6,
+	}
+}
+
+type TrafficStoreConfig struct { // envPrefix: PTS_
+	Enabled               bool          `env:"ENABLED"`
+	PodTrafficColl        string        `env:"POD_TRAFFIC_COLL"`
+	HostTrafficColl       string        `env:"HOST_TRAFFIC_COLL"`
+	MaxWorkerCount        int           `env:"MAX_WORKER_COUNT"`
+	FlushTimeout          time.Duration `env:"FLUSH_TIMEOUT"`
+	GetBatchTimeout       time.Duration `env:"GET_BATCH_TIMEOUT"`
+	BatchSize             int           `env:"BATCH_SIZE"`
+	CacheEntryTTL         time.Duration `env:"CACHE_ENTRY_TTL"`
+	CacheExpiredEntrySize int           `env:"CACHE_EXPIRED_ENTRY_SIZE"`
+	CacheEntrySize        int           `env:"CACHE_ENTRY_SIZE"`
+}
+
+func NewTrafficStoreConfig() TrafficStoreConfig {
+	return TrafficStoreConfig{
+		Enabled:               true,
+		PodTrafficColl:        "traffic",
+		HostTrafficColl:       "host_traffic",
 		MaxWorkerCount:        5,
 		FlushTimeout:          time.Second * 5,
 		GetBatchTimeout:       time.Second * 5,
@@ -118,6 +146,16 @@ func NewPodWatcherConfig() PodWatcherConfig {
 	}
 }
 
+type HostDevWatcherConfig struct {
+	HostDevs []string `env:"HOST_DEVS"`
+}
+
+func NewHostDevWatcherConfig() HostDevWatcherConfig {
+	return HostDevWatcherConfig{
+		HostDevs: make([]string, 0),
+	}
+}
+
 type MockConfig struct { // envPrefix: MOCK_
 	TrackedPodIP       string `env:"TRACKED_POD_IP"`
 	TrackedHostIP      string `env:"TRACKED_HOST_IP"`
@@ -153,8 +191,10 @@ func NewDebugServiceConfig() DebugServiceConfig {
 type GlobalConfig struct {
 	ClassifierConfig        `envPrefix:"CLS_"`
 	PodTrafficStoreConfig   `envPrefix:"PTS_"`
+	TrafficStoreConfig      `envPrefix:"TS_"`
 	DBConfig                `envPrefix:"DB_"`
 	BPFTrafficFactoryConfig `envPrefix:"TF_"`
+	HostDevWatcherConfig    `envPrefix:"HDW_"`
 	CepWatcherConfig        `envPrefix:"CEPW_"`
 	EpWatcherConfig         `envPrefix:"EPW_"`
 	PodWatcherConfig        `envPrefix:"PODW_"`
@@ -167,8 +207,10 @@ func NewGlobalConfig() *GlobalConfig {
 	return &GlobalConfig{
 		ClassifierConfig:        NewClassifierConfig(),
 		PodTrafficStoreConfig:   NewPodTrafficStoreConfig(),
+		TrafficStoreConfig:      NewTrafficStoreConfig(),
 		DBConfig:                NewDBConfig(),
 		BPFTrafficFactoryConfig: NewBPFTrafficFactoryConfig(),
+		HostDevWatcherConfig:    NewHostDevWatcherConfig(),
 		CepWatcherConfig:        NewCepWatcherConfig(),
 		EpWatcherConfig:         NewEpWatcherConfig(),
 		PodWatcherConfig:        NewPodWatcherConfig(),

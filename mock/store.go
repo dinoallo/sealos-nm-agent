@@ -25,18 +25,21 @@ func (pts *DummyPodTrafficStore) Update(ctx context.Context, hash string, meta s
 	return nil
 }
 
-type DummyHostTrafficStore struct {
-	hostAddr string
+type DummyTrafficStore struct {
+	MarkedPodAddrForPodTraffic   string
+	MarkedRemoteIPForHostTraffic string
 }
 
-func NewDummyHostTrafficStore(hostAddr string) *DummyHostTrafficStore {
-	return &DummyHostTrafficStore{
-		hostAddr: hostAddr,
+func (s *DummyTrafficStore) UpdatePodTraffic(ctx context.Context, hash string, meta structs.PodTrafficMeta, metric structs.PodMetric) error {
+	if s.MarkedPodAddrForPodTraffic == "" || meta.PodAddress != s.MarkedPodAddrForPodTraffic {
+		return nil
 	}
+	log.Printf("meta: %+v; metric: %+v", meta, metric)
+	return nil
 }
 
-func (hts *DummyHostTrafficStore) Update(ctx context.Context, hash string, meta structs.HostTrafficMeta, metric structs.HostTrafficMetric) error {
-	if meta.IP != hts.hostAddr {
+func (s *DummyTrafficStore) UpdateHostTraffic(ctx context.Context, hash string, meta structs.HostTrafficMeta, metric structs.HostTrafficMetric) error {
+	if s.MarkedRemoteIPForHostTraffic == "" || meta.RemoteIP != s.MarkedRemoteIPForHostTraffic {
 		return nil
 	}
 	log.Printf("meta: %+v; metric: %+v", meta, metric)

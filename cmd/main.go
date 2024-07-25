@@ -15,6 +15,7 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/debug"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/k8s_watcher"
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/node_watcher"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/store"
 	"github.com/dinoallo/sealos-networkmanager-agent/mock"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
@@ -22,6 +23,7 @@ import (
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/db/mongo"
 	loglib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
 	zaplog "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log/zap"
+	netlib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/net"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -30,9 +32,11 @@ import (
 )
 
 var (
+	mainNetlib              netlib.NetLib = netlib.NewNMNetLib()
 	mainDB                  dblib.DB
 	mainClassifier          modules.Classifier
 	mainPodTrafficStore     modules.PodTrafficStore
+	mainTrafficStore        modules.TrafficStore
 	mainTrafficFactory      modules.BPFTrafficFactory
 	mainPortExposureChecker modules.PortExposureChecker
 
@@ -46,8 +50,10 @@ var (
 	ErrStartingCCMWatcher      = errors.New("failed to start the cilium ccm watcher")
 	ErrStartingClassifier      = errors.New("failed to start the classifier")
 	ErrStartingPodTrafficStore = errors.New("failed to start the pod traffic store")
+	ErrStartingTrafficStore    = errors.New("failed to start the traffic store")
 	ErrStartingCtrlManager     = errors.New("failed to start the ctrl manager")
 	ErrCreatingCtrlManager     = errors.New("failed to create the ctrl manager")
+	ErrStartingHostDevWatcher  = errors.New("failed to start the host device watcher")
 	ErrStartingPodWatcher      = errors.New("failed to start the pod watcher")
 	ErrStartingEpWatcher       = errors.New("failed to start the ep watcher")
 	ErrStartingCepWatcher      = errors.New("failed to start the cep watcher")
@@ -88,8 +94,8 @@ func main() {
 		printErr(err)
 		return
 	}
-	// start the pod traffic store
-	if err := startPodTrafficStore(mainCtx); err != nil {
+	// start the traffic store
+	if err := startTrafficStore(mainCtx); err != nil {
 		printErr(err)
 		return
 	}
@@ -109,6 +115,11 @@ func main() {
 		return
 	}
 	defer closeTF()
+	// start the host device watcher
+	if err := startHostDevWatcher(mainCtx); err != nil {
+		printErr(err)
+		return
+	}
 	// init the main ctrl manager
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:         scheme,
@@ -186,7 +197,7 @@ func startTrafficFactory(ctx context.Context) (error, func()) {
 	p := traffic.TrafficFactoryParams{
 		ParentLogger:            mainLogger,
 		BPFTrafficFactoryConfig: globalConfig.BPFTrafficFactoryConfig,
-		PodTrafficStore:         mainPodTrafficStore,
+		TrafficStore:            mainTrafficStore,
 		Classifier:              mainClassifier,
 	}
 	tf, err := traffic.NewTrafficFactory(p)
@@ -264,6 +275,51 @@ func startPodTrafficStore(ctx context.Context) error {
 		mockConfig := globalConfig.MockConfig
 		s := mock.NewDummyPodTrafficStore(mockConfig.TrackedPodIP)
 		mainPodTrafficStore = s
+	}
+	return nil
+}
+
+func startTrafficStore(ctx context.Context) error {
+	config := globalConfig.TrafficStoreConfig
+	if config.Enabled {
+		params := store.TrafficStoreParams{
+			ParentLogger:       mainLogger,
+			DB:                 mainDB,
+			TrafficStoreConfig: config,
+		}
+		s, err := store.NewTrafficStore(params)
+		if err != nil {
+			return errors.Join(err, ErrStartingTrafficStore)
+		}
+		mainTrafficStore = s
+		if err := s.Start(ctx); err != nil {
+			return errors.Join(err, ErrStartingTrafficStore)
+		}
+	} else {
+		mockConfig := globalConfig.MockConfig
+		s := &mock.DummyTrafficStore{
+			MarkedPodAddrForPodTraffic:   mockConfig.TrackedPodIP,
+			MarkedRemoteIPForHostTraffic: mockConfig.TrackedWorldIP,
+		}
+		mainTrafficStore = s
+	}
+	return nil
+}
+
+func startHostDevWatcher(ctx context.Context) error {
+	p := node_watcher.HostDevWatcherParams{
+		ParentLogger:         mainLogger,
+		NetLib:               mainNetlib,
+		BPFTrafficFactory:    mainTrafficFactory,
+		Classifier:           mainClassifier,
+		HostDevWatcherConfig: globalConfig.HostDevWatcherConfig,
+	}
+	w, err := node_watcher.NewHostDevWatcher(p)
+	if err != nil {
+		return errors.Join(err, ErrStartingHostDevWatcher)
+	}
+	if err := w.Start(ctx); err != nil {
+		return errors.Join(err, ErrStartingHostDevWatcher)
 	}
 	return nil
 }

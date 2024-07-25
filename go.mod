@@ -7,7 +7,7 @@ require (
 	github.com/cilium/cilium v1.15.7
 	github.com/cilium/ebpf v0.15.0
 	github.com/puzpuzpuz/xsync v1.5.2
-	gitlab.com/dinoallo/sealos-networkmanager-library v0.0.0-20240702111146-9baae8a7ee7b
+	gitlab.com/dinoallo/sealos-networkmanager-library v0.0.0-20240725092154-fd6509c6244d
 	golang.org/x/sync v0.6.0
 	golang.org/x/sys v0.21.0
 	k8s.io/api v0.29.2
@@ -93,7 +93,6 @@ require (
 	github.com/spf13/cobra v1.8.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.18.1 // indirect
-	github.com/sqids/sqids-go v0.4.1 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.11 // indirect
 	github.com/tklauser/numcpus v0.6.0 // indirect

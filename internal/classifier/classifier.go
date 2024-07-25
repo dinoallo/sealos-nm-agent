@@ -29,9 +29,10 @@ type RawTrafficClassifierParams struct {
 type RawTrafficClassifier struct {
 	podMetaTable      *xsync.MapOf[string, structs.PodMeta]
 	exposedPortTables *xsync.MapOf[string, *exposedPortTable]
-	hostCIDRs         []netip.Prefix
+	hostAddrs         *xsync.MapOf[string, struct{}]
 	skippedCIDRs      []netip.Prefix
 	podCIDRs          []netip.Prefix
+	nodeCIDRs         []netip.Prefix
 	RawTrafficClassifierParams
 }
 
@@ -49,18 +50,6 @@ func NewRawTrafficClassifer(params RawTrafficClassifierParams) (*RawTrafficClass
 		skippedCIDRs = append(skippedCIDRs, prefixes...)
 	}
 	log.Printf("skipped cidrs: %v", skippedCIDRs)
-	// init host cidrs
-	var hostCIDRs []netip.Prefix
-	/// add user specified host cidrs
-	for _, hostCIDRStr := range params.HostCIDRList {
-		prefixes, err := getPrefixes(hostCIDRStr, true)
-		if err != nil {
-			log.Printf("this cidr expression %v is invalid: %v. it's unable to consider a host cidr", hostCIDRStr, err)
-			continue
-		}
-		hostCIDRs = append(hostCIDRs, prefixes...)
-	}
-	log.Printf("host cidrs: %v", hostCIDRs)
 	// init pod cidrs
 	var podCIDRs []netip.Prefix
 	/// add user specified pod cidrs
@@ -73,13 +62,26 @@ func NewRawTrafficClassifer(params RawTrafficClassifierParams) (*RawTrafficClass
 		podCIDRs = append(podCIDRs, prefixes...)
 	}
 	log.Printf("pod cidrs: %v", podCIDRs)
+	// init node cidrs
+	var nodeCIDRs []netip.Prefix
+	/// add user specified pod cidrs
+	for _, nodeCIDRStr := range params.NodeCIDRList {
+		prefixes, err := getPrefixes(nodeCIDRStr, true)
+		if err != nil {
+			log.Printf("this cidr expression %v is invalid: %v. it's unable to consider a node cidr", nodeCIDRStr, err)
+			continue
+		}
+		nodeCIDRs = append(nodeCIDRs, prefixes...)
+	}
+	log.Printf("node cidrs: %v", nodeCIDRs)
 	return &RawTrafficClassifier{
 		podMetaTable:               xsync.NewMapOf[structs.PodMeta](),
 		exposedPortTables:          xsync.NewMapOf[*exposedPortTable](),
+		hostAddrs:                  xsync.NewMapOf[struct{}](),
 		RawTrafficClassifierParams: params,
 		skippedCIDRs:               skippedCIDRs,
 		podCIDRs:                   podCIDRs,
-		hostCIDRs:                  hostCIDRs,
+		nodeCIDRs:                  nodeCIDRs,
 	}, nil
 }
 
@@ -114,6 +116,16 @@ func (c *RawTrafficClassifier) UnregisterExposedPort(podAddr string, podPort uin
 	return nil
 }
 
+func (c *RawTrafficClassifier) RegisterHostAddr(hostAddr string) error {
+	c.hostAddrs.LoadOrStore(hostAddr, struct{}{})
+	return nil
+}
+
+func (c *RawTrafficClassifier) UnregisterHostAddr(hostAddr string) error {
+	c.hostAddrs.Delete(hostAddr)
+	return nil
+}
+
 func (c *RawTrafficClassifier) CheckAndGetPodMeta(addr string) (structs.PodMeta, bool) {
 	podMeta, loaded := c.podMetaTable.Load(addr)
 	if !loaded {
@@ -141,6 +153,13 @@ func (c *RawTrafficClassifier) GetAddrType(addr string) (modules.AddrType, error
 	if isSkippedAddr {
 		return modules.AddrTypeSkipped, nil
 	}
+	isHostAddr, err := c.IsHostAddr(addr)
+	if err != nil {
+		return modules.AddrTypeUnknown, err
+	}
+	if isHostAddr {
+		return modules.AddrTypeHost, nil
+	}
 	isPodAddr, err := c.IsPodAddr(addr)
 	if err != nil {
 		return modules.AddrTypeUnknown, err
@@ -148,12 +167,12 @@ func (c *RawTrafficClassifier) GetAddrType(addr string) (modules.AddrType, error
 	if isPodAddr {
 		return modules.AddrTypePod, nil
 	}
-	isHostAddr, err := c.IsHostAddr(addr)
+	isNodeAddr, err := c.IsNodeAddr(addr)
 	if err != nil {
 		return modules.AddrTypeUnknown, err
 	}
-	if isHostAddr {
-		return modules.AddrTypeHost, nil
+	if isNodeAddr {
+		return modules.AddrTypeNode, nil
 	}
 	return modules.AddrTypeWorld, nil
 }
@@ -171,9 +190,9 @@ func (c *RawTrafficClassifier) IsPodAddr(addr string) (bool, error) {
 	return false, nil
 }
 
-func (c *RawTrafficClassifier) IsHostAddr(addr string) (bool, error) {
-	for _, hostCIDR := range c.hostCIDRs {
-		yes, err := inNetwork(hostCIDR, addr)
+func (c *RawTrafficClassifier) IsNodeAddr(addr string) (bool, error) {
+	for _, nodeCIDR := range c.nodeCIDRs {
+		yes, err := inNetwork(nodeCIDR, addr)
 		if err != nil {
 			return false, err
 		}
@@ -182,6 +201,11 @@ func (c *RawTrafficClassifier) IsHostAddr(addr string) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+func (c *RawTrafficClassifier) IsHostAddr(addr string) (bool, error) {
+	_, loaded := c.hostAddrs.Load(addr)
+	return loaded, nil
 }
 
 func (c *RawTrafficClassifier) IsSkippedAddr(addr string) (bool, error) {

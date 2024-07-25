@@ -32,19 +32,19 @@ type RawTraffic struct {
 }
 
 type HostTrafficMeta struct {
-	IP   string `bson:"ip"`
-	Port uint32 `bson:"port"`
+	LocalPort uint32 `bson:"port"`
+	RemoteIP  string `bson:"ip"` // for egress, this is dst; for ingress, this is src;
+}
+
+type HostTrafficMetric struct {
+	SentBytes uint64 `bson:"sent_bytes"`
+	RecvBytes uint64 `bson:"recv_bytes"`
 }
 
 type HostTraffic struct {
 	HostTrafficMeta   `bson:"host_traffic_meta"`
 	HostTrafficMetric `bson:"host_traffic_metric"`
 	Timestamp         time.Time `bson:"timestamp"`
-}
-
-type HostTrafficMetric struct {
-	SentBytes uint64 `bson:"sent_bytes"`
-	RecvBytes uint64 `bson:"recv_bytes"`
 }
 
 // TODO: merge this with PodTrafficMeta
