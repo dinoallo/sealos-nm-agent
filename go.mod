@@ -7,7 +7,7 @@ require (
 	github.com/cilium/cilium v1.15.7
 	github.com/cilium/ebpf v0.15.0
 	github.com/puzpuzpuz/xsync v1.5.2
-	gitlab.com/dinoallo/sealos-networkmanager-library v0.0.0-20240725092154-fd6509c6244d
+	gitlab.com/dinoallo/sealos-networkmanager-library v0.0.0-20240725113523-cdea581d8dec
 	golang.org/x/sync v0.6.0
 	golang.org/x/sys v0.21.0
 	k8s.io/api v0.29.2
