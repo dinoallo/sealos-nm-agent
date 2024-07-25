@@ -12,6 +12,20 @@ import (
 	"github.com/puzpuzpuz/xsync"
 )
 
+var (
+	defaultPrivateCIDRs = []string{
+		"127.0.0.0/8",
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"100.64.0.0/10",
+		"169.254.0.0/16",
+		"::1/128",
+		"fc00::/7",
+		"fd80::/10",
+	}
+)
+
 type exposedPortTable struct {
 	exposedPorts *xsync.MapOf[uint32, bool]
 }
@@ -31,6 +45,7 @@ type RawTrafficClassifier struct {
 	exposedPortTables *xsync.MapOf[string, *exposedPortTable]
 	hostAddrs         *xsync.MapOf[string, struct{}]
 	skippedCIDRs      []netip.Prefix
+	privateCIDRs      []netip.Prefix
 	podCIDRs          []netip.Prefix
 	nodeCIDRs         []netip.Prefix
 	RawTrafficClassifierParams
@@ -52,7 +67,6 @@ func NewRawTrafficClassifer(params RawTrafficClassifierParams) (*RawTrafficClass
 	log.Printf("skipped cidrs: %v", skippedCIDRs)
 	// init pod cidrs
 	var podCIDRs []netip.Prefix
-	/// add user specified pod cidrs
 	for _, podCIDRStr := range params.PodCIDRList {
 		prefixes, err := getPrefixes(podCIDRStr, true)
 		if err != nil {
@@ -64,7 +78,6 @@ func NewRawTrafficClassifer(params RawTrafficClassifierParams) (*RawTrafficClass
 	log.Printf("pod cidrs: %v", podCIDRs)
 	// init node cidrs
 	var nodeCIDRs []netip.Prefix
-	/// add user specified pod cidrs
 	for _, nodeCIDRStr := range params.NodeCIDRList {
 		prefixes, err := getPrefixes(nodeCIDRStr, true)
 		if err != nil {
@@ -74,6 +87,17 @@ func NewRawTrafficClassifer(params RawTrafficClassifierParams) (*RawTrafficClass
 		nodeCIDRs = append(nodeCIDRs, prefixes...)
 	}
 	log.Printf("node cidrs: %v", nodeCIDRs)
+	// init private cidrs
+	var privateCIDRs []netip.Prefix
+	for _, privateCIDRStr := range defaultPrivateCIDRs {
+		prefixes, err := getPrefixes(privateCIDRStr, true)
+		if err != nil {
+			log.Printf("this cidr expression %v is invalid: %v. it's unable to consider a node cidr", privateCIDRStr, err)
+			continue
+		}
+		privateCIDRs = append(privateCIDRs, prefixes...)
+	}
+	log.Printf("private cidrs: %v", privateCIDRs)
 	return &RawTrafficClassifier{
 		podMetaTable:               xsync.NewMapOf[structs.PodMeta](),
 		exposedPortTables:          xsync.NewMapOf[*exposedPortTable](),
@@ -82,6 +106,7 @@ func NewRawTrafficClassifer(params RawTrafficClassifierParams) (*RawTrafficClass
 		skippedCIDRs:               skippedCIDRs,
 		podCIDRs:                   podCIDRs,
 		nodeCIDRs:                  nodeCIDRs,
+		privateCIDRs:               privateCIDRs,
 	}, nil
 }
 
@@ -148,7 +173,7 @@ func (c *RawTrafficClassifier) GetAddrType(addr string) (modules.AddrType, error
 	}
 	isSkippedAddr, err := c.IsSkippedAddr(addr)
 	if err != nil {
-		return modules.AddrTypeSkipped, err
+		return modules.AddrTypeUnknown, err
 	}
 	if isSkippedAddr {
 		return modules.AddrTypeSkipped, nil
@@ -173,6 +198,13 @@ func (c *RawTrafficClassifier) GetAddrType(addr string) (modules.AddrType, error
 	}
 	if isNodeAddr {
 		return modules.AddrTypeNode, nil
+	}
+	isPrivateAddr, err := c.IsPrivateAddr(addr)
+	if err != nil {
+		return modules.AddrTypeUnknown, err
+	}
+	if isPrivateAddr {
+		return modules.AddrTypePrivate, err
 	}
 	return modules.AddrTypeWorld, nil
 }
@@ -211,6 +243,19 @@ func (c *RawTrafficClassifier) IsHostAddr(addr string) (bool, error) {
 func (c *RawTrafficClassifier) IsSkippedAddr(addr string) (bool, error) {
 	for _, skippedCIDR := range c.skippedCIDRs {
 		yes, err := inNetwork(skippedCIDR, addr)
+		if err != nil {
+			return false, err
+		}
+		if yes {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (c *RawTrafficClassifier) IsPrivateAddr(addr string) (bool, error) {
+	for _, privateCIDR := range c.privateCIDRs {
+		yes, err := inNetwork(privateCIDR, addr)
 		if err != nil {
 			return false, err
 		}

@@ -35,6 +35,7 @@ const (
 	AddrTypeSkipped
 	AddrTypeHost
 	AddrTypeNode
+	AddrTypePrivate
 	AddrTypeWorld
 )
 
@@ -48,6 +49,8 @@ func (t AddrType) String() string {
 		return "host"
 	case AddrTypeNode:
 		return "node"
+	case AddrTypePrivate:
+		return "private"
 	case AddrTypeWorld:
 		return "world"
 	default:
