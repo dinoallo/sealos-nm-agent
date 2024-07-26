@@ -35,7 +35,6 @@ var (
 	mainNetlib              netlib.NetLib = netlib.NewNMNetLib()
 	mainDB                  dblib.DB
 	mainClassifier          modules.Classifier
-	mainPodTrafficStore     modules.PodTrafficStore
 	mainTrafficStore        modules.TrafficStore
 	mainTrafficFactory      modules.BPFTrafficFactory
 	mainPortExposureChecker modules.PortExposureChecker
@@ -44,20 +43,19 @@ var (
 	mainMgr      ctrl.Manager
 	globalConfig *conf.GlobalConfig
 
-	ErrInitingGlobalConfig     = errors.New("failed to init the global config")
-	ErrStartingDB              = errors.New("failed to start the database")
-	ErrStartingTrafficFactory  = errors.New("failed to start the traffic factory")
-	ErrStartingCCMWatcher      = errors.New("failed to start the cilium ccm watcher")
-	ErrStartingClassifier      = errors.New("failed to start the classifier")
-	ErrStartingPodTrafficStore = errors.New("failed to start the pod traffic store")
-	ErrStartingTrafficStore    = errors.New("failed to start the traffic store")
-	ErrStartingCtrlManager     = errors.New("failed to start the ctrl manager")
-	ErrCreatingCtrlManager     = errors.New("failed to create the ctrl manager")
-	ErrStartingHostDevWatcher  = errors.New("failed to start the host device watcher")
-	ErrStartingPodWatcher      = errors.New("failed to start the pod watcher")
-	ErrStartingEpWatcher       = errors.New("failed to start the ep watcher")
-	ErrStartingCepWatcher      = errors.New("failed to start the cep watcher")
-	ErrStartingIngressWatcher  = errors.New("failed to start the ingress watcher")
+	ErrInitingGlobalConfig    = errors.New("failed to init the global config")
+	ErrStartingDB             = errors.New("failed to start the database")
+	ErrStartingTrafficFactory = errors.New("failed to start the traffic factory")
+	ErrStartingCCMWatcher     = errors.New("failed to start the cilium ccm watcher")
+	ErrStartingClassifier     = errors.New("failed to start the classifier")
+	ErrStartingTrafficStore   = errors.New("failed to start the traffic store")
+	ErrStartingCtrlManager    = errors.New("failed to start the ctrl manager")
+	ErrCreatingCtrlManager    = errors.New("failed to create the ctrl manager")
+	ErrStartingHostDevWatcher = errors.New("failed to start the host device watcher")
+	ErrStartingPodWatcher     = errors.New("failed to start the pod watcher")
+	ErrStartingEpWatcher      = errors.New("failed to start the ep watcher")
+	ErrStartingCepWatcher     = errors.New("failed to start the cep watcher")
+	ErrStartingIngressWatcher = errors.New("failed to start the ingress watcher")
 
 	scheme = runtime.NewScheme()
 )
@@ -252,29 +250,6 @@ func startClassifier() error {
 		}
 		c := mock.NewDummyClassifier(cfg)
 		mainClassifier = c
-	}
-	return nil
-}
-
-func startPodTrafficStore(ctx context.Context) error {
-	config := globalConfig.PodTrafficStoreConfig
-	if config.Enabled {
-		params := store.PodTrafficStoreParams{
-			DB:                    mainDB,
-			PodTrafficStoreConfig: config,
-		}
-		s, err := store.NewPodTrafficStore(params)
-		if err != nil {
-			return errors.Join(err, ErrStartingPodTrafficStore)
-		}
-		mainPodTrafficStore = s
-		if err := s.Start(ctx); err != nil {
-			return errors.Join(err, ErrStartingPodTrafficStore)
-		}
-	} else {
-		mockConfig := globalConfig.MockConfig
-		s := mock.NewDummyPodTrafficStore(mockConfig.TrackedPodIP)
-		mainPodTrafficStore = s
 	}
 	return nil
 }

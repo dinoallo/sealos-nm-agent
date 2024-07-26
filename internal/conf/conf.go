@@ -50,32 +50,6 @@ func NewClassifierConfig() ClassifierConfig {
 	}
 }
 
-type PodTrafficStoreConfig struct { // envPrefix: PTS_
-	Enabled               bool          `env:"ENABLED"`
-	DefaultColl           string        `env:"DEFAULT_COLL"`
-	MaxWorkerCount        int           `env:"MAX_WORKER_COUNT"`
-	FlushTimeout          time.Duration `env:"FLUSH_TIMEOUT"`
-	GetBatchTimeout       time.Duration `env:"GET_BATCH_TIMEOUT"`
-	BatchSize             int           `env:"BATCH_SIZE"`
-	CacheEntryTTL         time.Duration `env:"CACHE_ENTRY_TTL"`
-	CacheExpiredEntrySize int           `env:"CACHE_EXPIRED_ENTRY_SIZE"`
-	CacheEntrySize        int           `env:"CACHE_ENTRY_SIZE"`
-}
-
-func NewPodTrafficStoreConfig() PodTrafficStoreConfig {
-	return PodTrafficStoreConfig{
-		Enabled:               true,
-		DefaultColl:           "traffic",
-		MaxWorkerCount:        5,
-		FlushTimeout:          time.Second * 5,
-		GetBatchTimeout:       time.Second * 5,
-		BatchSize:             100,
-		CacheEntryTTL:         time.Second * 60,
-		CacheExpiredEntrySize: 1e4,
-		CacheEntrySize:        1e6,
-	}
-}
-
 type TrafficStoreConfig struct { // envPrefix: PTS_
 	Enabled               bool          `env:"ENABLED"`
 	PodTrafficColl        string        `env:"POD_TRAFFIC_COLL"`
@@ -190,7 +164,6 @@ func NewDebugServiceConfig() DebugServiceConfig {
 
 type GlobalConfig struct {
 	ClassifierConfig        `envPrefix:"CLS_"`
-	PodTrafficStoreConfig   `envPrefix:"PTS_"`
 	TrafficStoreConfig      `envPrefix:"TS_"`
 	DBConfig                `envPrefix:"DB_"`
 	BPFTrafficFactoryConfig `envPrefix:"TF_"`
@@ -206,7 +179,6 @@ type GlobalConfig struct {
 func NewGlobalConfig() *GlobalConfig {
 	return &GlobalConfig{
 		ClassifierConfig:        NewClassifierConfig(),
-		PodTrafficStoreConfig:   NewPodTrafficStoreConfig(),
 		TrafficStoreConfig:      NewTrafficStoreConfig(),
 		DBConfig:                NewDBConfig(),
 		BPFTrafficFactoryConfig: NewBPFTrafficFactoryConfig(),
