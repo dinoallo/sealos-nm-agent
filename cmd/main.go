@@ -211,6 +211,9 @@ func startTrafficFactory(ctx context.Context) (error, func()) {
 }
 
 func startCEPWatcher(ctx context.Context) error {
+	if !globalConfig.EnablePodTraffic {
+		return nil
+	}
 	params := k8s_watcher.CepWatcherParams{
 		Client:            mainMgr.GetClient(),
 		Scheme:            mainMgr.GetScheme(),
@@ -282,6 +285,9 @@ func startTrafficStore(ctx context.Context) error {
 }
 
 func startHostDevWatcher(ctx context.Context) error {
+	if !globalConfig.EnableHostTraffic {
+		return nil
+	}
 	p := node_watcher.HostDevWatcherParams{
 		ParentLogger:         mainLogger,
 		NetLib:               mainNetlib,

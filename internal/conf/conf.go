@@ -163,6 +163,12 @@ func NewDebugServiceConfig() DebugServiceConfig {
 }
 
 type GlobalConfig struct {
+	// set `EnableHostTraffic` to true to enable watching on host devices. the current
+	// implementation still allocates memory for packets from/to host no matter what
+	EnableHostTraffic bool `envPrefix:"ENABLE_HOST_TRAFFIC"`
+	// set `EnablePodTraffic` to true to enable watching on pods. the current
+	// implementation still allocates memory for packets from/to pod no matter what
+	EnablePodTraffic        bool `envPrefix:"ENABLE_POD_TRAFFIC"`
 	ClassifierConfig        `envPrefix:"CLS_"`
 	TrafficStoreConfig      `envPrefix:"TS_"`
 	DBConfig                `envPrefix:"DB_"`
@@ -178,6 +184,8 @@ type GlobalConfig struct {
 
 func NewGlobalConfig() *GlobalConfig {
 	return &GlobalConfig{
+		EnableHostTraffic:       true,
+		EnablePodTraffic:        true,
 		ClassifierConfig:        NewClassifierConfig(),
 		TrafficStoreConfig:      NewTrafficStoreConfig(),
 		DBConfig:                NewDBConfig(),
