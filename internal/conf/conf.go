@@ -23,12 +23,17 @@ func NewDBConfig() DBConfig {
 type BPFTrafficFactoryConfig struct { // envPrefix: TF_
 	ReaderMaxWorker  int `env:"READER_MAX_WORKER"`
 	HandlerMaxWorker int `env:"HANDLER_MAX_WORKER"`
+	// if `DumpMode` is set to true, the handler will dump packets before they
+	// get sent to the store, this is useful when testing and debugging.
+	// currently only host traffic dumping is supported
+	DumpMode bool `env:"DUMP_MODE"`
 }
 
 func NewBPFTrafficFactoryConfig() BPFTrafficFactoryConfig {
 	return BPFTrafficFactoryConfig{
 		ReaderMaxWorker:  5,
 		HandlerMaxWorker: 5,
+		DumpMode:         false,
 	}
 }
 

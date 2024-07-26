@@ -10,7 +10,6 @@ import (
 
 	"github.com/cilium/ebpf/ringbuf"
 	structsapi "github.com/dinoallo/sealos-networkmanager-agent/api/structs"
-	"github.com/dinoallo/sealos-networkmanager-agent/internal/common/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/host"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
@@ -23,6 +22,7 @@ const (
 )
 
 type TrafficEventHandlerConfig struct {
+	DumpMode  bool
 	MaxWorker int
 }
 
@@ -39,11 +39,15 @@ type TrafficEventHandlerParams struct {
 
 type TrafficEventHandler struct {
 	log.Logger
-	nativeEndian binary.ByteOrder
+	nativeEndian    binary.ByteOrder
+	hostItemsToDump chan structsapi.RawTraffic
 	TrafficEventHandlerParams
 }
 
 func (h *TrafficEventHandler) Start(ctx context.Context) {
+	if h.DumpMode {
+		h.doHandling(ctx, h.MaxWorker, h.dumpHostEgress)
+	}
 	h.doHandling(ctx, h.MaxWorker, h.handlePodEgress)
 	h.doHandling(ctx, h.MaxWorker, h.handlePodEgressNotis)
 	h.doHandling(ctx, h.MaxWorker, h.handleHostEgress)
@@ -62,6 +66,7 @@ func NewTrafficEventHandler(params TrafficEventHandlerParams) (*TrafficEventHand
 	return &TrafficEventHandler{
 		Logger:                    logger,
 		nativeEndian:              nativeEndian,
+		hostItemsToDump:           make(chan structsapi.RawTraffic),
 		TrafficEventHandlerParams: params,
 	}, nil
 }
@@ -146,6 +151,11 @@ func (h *TrafficEventHandler) handleHostEgress(ctx context.Context) error {
 			return nil
 		}
 		item := e.convertToRawTraffic()
+		if h.DumpMode {
+			go func() {
+				h.hostItemsToDump <- item
+			}()
+		}
 		srcAddr := item.Meta.Src.IP
 		dstAddr := item.Meta.Dst.IP
 		srcAddrType, err := h.GetAddrType(srcAddr)
@@ -167,6 +177,25 @@ func (h *TrafficEventHandler) handleHostEgress(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// `trackHostEgress` is only useful when the dump mode is on
+func (h *TrafficEventHandler) dumpHostEgress(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case item := <-h.hostItemsToDump:
+		srcType, err := h.GetAddrType(item.Meta.Src.IP)
+		if err != nil {
+			return err
+		}
+		dstType, err := h.GetAddrType(item.Meta.Dst.IP)
+		if err != nil {
+			return err
+		}
+		h.Infof("src %v:%v type %v => dst %v:%v type %v;Tx %v bytes", item.Meta.Src.IP, item.Meta.Src.Port, srcType, item.Meta.Dst.IP, item.Meta.Dst.Port, dstType, item.DataBytes)
+		return nil
+	}
 }
 
 func (h *TrafficEventHandler) handleOutboundTrafficFromPod(ctx context.Context, addrInfo structsapi.RawTrafficAddrInfo, dstAddrType modules.AddrType, item *structsapi.RawTraffic) error {
@@ -221,15 +250,6 @@ func (h *TrafficEventHandler) handleOutboundTrafficFromHost(ctx context.Context,
 			return err
 		}
 		return nil
-	}
-	return nil
-}
-
-func submitWithTimeout(ctx context.Context, event structs.RawTrafficEvent, timeout time.Duration, submitFunc func(context.Context, structs.RawTrafficEvent) error) error {
-	submitCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	if err := submitFunc(submitCtx, event); err != nil {
-		return err
 	}
 	return nil
 }
