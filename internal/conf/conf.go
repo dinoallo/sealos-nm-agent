@@ -26,14 +26,16 @@ type BPFTrafficFactoryConfig struct { // envPrefix: TF_
 	// if `DumpMode` is set to true, the handler will dump packets before they
 	// get sent to the store, this is useful when testing and debugging.
 	// currently only host traffic dumping is supported
-	DumpMode bool `env:"DUMP_MODE"`
+	HostDumpMode bool `env:"HOST_DUMP_MODE"`
+	PodDumpMode  bool `env:"POD_DUMP_MODE"`
 }
 
 func NewBPFTrafficFactoryConfig() BPFTrafficFactoryConfig {
 	return BPFTrafficFactoryConfig{
 		ReaderMaxWorker:  5,
 		HandlerMaxWorker: 5,
-		DumpMode:         false,
+		PodDumpMode:      false,
+		HostDumpMode:     false,
 	}
 }
 

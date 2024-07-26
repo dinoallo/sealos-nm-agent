@@ -22,8 +22,9 @@ const (
 )
 
 type TrafficEventHandlerConfig struct {
-	DumpMode  bool
-	MaxWorker int
+	PodTrafficDumpMode  bool
+	HostTrafficDumpMode bool
+	MaxWorker           int
 }
 
 type TrafficEventHandlerParams struct {
@@ -39,13 +40,17 @@ type TrafficEventHandlerParams struct {
 
 type TrafficEventHandler struct {
 	log.Logger
-	nativeEndian    binary.ByteOrder
-	hostItemsToDump chan structsapi.RawTraffic
+	nativeEndian          binary.ByteOrder
+	hostEgressItemsToDump chan structsapi.RawTraffic
+	podEgressItemsToDump  chan structsapi.RawTraffic
 	TrafficEventHandlerParams
 }
 
 func (h *TrafficEventHandler) Start(ctx context.Context) {
-	if h.DumpMode {
+	if h.PodTrafficDumpMode {
+		h.doHandling(ctx, h.MaxWorker, h.dumpPodEgress)
+	}
+	if h.HostTrafficDumpMode {
 		h.doHandling(ctx, h.MaxWorker, h.dumpHostEgress)
 	}
 	h.doHandling(ctx, h.MaxWorker, h.handlePodEgress)
@@ -66,7 +71,8 @@ func NewTrafficEventHandler(params TrafficEventHandlerParams) (*TrafficEventHand
 	return &TrafficEventHandler{
 		Logger:                    logger,
 		nativeEndian:              nativeEndian,
-		hostItemsToDump:           make(chan structsapi.RawTraffic),
+		hostEgressItemsToDump:     make(chan structsapi.RawTraffic),
+		podEgressItemsToDump:      make(chan structsapi.RawTraffic),
 		TrafficEventHandlerParams: params,
 	}, nil
 }
@@ -84,6 +90,11 @@ func (h *TrafficEventHandler) handlePodEgress(ctx context.Context) error {
 			return nil
 		}
 		item := e.convertToRawTraffic()
+		if h.PodTrafficDumpMode {
+			go func() {
+				h.podEgressItemsToDump <- item
+			}()
+		}
 		srcAddr := item.Meta.Src.IP
 		dstAddr := item.Meta.Dst.IP
 		srcAddrType, err := h.GetAddrType(srcAddr)
@@ -151,9 +162,9 @@ func (h *TrafficEventHandler) handleHostEgress(ctx context.Context) error {
 			return nil
 		}
 		item := e.convertToRawTraffic()
-		if h.DumpMode {
+		if h.HostTrafficDumpMode {
 			go func() {
-				h.hostItemsToDump <- item
+				h.hostEgressItemsToDump <- item
 			}()
 		}
 		srcAddr := item.Meta.Src.IP
@@ -184,7 +195,26 @@ func (h *TrafficEventHandler) dumpHostEgress(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return nil
-	case item := <-h.hostItemsToDump:
+	case item := <-h.hostEgressItemsToDump:
+		srcType, err := h.GetAddrType(item.Meta.Src.IP)
+		if err != nil {
+			return err
+		}
+		dstType, err := h.GetAddrType(item.Meta.Dst.IP)
+		if err != nil {
+			return err
+		}
+		h.Infof("src %v:%v type %v => dst %v:%v type %v;Tx %v bytes", item.Meta.Src.IP, item.Meta.Src.Port, srcType, item.Meta.Dst.IP, item.Meta.Dst.Port, dstType, item.DataBytes)
+		return nil
+	}
+}
+
+// `trackPodEgress` is only useful when the dump mode is on
+func (h *TrafficEventHandler) dumpPodEgress(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return nil
+	case item := <-h.podEgressItemsToDump:
 		srcType, err := h.GetAddrType(item.Meta.Src.IP)
 		if err != nil {
 			return err

@@ -51,8 +51,9 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 	egressHostTrafficRecords := make(chan *ringbuf.Record)
 	egressHostNotiRecords := make(chan *ringbuf.Record)
 	handlerConfig := TrafficEventHandlerConfig{
-		MaxWorker: params.HandlerMaxWorker,
-		DumpMode:  params.DumpMode,
+		MaxWorker:           params.HandlerMaxWorker,
+		HostTrafficDumpMode: params.HostDumpMode,
+		PodTrafficDumpMode:  params.PodDumpMode,
 	}
 	handlerParams := TrafficEventHandlerParams{
 		ParentLogger:              logger,
