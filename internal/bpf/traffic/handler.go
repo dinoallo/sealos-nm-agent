@@ -253,7 +253,12 @@ func (h *TrafficEventHandler) handleOutboundTrafficFromPod(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	if isFromExposedPort && dstAddrType != modules.AddrTypePod {
+	// check if the outbound traffic from node ports
+	isFromNodePort, err := h.IsPortNodePort(podAddr, podPort)
+	if err != nil {
+		return err
+	}
+	if (isFromExposedPort || isFromNodePort) && dstAddrType != modules.AddrTypePod {
 		tag := taglib.GetTagSrcPortN(podPort)
 		if err := h.updatePodMetric(ctx, podAddr, *tag, podMeta, podMetric); err != nil {
 			return err

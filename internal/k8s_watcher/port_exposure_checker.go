@@ -137,13 +137,19 @@ func (c *PortExposureChecker) updateEpSlice(hash string, latest discoveryv1.Endp
 	svc.epSlices.Store(hash, es)
 	// the ES is already updated so it's exposed if there are IBs using its owner SVC as backend
 	_updateExposure := func(ibHash string, ib *IB) bool {
-		if err := c.updateExposure(ib, true); err != nil {
+		if err := c.updateExposureForIngressBackend(ib, true); err != nil {
 			//TODO: handle me
 			log.Printf("failed to update exposure to true while removing the epslice")
 		}
 		return true
 	}
 	svc.referencedBy.Range(_updateExposure)
+	var isNodePort bool = service.Spec.Type == corev1.ServiceTypeNodePort
+	for _, servicePort := range service.Spec.Ports {
+		if err := c.updateNodePortForEp(servicePort.TargetPort, *es.epSlice, isNodePort); err != nil {
+			return nil, err
+		}
+	}
 	return es, nil
 }
 
@@ -163,7 +169,7 @@ func (c *PortExposureChecker) removeEpSlice(esHash string) error {
 	svc.mu.RUnlock()
 	// since this endpoint slice is removed, it's not exposed anymore
 	_updateExposure := func(ibHash string, ib *IB) bool {
-		if err := c.updateExposure(ib, false); err != nil {
+		if err := c.updateExposureForIngressBackend(ib, false); err != nil {
 			//TODO: handle me
 			log.Printf("failed to update exposure to false while removing the epslice")
 		}
@@ -329,7 +335,7 @@ func (c *PortExposureChecker) updateIngressBackend(svcHash string, latest networ
 	ib.mu.Unlock()
 	svc.referencedBy.Store(ibHash, ib)
 	// update exposure
-	if err := c.updateExposure(ib, true); err != nil {
+	if err := c.updateExposureForIngressBackend(ib, true); err != nil {
 		//TODO: handle me
 		log.Printf("failed to update exposure of an ingress backend %v while updating it: %v", ibHash, err)
 	}
@@ -346,7 +352,7 @@ func (c *PortExposureChecker) removeIngressBackend(ibHash string) {
 	if ib.backend == nil {
 		return
 	}
-	if err := c.updateExposure(ib, false); err != nil {
+	if err := c.updateExposureForIngressBackend(ib, false); err != nil {
 		//TODO: handle me
 		log.Printf("failed to update exposure of an ingress backend %v while removing it: %v", ibHash, err)
 	}
@@ -377,7 +383,7 @@ func (c *PortExposureChecker) getOwnerService(epSlice discoveryv1.EndpointSlice)
 	return &service
 }
 
-func (c *PortExposureChecker) updateExposure(ib *IB, exposure bool) error {
+func (c *PortExposureChecker) updateExposureForIngressBackend(ib *IB, exposure bool) error {
 	svc := ib.backend
 	if svc == nil {
 		return nil
@@ -391,6 +397,35 @@ func (c *PortExposureChecker) updateExposure(ib *IB, exposure bool) error {
 		return true
 	}
 	svc.epSlices.Range(_updateExposure)
+	return nil
+}
+
+func (c *PortExposureChecker) updateNodePortForEp(targetPort intstr.IntOrString, epSlice EndpointSlice, isNodePort bool) error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	for _, ep := range epSlice.Endpoints {
+		if ep.TargetRef == nil {
+			continue
+		}
+		podHash := GetPodHash(ep.TargetRef.Name, ep.TargetRef.Namespace)
+		if portNumber := targetPort.IntVal; portNumber != 0 {
+			c._updateNodePortForEp(podHash, ep.Addresses, portNumber, isNodePort)
+		} else if portName := targetPort.StrVal; portName != "" {
+			var pod corev1.Pod
+			podNN := types.NamespacedName{
+				Name:      ep.TargetRef.Name,
+				Namespace: ep.TargetRef.Namespace,
+			}
+			if err := c.Get(ctx, podNN, &pod); err != nil {
+				//TODO: handle me
+				continue
+			}
+			portNumber, exists := getNamedPort(pod, targetPort.StrVal)
+			if exists {
+				c._updateNodePortForEp(podHash, ep.Addresses, portNumber, isNodePort)
+			}
+		}
+	}
 	return nil
 }
 
@@ -443,6 +478,22 @@ func (c *PortExposureChecker) _updateExposureForEp(podHash string, addrs []strin
 	}
 }
 
+func (c *PortExposureChecker) _updateNodePortForEp(podHash string, addrs []string, portNumber int32, isNodePort bool) {
+	for _, addr := range addrs {
+		if isNodePort {
+			if err := c.makeNodePort(addr, portNumber); err != nil {
+				log.Printf("failed to make port %v a node port for pod %v@%v", portNumber, podHash, addr)
+				continue
+			}
+		} else {
+			if err := c.makeNonNodePort(addr, portNumber); err != nil {
+				log.Printf("failed to make port %v a non node port for pod %v@%v", portNumber, podHash, addr)
+				continue
+			}
+		}
+	}
+}
+
 func (c *PortExposureChecker) makeExposed(podAddr string, podPort int32) error {
 	// make the port exposed
 	if err := c.RegisterExposedPort(podAddr, uint32(podPort)); err != nil {
@@ -453,6 +504,21 @@ func (c *PortExposureChecker) makeExposed(podAddr string, podPort int32) error {
 
 func (c *PortExposureChecker) makePrivate(podAddr string, podPort int32) error {
 	if err := c.UnregisterExposedPort(podAddr, uint32(podPort)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *PortExposureChecker) makeNodePort(podAddr string, podPort int32) error {
+	// make the port a node port
+	if err := c.RegisterNodePort(podAddr, uint32(podPort)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *PortExposureChecker) makeNonNodePort(podAddr string, podPort int32) error {
+	if err := c.UnregisterNodePort(podAddr, uint32(podPort)); err != nil {
 		return err
 	}
 	return nil

@@ -10,6 +10,8 @@ type Classifier interface {
 	UnregisterPod(addr string) error
 	RegisterExposedPort(podAddr string, podPort uint32) error
 	UnregisterExposedPort(podAddr string, podPort uint32) error
+	RegisterNodePort(podAddr string, podPort uint32) error
+	UnregisterNodePort(podAddr string, podPort uint32) error
 	RegisterHostAddr(hostAddr string) error
 	UnregisterHostAddr(hostAddr string) error
 	GetPodMeta(addr string) (structs.PodMeta, bool)
@@ -19,6 +21,7 @@ type Classifier interface {
 	IsNodeAddr(addr string) (bool, error)
 	IsWorldAddr(addr string) (bool, error)
 	IsPortExposed(podAddr string, podPort uint32) (bool, error)
+	IsPortNodePort(podAddr string, podPort uint32) (bool, error)
 	GetAddrType(addr string) (AddrType, error)
 }
 

@@ -26,13 +26,15 @@ var (
 	}
 )
 
-type exposedPortTable struct {
+type specialPortTable struct {
 	exposedPorts *xsync.MapOf[uint32, bool]
+	nodePorts    *xsync.MapOf[uint32, bool]
 }
 
-func newExposedPortTable() *exposedPortTable {
-	return &exposedPortTable{
+func newSpecialPortTable() *specialPortTable {
+	return &specialPortTable{
 		exposedPorts: xsync.NewIntegerMapOf[uint32, bool](),
+		nodePorts:    xsync.NewIntegerMapOf[uint32, bool](),
 	}
 }
 
@@ -42,7 +44,7 @@ type RawTrafficClassifierParams struct {
 
 type RawTrafficClassifier struct {
 	podMetaTable      *xsync.MapOf[string, structs.PodMeta]
-	exposedPortTables *xsync.MapOf[string, *exposedPortTable]
+	specialPortTables *xsync.MapOf[string, *specialPortTable]
 	hostAddrs         *xsync.MapOf[string, struct{}]
 	skippedCIDRs      []netip.Prefix
 	privateCIDRs      []netip.Prefix
@@ -100,7 +102,7 @@ func NewRawTrafficClassifer(params RawTrafficClassifierParams) (*RawTrafficClass
 	log.Printf("private cidrs: %v", privateCIDRs)
 	return &RawTrafficClassifier{
 		podMetaTable:               xsync.NewMapOf[structs.PodMeta](),
-		exposedPortTables:          xsync.NewMapOf[*exposedPortTable](),
+		specialPortTables:          xsync.NewMapOf[*specialPortTable](),
 		hostAddrs:                  xsync.NewMapOf[struct{}](),
 		RawTrafficClassifierParams: params,
 		skippedCIDRs:               skippedCIDRs,
@@ -122,22 +124,42 @@ func (c *RawTrafficClassifier) UnregisterPod(addr string) error {
 }
 
 func (c *RawTrafficClassifier) RegisterExposedPort(podAddr string, podPort uint32) error {
-	newEPT := newExposedPortTable()
-	ept, loaded := c.exposedPortTables.LoadOrStore(podAddr, newEPT)
+	newSPT := newSpecialPortTable()
+	spt, loaded := c.specialPortTables.LoadOrStore(podAddr, newSPT)
 	if !loaded {
-		ept = newEPT
+		spt = newSPT
 	}
-	ept.exposedPorts.Store(podPort, true)
+	spt.exposedPorts.Store(podPort, true)
 	return nil
 }
 
 // TODO: gc the exposedPortTable if the podAddr doesn't have any registerd and exposed ports
 func (c *RawTrafficClassifier) UnregisterExposedPort(podAddr string, podPort uint32) error {
-	ept, loaded := c.exposedPortTables.Load(podAddr)
+	spt, loaded := c.specialPortTables.Load(podAddr)
 	if !loaded {
 		return nil
 	}
-	ept.exposedPorts.LoadAndDelete(podPort)
+	spt.exposedPorts.LoadAndDelete(podPort)
+	return nil
+}
+
+func (c *RawTrafficClassifier) RegisterNodePort(podAddr string, podPort uint32) error {
+	newSPT := newSpecialPortTable()
+	spt, loaded := c.specialPortTables.LoadOrStore(podAddr, newSPT)
+	if !loaded {
+		spt = newSPT
+	}
+	spt.nodePorts.Store(podPort, true)
+	return nil
+}
+
+// TODO: gc the nodePortTable if the podAddr doesn't have any registerd node ports
+func (c *RawTrafficClassifier) UnregisterNodePort(podAddr string, podPort uint32) error {
+	spt, loaded := c.specialPortTables.Load(podAddr)
+	if !loaded {
+		return nil
+	}
+	spt.nodePorts.LoadAndDelete(podPort)
 	return nil
 }
 
@@ -278,11 +300,23 @@ func (c *RawTrafficClassifier) IsWorldAddr(addr string) (bool, error) {
 }
 
 func (c *RawTrafficClassifier) IsPortExposed(podAddr string, podPort uint32) (bool, error) {
-	ept, loaded := c.exposedPortTables.Load(podAddr)
+	spt, loaded := c.specialPortTables.Load(podAddr)
 	if !loaded {
 		return false, nil
 	}
-	_, loaded = ept.exposedPorts.Load(podPort)
+	_, loaded = spt.exposedPorts.Load(podPort)
+	if loaded {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (c *RawTrafficClassifier) IsPortNodePort(podAddr string, podPort uint32) (bool, error) {
+	spt, loaded := c.specialPortTables.Load(podAddr)
+	if !loaded {
+		return false, nil
+	}
+	_, loaded = spt.nodePorts.Load(podPort)
 	if loaded {
 		return true, nil
 	}
@@ -291,20 +325,20 @@ func (c *RawTrafficClassifier) IsPortExposed(podAddr string, podPort uint32) (bo
 
 func (c *RawTrafficClassifier) DumpExposedPorts(w http.ResponseWriter, req *http.Request) {
 	fmt.Fprintf(w, "dumping exposed ports:\n")
-	dumpExposedPorts := func(podAddr string, ept *exposedPortTable) bool {
+	dumpExposedPorts := func(podAddr string, spt *specialPortTable) bool {
 		fmt.Fprintf(w, "dump %v's exposed port:\n", podAddr)
 		dump := func(port uint32, v bool) bool {
 			fmt.Fprintf(w, "%v is exposed\n", port)
 			return true
 		}
-		if ept != nil {
-			ept.exposedPorts.Range(dump)
+		if spt != nil {
+			spt.exposedPorts.Range(dump)
 		} else {
 			fmt.Fprintf(w, "why is there a nil exposedPortTable???\n")
 		}
 		return true
 	}
-	c.exposedPortTables.Range(dumpExposedPorts)
+	c.specialPortTables.Range(dumpExposedPorts)
 }
 
 // TODO: maybe put this into netutil

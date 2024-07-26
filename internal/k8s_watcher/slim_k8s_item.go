@@ -24,6 +24,7 @@ func NewServicePort(sp corev1.ServicePort) ServicePort {
 
 type ServiceSpec struct {
 	Ports []ServicePort
+	Type  corev1.ServiceType
 }
 
 func NewServiceSpec(sp corev1.ServiceSpec) ServiceSpec {
@@ -34,6 +35,7 @@ func NewServiceSpec(sp corev1.ServiceSpec) ServiceSpec {
 	}
 	return ServiceSpec{
 		Ports: ports,
+		Type:  sp.Type,
 	}
 }
 

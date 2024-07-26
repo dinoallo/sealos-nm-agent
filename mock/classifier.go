@@ -64,6 +64,28 @@ func (c *DummyClassifier) UnregisterExposedPort(podAddr string, podPort uint32) 
 	return nil
 }
 
+func (c *DummyClassifier) RegisterNodePort(podAddr string, podPort uint32) error {
+	if podAddr != c.PodAddr {
+		return nil
+	}
+	if c.PodPort != 0 && podPort != c.PodPort {
+		return nil
+	}
+	log.Printf("register node port %v for addr %v", podPort, podAddr)
+	return nil
+}
+
+func (c *DummyClassifier) UnregisterNodePort(podAddr string, podPort uint32) error {
+	if podAddr != c.PodAddr {
+		return nil
+	}
+	if c.PodPort != 0 && podPort != c.PodPort {
+		return nil
+	}
+	log.Printf("unregister exposed port %v for addr %v", podPort, podAddr)
+	return nil
+}
+
 func (c *DummyClassifier) RegisterHostAddr(hostAddr string) error {
 	if hostAddr != c.HostAddr {
 		return nil
@@ -120,6 +142,13 @@ func (c *DummyClassifier) IsWorldAddr(addr string) (bool, error) {
 }
 
 func (c *DummyClassifier) IsPortExposed(podAddr string, podPort uint32) (bool, error) {
+	if podAddr == c.PodAddr && podPort == c.PodPort {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (c *DummyClassifier) IsPortNodePort(podAddr string, podPort uint32) (bool, error) {
 	if podAddr == c.PodAddr && podPort == c.PodPort {
 		return true, nil
 	}
