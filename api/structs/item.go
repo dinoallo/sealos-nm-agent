@@ -33,6 +33,7 @@ type RawTraffic struct {
 
 type HostTrafficMeta struct {
 	RemoteIP string `bson:"remote_ip"` // for egress, this is dst; for ingress, this is src;
+	Node     string `bson:"node"`
 }
 
 type HostTrafficMetric struct {

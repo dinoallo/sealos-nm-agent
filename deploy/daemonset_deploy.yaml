@@ -162,7 +162,7 @@ spec:
               key: db_name
               name: nm-db-conn-credential
               optional: false
-        - name: CEPW_HOST
+        - name: AGENT_HOST
           valueFrom:
             fieldRef:
               fieldPath: status.podIP

@@ -18,6 +18,7 @@ import (
 
 type CepWatcherParams struct {
 	ParentLogger log.Logger
+	Host         string
 	client.Client
 	*runtime.Scheme
 	modules.BPFTrafficFactory

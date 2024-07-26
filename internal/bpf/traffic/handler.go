@@ -28,6 +28,7 @@ type TrafficEventHandlerConfig struct {
 }
 
 type TrafficEventHandlerParams struct {
+	Host                     string
 	ParentLogger             log.Logger
 	EgressPodTrafficRecords  chan *ringbuf.Record
 	EgressPodNotiRecords     chan *ringbuf.Record
@@ -271,6 +272,7 @@ func (h *TrafficEventHandler) handleOutboundTrafficFromHost(ctx context.Context,
 	}
 	hostMeta := structsapi.HostTrafficMeta{
 		RemoteIP: item.Meta.Dst.IP,
+		Node:     h.Host,
 	}
 	if err := h.updateHostMetric(ctx, remoteIP, hostMeta, hostMetric); err != nil {
 		return err

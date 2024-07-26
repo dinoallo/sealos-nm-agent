@@ -21,6 +21,7 @@ const (
 )
 
 type TrafficFactoryParams struct {
+	Host         string
 	ParentLogger log.Logger
 	conf.BPFTrafficFactoryConfig
 	modules.TrafficStore
@@ -56,6 +57,7 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 		PodTrafficDumpMode:  params.PodDumpMode,
 	}
 	handlerParams := TrafficEventHandlerParams{
+		Host:                      params.Host,
 		ParentLogger:              logger,
 		EgressPodTrafficRecords:   egressPodTrafficRecords,
 		EgressPodNotiRecords:      egressPodNotiRecords,

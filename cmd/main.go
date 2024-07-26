@@ -197,6 +197,7 @@ func startDB() error {
 
 func startTrafficFactory(ctx context.Context) (error, func()) {
 	p := traffic.TrafficFactoryParams{
+		Host:                    globalConfig.Host,
 		ParentLogger:            mainLogger,
 		BPFTrafficFactoryConfig: globalConfig.BPFTrafficFactoryConfig,
 		TrafficStore:            mainTrafficStore,
@@ -219,6 +220,7 @@ func startCEPWatcher(ctx context.Context) error {
 		return nil
 	}
 	params := k8s_watcher.CepWatcherParams{
+		Host:              globalConfig.Host,
 		Client:            mainMgr.GetClient(),
 		Scheme:            mainMgr.GetScheme(),
 		ParentLogger:      mainLogger,
