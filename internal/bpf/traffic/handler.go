@@ -180,11 +180,12 @@ func (h *TrafficEventHandler) handleHostEgress(ctx context.Context) error {
 		if checkSkipped(srcAddrType, dstAddrType) {
 			return nil
 		}
-		// if this traffic isn't originate from the local host, ignore it
-		if srcAddrType == modules.AddrTypeHost {
-			if err := h.handleOutboundTrafficFromHost(ctx, item.Meta.Src, dstAddrType, &item); err != nil {
-				return err
-			}
+		// if this traffic isn't destinated to the world, ignore it
+		if dstAddrType != modules.AddrTypeWorld {
+			return nil
+		}
+		if err := h.handleOutboundTrafficFromHost(ctx, item.Meta.Src, &item); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -262,24 +263,17 @@ func (h *TrafficEventHandler) handleOutboundTrafficFromPod(ctx context.Context, 
 	return nil
 }
 
-func (h *TrafficEventHandler) handleOutboundTrafficFromHost(ctx context.Context, addrInfo structsapi.RawTrafficAddrInfo, dstAddrType modules.AddrType, item *structsapi.RawTraffic) error {
-	localPort := addrInfo.Port
+func (h *TrafficEventHandler) handleOutboundTrafficFromHost(ctx context.Context, addrInfo structsapi.RawTrafficAddrInfo, item *structsapi.RawTraffic) error {
 	remoteIP := item.Meta.Dst.IP
 	hostMetric := structsapi.HostTrafficMetric{
 		SentBytes: uint64(item.DataBytes),
 		RecvBytes: 0,
 	}
-	// check if the outbound traffic is sent to world
-	if dstAddrType == modules.AddrTypeWorld {
-		tag := taglib.GetTagSrcPortN(localPort)
-		hostMeta := structsapi.HostTrafficMeta{
-			LocalPort: localPort,
-			RemoteIP:  item.Meta.Dst.IP,
-		}
-		if err := h.updateHostMetric(ctx, remoteIP, *tag, hostMeta, hostMetric); err != nil {
-			return err
-		}
-		return nil
+	hostMeta := structsapi.HostTrafficMeta{
+		RemoteIP: item.Meta.Dst.IP,
+	}
+	if err := h.updateHostMetric(ctx, remoteIP, hostMeta, hostMetric); err != nil {
+		return err
 	}
 	return nil
 }
@@ -293,8 +287,8 @@ func (h *TrafficEventHandler) updatePodMetric(ctx context.Context, podAddr strin
 	return nil
 }
 
-func (h *TrafficEventHandler) updateHostMetric(ctx context.Context, remoteIP string, tag taglib.Tag, hostMeta structsapi.HostTrafficMeta, hostMetric structsapi.HostTrafficMetric) error {
-	hash := getHostMetaHash(tag, remoteIP)
+func (h *TrafficEventHandler) updateHostMetric(ctx context.Context, remoteIP string, hostMeta structsapi.HostTrafficMeta, hostMetric structsapi.HostTrafficMetric) error {
+	hash := getHostMetaHash(remoteIP)
 	if err := h.TrafficStore.UpdateHostTraffic(ctx, hash, hostMeta, hostMetric); err != nil {
 		return err
 	}
@@ -304,9 +298,8 @@ func getPodMetaHash(podAddr string, tag taglib.Tag) string {
 	return fmt.Sprintf("%s/%s", podAddr, tag.String)
 }
 
-func getHostMetaHash(tag taglib.Tag, remoteIP string) string {
-	return fmt.Sprintf("%s/%s", tag.String, remoteIP)
-
+func getHostMetaHash(remoteIP string) string {
+	return remoteIP
 }
 
 func (h *TrafficEventHandler) getPodTrafficMeta(addr string, tag taglib.Tag, _meta structsapi.PodMeta) structsapi.PodTrafficMeta {

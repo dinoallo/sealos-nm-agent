@@ -32,8 +32,7 @@ type RawTraffic struct {
 }
 
 type HostTrafficMeta struct {
-	LocalPort uint32 `bson:"port"`
-	RemoteIP  string `bson:"ip"` // for egress, this is dst; for ingress, this is src;
+	RemoteIP string `bson:"remote_ip"` // for egress, this is dst; for ingress, this is src;
 }
 
 type HostTrafficMetric struct {
