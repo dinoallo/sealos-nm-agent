@@ -86,13 +86,11 @@ func NewTrafficStoreConfig() TrafficStoreConfig {
 }
 
 type CepWatcherConfig struct {
-	Host      string `env:"HOST"`
-	MaxWorker int    `env:"MAX_WORKER"`
+	MaxWorker int `env:"MAX_WORKER"`
 }
 
 func NewCepWatcherConfig() CepWatcherConfig {
 	return CepWatcherConfig{
-		Host:      "",
 		MaxWorker: 5,
 	}
 }
@@ -170,12 +168,14 @@ func NewDebugServiceConfig() DebugServiceConfig {
 }
 
 type GlobalConfig struct {
+	// the ip of the host that the agent is currently running on
+	Host string `env:"AGENT_HOST"`
 	// set `EnableHostTraffic` to true to enable watching on host devices. the current
 	// implementation still allocates memory for packets from/to host no matter what
-	EnableHostTraffic bool `envPrefix:"ENABLE_HOST_TRAFFIC"`
+	EnableHostTraffic bool `env:"ENABLE_HOST_TRAFFIC"`
 	// set `EnablePodTraffic` to true to enable watching on pods. the current
 	// implementation still allocates memory for packets from/to pod no matter what
-	EnablePodTraffic        bool `envPrefix:"ENABLE_POD_TRAFFIC"`
+	EnablePodTraffic        bool `env:"ENABLE_POD_TRAFFIC"`
 	ClassifierConfig        `envPrefix:"CLS_"`
 	TrafficStoreConfig      `envPrefix:"TS_"`
 	DBConfig                `envPrefix:"DB_"`
@@ -191,6 +191,7 @@ type GlobalConfig struct {
 
 func NewGlobalConfig() *GlobalConfig {
 	return &GlobalConfig{
+		Host:                    "127.0.0.1",
 		EnableHostTraffic:       true,
 		EnablePodTraffic:        true,
 		ClassifierConfig:        NewClassifierConfig(),

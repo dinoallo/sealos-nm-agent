@@ -29,6 +29,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 
 	ctrl "sigs.k8s.io/controller-runtime"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 var (
@@ -122,6 +123,9 @@ func main() {
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:         scheme,
 		LeaderElection: false,
+		Metrics: metricsserver.Options{
+			BindAddress: "0",
+		},
 	})
 	if err != nil {
 		printErr(errors.Join(err, ErrCreatingCtrlManager))
@@ -193,6 +197,7 @@ func startDB() error {
 
 func startTrafficFactory(ctx context.Context) (error, func()) {
 	p := traffic.TrafficFactoryParams{
+		Host:                    globalConfig.Host,
 		ParentLogger:            mainLogger,
 		BPFTrafficFactoryConfig: globalConfig.BPFTrafficFactoryConfig,
 		TrafficStore:            mainTrafficStore,
@@ -215,6 +220,7 @@ func startCEPWatcher(ctx context.Context) error {
 		return nil
 	}
 	params := k8s_watcher.CepWatcherParams{
+		Host:              globalConfig.Host,
 		Client:            mainMgr.GetClient(),
 		Scheme:            mainMgr.GetScheme(),
 		ParentLogger:      mainLogger,
