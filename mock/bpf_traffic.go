@@ -10,32 +10,12 @@ func NewDummyBPFTrafficModule() *DummyBPFTrafficModule {
 	return &DummyBPFTrafficModule{}
 }
 
-func (m *DummyBPFTrafficModule) SubscribeToPodDevice(ifaceName string) error {
-	log.Printf("subscribe to pod device: %v", ifaceName)
-	return nil
+func (m *DummyBPFTrafficModule) GetEgressFilterFDForHostDev() int {
+	log.Printf("getting the egress filter fd for host dev")
+	return 0
 }
 
-func (m *DummyBPFTrafficModule) SubscribeToHostDevice(ifaceName string) error {
-	log.Printf("subscribe to host device: %v", ifaceName)
-	return nil
-}
-
-func (m *DummyBPFTrafficModule) UnsubscribeFromPodDevice(ifaceName string) error {
-	log.Printf("unsubscribe to pod device: %v", ifaceName)
-	return nil
-}
-
-func (m *DummyBPFTrafficModule) UnsubscribeFromHostDevice(ifaceName string) error {
-	log.Printf("unsubscribe to host device: %v", ifaceName)
-	return nil
-}
-
-func (m *DummyBPFTrafficModule) SubscribeToCep(cep int64) error {
-	log.Printf("subscribe to cep: %v", cep)
-	return nil
-}
-
-func (m *DummyBPFTrafficModule) UnsubscribeFromCep(cep int64) error {
-	log.Printf("unsubscribe from cep: %v", cep)
-	return nil
+func (m *DummyBPFTrafficModule) GetEgressFilterFDForPodDev() int {
+	log.Printf("getting the egress filter fd for pod dev")
+	return 0
 }

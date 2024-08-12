@@ -2,22 +2,15 @@ package traffic
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
-	"github.com/puzpuzpuz/xsync"
-	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/bpf/hooker"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
-)
-
-const (
-	ingressFilterNameForHostDev = "sealos_nm_host_ingress_hook"
-	egressFilterNameForHostDev  = "sealos_nm_host_egress_hook"
-	ingressFilterNameForPodDev  = "sealos_nm_pod_ingress_hook"
-	egressFilterNameForPodDev   = "sealos_nm_pod_egress_hook"
 )
 
 type TrafficFactoryParams struct {
@@ -31,10 +24,9 @@ type TrafficFactoryParams struct {
 type TrafficFactory struct {
 	log.Logger
 	trafficObjs         trafficObjects
-	cepHookers          *xsync.MapOf[int64, *hooker.CiliumCCMHooker]
-	hostDevHookers      *xsync.MapOf[string, *hooker.DeviceHooker]
 	trafficEventReader  *TrafficEventReader
 	trafficEventHandler *TrafficEventHandler
+	hostNetnsAlias      string
 	TrafficFactoryParams
 }
 
@@ -45,7 +37,7 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 	}
 	trafficObjs := trafficObjects{}
 	if err := loadTrafficObjects(&trafficObjs, nil); err != nil {
-		return nil, errors.Join(err, modules.ErrLoadingCepTrafficObjs)
+		return nil, errors.Join(err, modules.ErrLoadingTrafficObjs)
 	}
 	egressPodTrafficRecords := make(chan *ringbuf.Record)
 	egressPodNotiRecords := make(chan *ringbuf.Record)
@@ -88,40 +80,15 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 	if err != nil {
 		return nil, errors.Join(err, modules.ErrCreatingTrafficEventReader)
 	}
+	hostNetnsAlias := generateRandomHashForHostNet()
 	return &TrafficFactory{
 		Logger:               logger,
 		trafficObjs:          trafficObjs,
-		cepHookers:           xsync.NewIntegerMapOf[int64, *hooker.CiliumCCMHooker](),
-		hostDevHookers:       xsync.NewMapOf[*hooker.DeviceHooker](),
+		hostNetnsAlias:       hostNetnsAlias,
 		trafficEventHandler:  handler,
 		trafficEventReader:   reader,
 		TrafficFactoryParams: params,
 	}, nil
-}
-
-func (f *TrafficFactory) SubscribeToCep(eid int64) error {
-	newCepHooker := hooker.NewCiliumCCMHooker(eid)
-	cepHooker, _ := f.cepHookers.LoadOrStore(eid, newCepHooker)
-	if err := cepHooker.AttachV4EgressHook(f.trafficObjs.EgressCepTrafficHook); err != nil {
-		if errors.Is(err, hooker.ErrCiliumCCMNotExists) {
-			return errors.Join(err, modules.ErrCepNotFound)
-		}
-		return errors.Join(err, modules.ErrAttachingEgressHookToCCM)
-	}
-	f.Debugf("cep %v has been subscribed to", eid)
-	return nil
-}
-
-func (f *TrafficFactory) UnsubscribeFromCep(eid int64) error {
-	cepHooker, loaded := f.cepHookers.LoadAndDelete(eid)
-	if !loaded {
-		return nil
-	}
-	if err := f.detachAllHooks(cepHooker); err != nil && !errors.Is(err, hooker.ErrCiliumCCMNotExists) {
-		return errors.Join(err, modules.ErrDetachingAllHooksFromCCM)
-	}
-	f.Debugf("cep %v has been unsubscribed from", eid)
-	return nil
 }
 
 func (f *TrafficFactory) Start(ctx context.Context) error {
@@ -130,57 +97,29 @@ func (f *TrafficFactory) Start(ctx context.Context) error {
 	return nil
 }
 
-func (f *TrafficFactory) SubscribeToHostDev(iface string) error {
-	newDevHooker, err := hooker.NewDeviceHooker(iface, false)
-	if err != nil {
-		return err
-	}
-	devHooker, _ := f.hostDevHookers.LoadOrStore(iface, newDevHooker)
-	hookFD := f.trafficObjs.EgressHostTrafficHook.FD()
-	if err := devHooker.AddFilterToEgressQdisc(egressFilterNameForHostDev, hookFD); err != nil {
-		return err
-	}
-	f.Debugf("host device: %v has been subscribed to", iface)
-	return nil
+func (f *TrafficFactory) GetEgressFilterFDForHostDev() int {
+	return f.trafficObjs.SealosToNetdev.FD()
 }
 
-func (f *TrafficFactory) UnsubscribeFromHostDev(iface string) error {
-	devHooker, loaded := f.hostDevHookers.LoadAndDelete(iface)
-	if !loaded {
-		return nil
-	}
-	if err := devHooker.Close(); err != nil {
-		return err
-	}
-	f.Debugf("hostdev %v has been unsubscribed from", iface)
-	return nil
+func (f *TrafficFactory) GetEgressFilterFDForPodDev() int {
+	return f.trafficObjs.SealosFromContainer.FD()
 }
 
 func (f *TrafficFactory) Close() {
-	detachCepHook := func(eid int64, cepHooker *hooker.CiliumCCMHooker) bool {
-		if err := f.detachAllHooks(cepHooker); err != nil {
-			f.Error(err)
-		}
-		return true
-	}
-	detachDevHook := func(devName string, devHooker *hooker.DeviceHooker) bool {
-		if err := devHooker.Close(); err != nil {
-			f.Error(err)
-		}
-		return true
-	}
-	f.cepHookers.Range(detachCepHook)
-	f.hostDevHookers.Range(detachDevHook)
 	f.trafficObjs.Close()
 }
 
-func (f *TrafficFactory) detachAllHooks(cepHooker *hooker.CiliumCCMHooker) error {
-	var err error
-	err = cepHooker.DetachV4EgressHook()
-	return err
-}
-
-func getIfaceHash(ifaceName string) string {
+func getPodIfaceHash(ifaceName string) string {
 	//TODO: imple me
 	return ifaceName
+}
+
+func getNetnsHash(netnsName string) string {
+	return netnsName
+}
+
+func generateRandomHashForHostNet() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return base64.URLEncoding.EncodeToString(b) + time.Now().Format("20060102150405")
 }

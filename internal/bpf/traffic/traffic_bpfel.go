@@ -53,18 +53,18 @@ type trafficSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type trafficProgramSpecs struct {
-	EgressCepTrafficHook  *ebpf.ProgramSpec `ebpf:"egress_cep_traffic_hook"`
-	EgressHostTrafficHook *ebpf.ProgramSpec `ebpf:"egress_host_traffic_hook"`
+	SealosFromContainer *ebpf.ProgramSpec `ebpf:"sealos_from_container"`
+	SealosToNetdev      *ebpf.ProgramSpec `ebpf:"sealos_to_netdev"`
 }
 
 // trafficMapSpecs contains maps before they are loaded into the kernel.
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type trafficMapSpecs struct {
-	EgressCepTrafficEvents         *ebpf.MapSpec `ebpf:"egress_cep_traffic_events"`
-	EgressHostTrafficEvents        *ebpf.MapSpec `ebpf:"egress_host_traffic_events"`
-	SubmitCepTrafficNotifications  *ebpf.MapSpec `ebpf:"submit_cep_traffic_notifications"`
-	SubmitHostTrafficNotifications *ebpf.MapSpec `ebpf:"submit_host_traffic_notifications"`
+	FromContainerTrafficEvents *ebpf.MapSpec `ebpf:"from_container_traffic_events"`
+	FromContainerTrafficNotis  *ebpf.MapSpec `ebpf:"from_container_traffic_notis"`
+	ToNetdevTrafficEvents      *ebpf.MapSpec `ebpf:"to_netdev_traffic_events"`
+	ToNetdevTrafficNotis       *ebpf.MapSpec `ebpf:"to_netdev_traffic_notis"`
 }
 
 // trafficObjects contains all objects after they have been loaded into the kernel.
@@ -86,18 +86,18 @@ func (o *trafficObjects) Close() error {
 //
 // It can be passed to loadTrafficObjects or ebpf.CollectionSpec.LoadAndAssign.
 type trafficMaps struct {
-	EgressCepTrafficEvents         *ebpf.Map `ebpf:"egress_cep_traffic_events"`
-	EgressHostTrafficEvents        *ebpf.Map `ebpf:"egress_host_traffic_events"`
-	SubmitCepTrafficNotifications  *ebpf.Map `ebpf:"submit_cep_traffic_notifications"`
-	SubmitHostTrafficNotifications *ebpf.Map `ebpf:"submit_host_traffic_notifications"`
+	FromContainerTrafficEvents *ebpf.Map `ebpf:"from_container_traffic_events"`
+	FromContainerTrafficNotis  *ebpf.Map `ebpf:"from_container_traffic_notis"`
+	ToNetdevTrafficEvents      *ebpf.Map `ebpf:"to_netdev_traffic_events"`
+	ToNetdevTrafficNotis       *ebpf.Map `ebpf:"to_netdev_traffic_notis"`
 }
 
 func (m *trafficMaps) Close() error {
 	return _TrafficClose(
-		m.EgressCepTrafficEvents,
-		m.EgressHostTrafficEvents,
-		m.SubmitCepTrafficNotifications,
-		m.SubmitHostTrafficNotifications,
+		m.FromContainerTrafficEvents,
+		m.FromContainerTrafficNotis,
+		m.ToNetdevTrafficEvents,
+		m.ToNetdevTrafficNotis,
 	)
 }
 
@@ -105,14 +105,14 @@ func (m *trafficMaps) Close() error {
 //
 // It can be passed to loadTrafficObjects or ebpf.CollectionSpec.LoadAndAssign.
 type trafficPrograms struct {
-	EgressCepTrafficHook  *ebpf.Program `ebpf:"egress_cep_traffic_hook"`
-	EgressHostTrafficHook *ebpf.Program `ebpf:"egress_host_traffic_hook"`
+	SealosFromContainer *ebpf.Program `ebpf:"sealos_from_container"`
+	SealosToNetdev      *ebpf.Program `ebpf:"sealos_to_netdev"`
 }
 
 func (p *trafficPrograms) Close() error {
 	return _TrafficClose(
-		p.EgressCepTrafficHook,
-		p.EgressHostTrafficHook,
+		p.SealosFromContainer,
+		p.SealosToNetdev,
 	)
 }
 

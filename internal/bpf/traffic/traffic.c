@@ -18,22 +18,22 @@ const struct notification_t *unused_notification __attribute__((unused));
 struct {
   __uint(type, BPF_MAP_TYPE_RINGBUF);
   __uint(max_entries, TRAFFIC_EVENTS_MAX_ENTRIES);
-} egress_cep_traffic_events SEC(".maps");
+} from_container_traffic_events SEC(".maps");
 
 struct {
   __uint(type, BPF_MAP_TYPE_RINGBUF);
   __uint(max_entries, NOTIFICATIONS_MAX_ENTRIES);
-} submit_cep_traffic_notifications SEC(".maps");
+} from_container_traffic_notis SEC(".maps");
 
 struct {
   __uint(type, BPF_MAP_TYPE_RINGBUF);
   __uint(max_entries, TRAFFIC_EVENTS_MAX_ENTRIES);
-} egress_host_traffic_events SEC(".maps");
+} to_netdev_traffic_events SEC(".maps");
 
 struct {
   __uint(type, BPF_MAP_TYPE_RINGBUF);
   __uint(max_entries, NOTIFICATIONS_MAX_ENTRIES);
-} submit_host_traffic_notifications SEC(".maps");
+} to_netdev_traffic_notis SEC(".maps");
 
 static __always_inline void submit_egress_traffic(struct __sk_buff *ctx,
                                                   u32 identity, void *events,
@@ -72,24 +72,23 @@ static __always_inline void submit_egress_traffic(struct __sk_buff *ctx,
 }
 
 SEC("classifier")
-int egress_cep_traffic_hook(struct __sk_buff *ctx) {
+int sealos_from_container(struct __sk_buff *ctx) {
   u32 custom_meta = ctx->cb[4];
   u32 identity = custom_meta & 0xffffff;
-  int ret = (custom_meta >> 24) & 0xff;
 
-  submit_egress_traffic(ctx, identity, &egress_cep_traffic_events,
-                        &submit_cep_traffic_notifications);
+  submit_egress_traffic(ctx, identity, &from_container_traffic_events,
+                        &from_container_traffic_notis);
 
-  return ret;
+  return TC_ACT_UNSPEC;
 }
 
 SEC("classifier")
-int egress_host_traffic_hook(struct __sk_buff *ctx) {
+int sealos_to_netdev(struct __sk_buff *ctx) {
   u32 custom_meta = ctx->cb[4];
   u32 identity = custom_meta & 0xffffff;
 
-  submit_egress_traffic(ctx, identity, &egress_host_traffic_events,
-                        &submit_host_traffic_notifications);
+  submit_egress_traffic(ctx, identity, &to_netdev_traffic_events,
+                        &to_netdev_traffic_notis);
 
   return TC_ACT_UNSPEC;
 }

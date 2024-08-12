@@ -46,19 +46,19 @@ func NewTrafficEventReader(params TrafficEventReaderParams) (*TrafficEventReader
 	if err != nil {
 		return nil, errors.Join(err, modules.ErrCreatingLogger)
 	}
-	egressPodTrafficReader, err := ringbuf.NewReader(params.TrafficObjs.EgressCepTrafficEvents)
+	egressPodTrafficReader, err := ringbuf.NewReader(params.TrafficObjs.FromContainerTrafficEvents)
 	if err != nil {
 		return nil, errors.Join(err, modules.ErrCreatingEgressPodTrafficReader)
 	}
-	egressHostTrafficReader, err := ringbuf.NewReader(params.TrafficObjs.EgressHostTrafficEvents)
+	egressHostTrafficReader, err := ringbuf.NewReader(params.TrafficObjs.ToNetdevTrafficEvents)
 	if err != nil {
 		return nil, errors.Join(err, modules.ErrCreatingEgressHostTrafficReader)
 	}
-	egressPodNotiReader, err := ringbuf.NewReader(params.TrafficObjs.SubmitCepTrafficNotifications)
+	egressPodNotiReader, err := ringbuf.NewReader(params.TrafficObjs.FromContainerTrafficNotis)
 	if err != nil {
 		return nil, errors.Join(err, modules.ErrCreatingEgressPodNotiReader)
 	}
-	egressHostNotiReader, err := ringbuf.NewReader(params.TrafficObjs.SubmitHostTrafficNotifications)
+	egressHostNotiReader, err := ringbuf.NewReader(params.TrafficObjs.ToNetdevTrafficNotis)
 	if err != nil {
 		return nil, errors.Join(err, modules.ErrCreatingEgressHostNotiReader)
 	}

@@ -53,6 +53,7 @@ var (
 	ErrStartingCtrlManager    = errors.New("failed to start the ctrl manager")
 	ErrCreatingCtrlManager    = errors.New("failed to create the ctrl manager")
 	ErrStartingHostDevWatcher = errors.New("failed to start the host device watcher")
+	ErrStartingNetnsWatcher   = errors.New("failed to start the net ns watcher")
 	ErrStartingPodWatcher     = errors.New("failed to start the pod watcher")
 	ErrStartingEpWatcher      = errors.New("failed to start the ep watcher")
 	ErrStartingCepWatcher     = errors.New("failed to start the cep watcher")
@@ -113,11 +114,22 @@ func main() {
 		printErr(err)
 		return
 	}
-	defer closeTF()
+	if closeTF != nil {
+		defer closeTF()
+	}
 	// start the host device watcher
 	if err := startHostDevWatcher(mainCtx); err != nil {
 		printErr(err)
 		return
+	}
+	// start the net ns watcher
+	err, closeNetnsWatcher := startNetnsWatcher(mainCtx)
+	if err != nil {
+		printErr(err)
+		return
+	}
+	if closeNetnsWatcher != nil {
+		defer closeNetnsWatcher()
 	}
 	// init the main ctrl manager
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -132,10 +144,6 @@ func main() {
 		return
 	}
 	mainMgr = mgr
-	if err := startCEPWatcher(mainCtx); err != nil {
-		printErr(err)
-		return
-	}
 	// start the port exposure checker
 	if err := startPortExposureChecker(); err != nil {
 		printErr(err)
@@ -215,28 +223,6 @@ func startTrafficFactory(ctx context.Context) (error, func()) {
 	return nil, closeTF
 }
 
-func startCEPWatcher(ctx context.Context) error {
-	if !globalConfig.EnablePodTraffic {
-		return nil
-	}
-	params := k8s_watcher.CepWatcherParams{
-		Host:              globalConfig.Host,
-		Client:            mainMgr.GetClient(),
-		Scheme:            mainMgr.GetScheme(),
-		ParentLogger:      mainLogger,
-		BPFTrafficFactory: mainTrafficFactory,
-		CepWatcherConfig:  globalConfig.CepWatcherConfig,
-	}
-	cepw, err := k8s_watcher.NewCepWatcher(params)
-	if err != nil {
-		return err
-	}
-	if err := cepw.SetupWithManager(mainMgr); err != nil {
-		return errors.Join(err, ErrStartingCepWatcher)
-	}
-	return nil
-}
-
 func startClassifier() error {
 	config := globalConfig.ClassifierConfig
 	if config.Enabled {
@@ -309,6 +295,27 @@ func startHostDevWatcher(ctx context.Context) error {
 		return errors.Join(err, ErrStartingHostDevWatcher)
 	}
 	return nil
+}
+
+func startNetnsWatcher(ctx context.Context) (error, func()) {
+	if !globalConfig.EnablePodTraffic {
+		return nil, nil
+	}
+	p := node_watcher.NetnsWatcherParams{
+		ParentLogger:      mainLogger,
+		BPFTrafficFactory: mainTrafficFactory,
+	}
+	w, err := node_watcher.NewNetnsWatcher(p)
+	if err != nil {
+		return errors.Join(err, ErrStartingNetnsWatcher), nil
+	}
+	if err := w.Start(ctx); err != nil {
+		return errors.Join(err, ErrStartingNetnsWatcher), nil
+	}
+	closeNetnsWatcher := func() {
+		w.Close()
+	}
+	return nil, closeNetnsWatcher
 }
 
 func startPodWatcher() error {
