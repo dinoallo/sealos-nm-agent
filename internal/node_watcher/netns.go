@@ -2,6 +2,7 @@ package node_watcher
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -23,6 +24,10 @@ const (
 	egressFilterNameForHostDev  = "sealos_nm_host_egress_hook"
 	ingressFilterNameForPodDev  = "sealos_nm_pod_ingress_hook"
 	egressFilterNameForPodDev   = "sealos_nm_pod_egress_hook"
+)
+
+var (
+	ErrCheckingNetNsExists = errors.New("failed to check if the netns exists")
 )
 
 type IfEntry struct {
@@ -140,7 +145,7 @@ func (w *NetnsWatcher) startWatching(ctx context.Context) error {
 					w.Infof("the channel for events has been closed")
 					return
 				}
-				if event.Has(fsnotify.Create) {
+				if event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) {
 					w.waitQueue <- event.Name
 				}
 			case err, ok := <-w.watcher.Errors:
@@ -165,21 +170,15 @@ func (w *NetnsWatcher) startProcessing(ctx context.Context) error {
 				if !w.isRelevantNetns(netnsName) {
 					continue
 				}
-				if err := w.updatePodNetns(netnsName); err == nil {
-					continue
-				} else {
-					w.Errorf("failed to update pod netns %v: %v", netnsName, err)
-				}
-				netnsFullPath := filepath.Join(defaultBindMountPath, netnsPath)
-				_, err := os.Stat(netnsFullPath)
+				err := w.updatePodNetns(netnsName)
 				if err == nil {
-					w.Info("retry updating pod netns %v", netnsName)
-					w.waitQueue <- netnsPath
-				} else if os.IsNotExist(err) {
 					continue
-				} else {
-					w.Errorf("failed to check if pod netns %v exists", netnsName)
+				} else if errors.Is(err, ErrCheckingNetNsExists) {
+					w.Error("failed to update pod netns but we are unable to retry: %v", err)
+					continue
 				}
+				w.Info("failed to update pod netns %v due to %v retry updating...", netnsName, err)
+				w.waitQueue <- netnsPath
 			case <-ctx.Done():
 				return
 			}
@@ -199,23 +198,25 @@ func (w *NetnsWatcher) Close() {
 	w.watcher.Close()
 }
 
-func (w *NetnsWatcher) updatePodNetns(name string) error {
-	newNetnsEntry, err := NewNetnsEntry(name)
+func (w *NetnsWatcher) updatePodNetns(netNsName string) error {
+	netNsFullPath := filepath.Join(defaultBindMountPath, netNsName)
+	netNsHash := getNetnsHash(netNsName)
+	// verify that this net namespace still exists
+	_, err := os.Stat(netNsFullPath)
+	if os.IsNotExist(err) {
+		// if this netns doesn't exist, we ignore it and remove its entry (if any)
+		w.netnsEntries.Delete(netNsHash)
+	} else if err != nil {
+		return errors.Join(err, ErrCheckingNetNsExists)
+	}
+	// this net ns exists, so we try to install filters
+	netnsHash := getNetnsHash(netNsName)
+	newNetnsEntry, err := NewNetnsEntry(netnsHash)
 	if err != nil {
 		return err
 	}
-	netnsHash := getNetnsHash(name)
 	netnsEntry, _ := w.netnsEntries.LoadOrStore(netnsHash, newNetnsEntry)
 	return w.installFiltersOnPodMainIf(netnsEntry)
-}
-
-func (w *NetnsWatcher) resetPodNetns(name string) error {
-	netnsHash := getNetnsHash(name)
-	netnsEntry, loaded := w.netnsEntries.LoadAndDelete(netnsHash)
-	if !loaded {
-		return nil
-	}
-	return netnsEntry.removeClsactQdiscForAllIfs()
 }
 
 func (e *NetnsEntry) GetHash() string {
@@ -232,17 +233,16 @@ func getIfHash(ifName string) string {
 
 func (e *NetnsEntry) removeClsactQdiscForAllIfs() error {
 	bpfHooker := e.Hooker
+	var err error = nil
 	uninstallForEachIf := func(ifHash string, ifEntry *IfEntry) bool {
 		if ifEntry.Qdisc == nil {
 			return true
 		}
-		if err := bpfHooker.DelQdisc(ifEntry.Qdisc); err != nil {
-
-		}
+		err = bpfHooker.DelQdisc(ifEntry.Qdisc)
 		return true
 	}
 	e.IfEntries.Range(uninstallForEachIf)
-	return nil
+	return err
 }
 
 func (w *NetnsWatcher) installFiltersOnPodMainIf(netnsEntry *NetnsEntry) error {
