@@ -146,6 +146,7 @@ func (w *NetnsWatcher) startWatching(ctx context.Context) error {
 					return
 				}
 				if event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) {
+					w.Debugf("receive event %v", event)
 					w.waitQueue <- event.Name
 				}
 			case err, ok := <-w.watcher.Errors:
@@ -172,6 +173,7 @@ func (w *NetnsWatcher) startProcessing(ctx context.Context) error {
 				}
 				err := w.updatePodNetns(netnsName)
 				if err == nil {
+					w.Debugf("pod netns %v updated", netnsName)
 					continue
 				} else if errors.Is(err, ErrCheckingNetNsExists) {
 					w.Error("failed to update pod netns but we are unable to retry: %v", err)
@@ -191,6 +193,8 @@ func (w *NetnsWatcher) Close() {
 	doResettingPodNetns := func(netnsHash string, netnsEntry *NetnsEntry) bool {
 		if err := netnsEntry.removeClsactQdiscForAllIfs(); err != nil {
 			w.Errorf("failed to remove the clsact qdisc for all interfaces inside pod netns %v: %v", netnsEntry.Name, err)
+		} else {
+			w.Debugf("successfully remove the clsact qdisc for all interfaces inside pod netns %v: %v", netnsEntry.Name, err)
 		}
 		return true
 	}

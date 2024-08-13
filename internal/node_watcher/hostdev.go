@@ -60,6 +60,7 @@ func (w *HostDevWatcher) Start(ctx context.Context) error {
 		if err := w.updateHostDev(hostDev); err != nil {
 			return err
 		}
+		w.Debugf("host dev %v watched", hostDev)
 	}
 	return nil
 }
@@ -77,6 +78,8 @@ func (w *HostDevWatcher) Close() {
 	doResettingHostDev := func(ifHash string, ifEntry *IfEntry) bool {
 		if err := bpfHooker.FilterDel(ifEntry.EgressFilter); err != nil {
 			w.Errorf("failed to remove egress filter for host device %v: %v", ifEntry.Name, err)
+		} else {
+			w.Debugf("successfully remove egress filter for host device %v: %v", ifEntry.Name, err)
 		}
 		return true
 	}
