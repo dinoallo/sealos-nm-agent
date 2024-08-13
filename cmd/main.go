@@ -118,9 +118,13 @@ func main() {
 		defer closeTF()
 	}
 	// start the host device watcher
-	if err := startHostDevWatcher(mainCtx); err != nil {
+	err, closeHostDevWatcher := startHostDevWatcher(mainCtx)
+	if err != nil {
 		printErr(err)
 		return
+	}
+	if closeHostDevWatcher != nil {
+		defer closeHostDevWatcher()
 	}
 	// start the net ns watcher
 	err, closeNetnsWatcher := startNetnsWatcher(mainCtx)
@@ -276,9 +280,9 @@ func startTrafficStore(ctx context.Context) error {
 	return nil
 }
 
-func startHostDevWatcher(ctx context.Context) error {
+func startHostDevWatcher(ctx context.Context) (error, func()) {
 	if !globalConfig.EnableHostTraffic {
-		return nil
+		return nil, nil
 	}
 	p := node_watcher.HostDevWatcherParams{
 		ParentLogger:         mainLogger,
@@ -289,12 +293,15 @@ func startHostDevWatcher(ctx context.Context) error {
 	}
 	w, err := node_watcher.NewHostDevWatcher(p)
 	if err != nil {
-		return errors.Join(err, ErrStartingHostDevWatcher)
+		return errors.Join(err, ErrStartingHostDevWatcher), nil
 	}
 	if err := w.Start(ctx); err != nil {
-		return errors.Join(err, ErrStartingHostDevWatcher)
+		return errors.Join(err, ErrStartingHostDevWatcher), nil
 	}
-	return nil
+	closeHostDevWatcher := func() {
+		w.Close()
+	}
+	return nil, closeHostDevWatcher
 }
 
 func startNetnsWatcher(ctx context.Context) (error, func()) {
