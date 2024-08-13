@@ -5,6 +5,7 @@ import (
 
 	"github.com/vishvananda/netlink"
 	netns "github.com/vishvananda/netns"
+	"golang.org/x/sys/unix"
 )
 
 type specialQdiscType int
@@ -109,7 +110,7 @@ func (h *TcBpfHooker) addFilter(sqt specialQdiscType, opts AddFilterOption) (net
 		return nil, ErrClsactQdiscNotExists
 	}
 	ifIndex := link.Attrs().Index
-	attrs := getBpfFilterAttrs(ifIndex, opts.Prio, opts.Prio, sqt)
+	attrs := getBpfFilterAttrs(ifIndex, opts.Prio, unix.ETH_P_ALL, sqt)
 	bpfFilter := netlink.BpfFilter{
 		FilterAttrs:  attrs,
 		Fd:           opts.ProgFD,
