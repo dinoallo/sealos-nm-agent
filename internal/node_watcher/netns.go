@@ -176,10 +176,10 @@ func (w *NetnsWatcher) startProcessing(ctx context.Context) error {
 					w.Debugf("pod netns %v updated", netnsName)
 					continue
 				} else if errors.Is(err, ErrCheckingNetNsExists) {
-					w.Error("failed to update pod netns but we are unable to retry: %v", err)
+					w.Errorf("failed to update pod netns but we are unable to retry: %v", err)
 					continue
 				}
-				w.Info("failed to update pod netns %v due to %v retry updating...", netnsName, err)
+				w.Infof("failed to update pod netns %v due to %v retry updating...", netnsName, err)
 				w.waitQueue <- netnsPath
 			case <-ctx.Done():
 				return
