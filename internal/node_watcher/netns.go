@@ -209,11 +209,13 @@ func (w *NetnsWatcher) updatePodNetns(netNsName string) error {
 	_, err := os.Stat(netNsFullPath)
 	if os.IsNotExist(err) {
 		// if this netns doesn't exist, we ignore it and remove its entry (if any)
+		w.Debugf("pod netns %v doesn't exist. ignore it", netNsName)
 		w.netnsEntries.Delete(netNsHash)
+		return nil
 	} else if err != nil {
 		return errors.Join(err, ErrCheckingNetNsExists)
 	}
-	// this net ns exists, so we try to install filters
+	// this netns exists, so we try to install filters
 	netnsHash := getNetnsHash(netNsName)
 	newNetnsEntry, err := NewNetnsEntry(netnsHash)
 	if err != nil {
@@ -254,10 +256,10 @@ func (w *NetnsWatcher) installFiltersOnPodMainIf(netnsEntry *NetnsEntry) error {
 	// to avoid conflicts. That is, a clsact qdisc shouldn't exist beforehand and
 	// it will then be created by us.
 	if err := netnsEntry.installClsactQdiscOnIf(w.PodIfName); err != nil {
-		return nil
+		return err
 	}
 	if err := netnsEntry.installEgressFilterOnIf(w.PodIfName, egressFilterNameForPodDev, w.GetEgressFilterFDForPodDev()); err != nil {
-		return nil
+		return err
 	}
 	return nil
 }
