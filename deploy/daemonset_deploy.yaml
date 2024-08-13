@@ -179,12 +179,19 @@ spec:
         - mountPath: /sys/fs/bpf
           mountPropagation: HostToContainer
           name: bpf-maps
+        - mountPath: /run/netns
+          mountPropagation: HostToContainer
+          name: net-namespaces
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       volumes:
       - name: bpf-maps
         hostPath:
           path: /sys/fs/bpf
+          type: Directory
+      - name: net-namespaces
+        hostPath:
+          path: /run/netns
           type: Directory
   updateStrategy:
     rollingUpdate:
