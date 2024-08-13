@@ -135,6 +135,18 @@ func NewHostDevWatcherConfig() HostDevWatcherConfig {
 	}
 }
 
+type NetnsWatcherConfig struct {
+	PodIfName string `env:"POD_IF_NAME"`
+	NsPattern string `env:"NS_PATTERN"`
+}
+
+func NewNetnsWatcherConfig() NetnsWatcherConfig {
+	return NetnsWatcherConfig{
+		PodIfName: "eth0",
+		NsPattern: "^cni",
+	}
+}
+
 type MockConfig struct { // envPrefix: MOCK_
 	TrackedPodIP       string `env:"TRACKED_POD_IP"`
 	TrackedHostIP      string `env:"TRACKED_HOST_IP"`
@@ -182,6 +194,7 @@ type GlobalConfig struct {
 	BPFTrafficFactoryConfig `envPrefix:"TF_"`
 	HostDevWatcherConfig    `envPrefix:"HDW_"`
 	CepWatcherConfig        `envPrefix:"CEPW_"`
+	NetnsWatcherConfig      `envPrefix:"NW_"`
 	EpWatcherConfig         `envPrefix:"EPW_"`
 	PodWatcherConfig        `envPrefix:"PODW_"`
 	IngressWatcherConfig    `envPrefix:"INGW_"`
@@ -200,6 +213,7 @@ func NewGlobalConfig() *GlobalConfig {
 		BPFTrafficFactoryConfig: NewBPFTrafficFactoryConfig(),
 		HostDevWatcherConfig:    NewHostDevWatcherConfig(),
 		CepWatcherConfig:        NewCepWatcherConfig(),
+		NetnsWatcherConfig:      NewNetnsWatcherConfig(),
 		EpWatcherConfig:         NewEpWatcherConfig(),
 		PodWatcherConfig:        NewPodWatcherConfig(),
 		IngressWatcherConfig:    NewIngressWatcherConfig(),

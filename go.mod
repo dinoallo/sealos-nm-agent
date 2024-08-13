@@ -6,7 +6,10 @@ require (
 	github.com/caarlos0/env/v11 v11.0.1
 	github.com/cilium/cilium v1.15.7
 	github.com/cilium/ebpf v0.15.0
+	github.com/fsnotify/fsnotify v1.7.0
 	github.com/puzpuzpuz/xsync v1.5.2
+	github.com/vishvananda/netlink v1.2.1-beta.2.0.20240524165444-4d4ba1473f21
+	github.com/vishvananda/netns v0.0.4
 	gitlab.com/dinoallo/sealos-networkmanager-library v0.0.0-20240725113523-cdea581d8dec
 	golang.org/x/sync v0.6.0
 	golang.org/x/sys v0.21.0
@@ -28,7 +31,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.11.2 // indirect
 	github.com/evanphx/json-patch/v5 v5.7.0 // indirect
-	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
@@ -96,8 +98,6 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.11 // indirect
 	github.com/tklauser/numcpus v0.6.0 // indirect
-	github.com/vishvananda/netlink v1.2.1-beta.2.0.20240524165444-4d4ba1473f21 // indirect
-	github.com/vishvananda/netns v0.0.4 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect

@@ -4,7 +4,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 
+	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/tc_bpf"
 	"github.com/fsnotify/fsnotify"
@@ -15,7 +17,6 @@ import (
 
 const (
 	defaultBindMountPath = "/run/netns"
-	defaultPodMainIf     = "eth0"
 	defaultFilterPrio    = 1
 
 	ingressFilterNameForHostDev = "sealos_nm_host_ingress_hook"
@@ -63,14 +64,16 @@ func NewNetnsEntry(netnsName string) (*NetnsEntry, error) {
 
 type NetnsWatcherParams struct {
 	ParentLogger log.Logger
+	conf.NetnsWatcherConfig
 	modules.BPFTrafficFactory
 }
 
 type NetnsWatcher struct {
 	log.Logger
-	watcher      *fsnotify.Watcher
-	netnsEntries *xsync.MapOf[string, *NetnsEntry] // netnsHash -> NetnsEntry
-	waitQueue    chan string
+	watcher              *fsnotify.Watcher
+	netnsEntries         *xsync.MapOf[string, *NetnsEntry] // netnsHash -> NetnsEntry
+	waitQueue            chan string
+	relevantNetnsPattern *regexp.Regexp
 	NetnsWatcherParams
 }
 
@@ -83,19 +86,47 @@ func NewNetnsWatcher(params NetnsWatcherParams) (*NetnsWatcher, error) {
 	if err != nil {
 		return nil, err
 	}
+	re := regexp.MustCompile(params.NsPattern)
 	return &NetnsWatcher{
-		Logger:             logger,
-		watcher:            watcher,
-		netnsEntries:       xsync.NewMapOf[*NetnsEntry](),
-		waitQueue:          make(chan string, 10),
-		NetnsWatcherParams: params,
+		Logger:               logger,
+		watcher:              watcher,
+		netnsEntries:         xsync.NewMapOf[*NetnsEntry](),
+		waitQueue:            make(chan string, 10),
+		relevantNetnsPattern: re,
+		NetnsWatcherParams:   params,
 	}, nil
 
 }
 
 func (w *NetnsWatcher) Start(ctx context.Context) error {
-	w.startWatching(ctx)
-	w.startProcessing(ctx)
+	if err := w.startProcessing(ctx); err != nil {
+		return err
+	}
+	if err := w.initExistingNetns(); err != nil {
+		return err
+	}
+	if err := w.startWatching(ctx); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (w *NetnsWatcher) initExistingNetns() error {
+	files, err := os.ReadDir(defaultBindMountPath)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		fileName := file.Name()
+		if fileName == "." || fileName == ".." {
+			continue
+
+		}
+		w.waitQueue <- fileName
+	}
 	return nil
 }
 
@@ -109,7 +140,6 @@ func (w *NetnsWatcher) startWatching(ctx context.Context) error {
 					w.Infof("the channel for events has been closed")
 					return
 				}
-				//TODO: filter out non pod netns
 				if event.Has(fsnotify.Create) {
 					w.waitQueue <- event.Name
 				}
@@ -132,6 +162,9 @@ func (w *NetnsWatcher) startProcessing(ctx context.Context) error {
 			select {
 			case netnsPath := <-w.waitQueue:
 				netnsName := filepath.Base(netnsPath)
+				if !w.isRelevantNetns(netnsName) {
+					continue
+				}
 				if err := w.updatePodNetns(netnsName); err == nil {
 					continue
 				} else {
@@ -216,24 +249,28 @@ func (w *NetnsWatcher) installFiltersOnPodMainIf(netnsEntry *NetnsEntry) error {
 	// Currently, we expect that there are no other tc bpf programs except for ours
 	// to avoid conflicts. That is, a clsact qdisc shouldn't exist beforehand and
 	// it will then be created by us.
-	if err := netnsEntry.installClsactQdiscOnPodMainIf(); err != nil {
+	if err := netnsEntry.installClsactQdiscOnIf(w.PodIfName); err != nil {
 		return nil
 	}
-	if err := netnsEntry.installEgressFilterOnIf(defaultPodMainIf, egressFilterNameForPodDev, w.GetEgressFilterFDForPodDev()); err != nil {
+	if err := netnsEntry.installEgressFilterOnIf(w.PodIfName, egressFilterNameForPodDev, w.GetEgressFilterFDForPodDev()); err != nil {
 		return nil
 	}
 	return nil
 }
 
-func (e *NetnsEntry) installClsactQdiscOnPodMainIf() error {
+func (w *NetnsWatcher) isRelevantNetns(netNsName string) bool {
+	return w.relevantNetnsPattern.MatchString(netNsName)
+}
+
+func (e *NetnsEntry) installClsactQdiscOnIf(ifName string) error {
 	bpfHooker := e.Hooker
-	qdisc, err := bpfHooker.AddClsactQdisc(defaultPodMainIf)
+	qdisc, err := bpfHooker.AddClsactQdisc(ifName)
 	if err != nil {
 		return err
 	}
-	newIfEntry := NewIfEntry(defaultPodMainIf)
-	podMainIfHash := getIfHash(defaultPodMainIf)
-	ifEntry, _ := e.IfEntries.LoadOrStore(podMainIfHash, newIfEntry)
+	newIfEntry := NewIfEntry(ifName)
+	ifHash := getIfHash(ifName)
+	ifEntry, _ := e.IfEntries.LoadOrStore(ifHash, newIfEntry)
 	ifEntry.Qdisc = qdisc
 	return nil
 }

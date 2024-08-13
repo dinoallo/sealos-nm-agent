@@ -309,8 +309,9 @@ func startNetnsWatcher(ctx context.Context) (error, func()) {
 		return nil, nil
 	}
 	p := node_watcher.NetnsWatcherParams{
-		ParentLogger:      mainLogger,
-		BPFTrafficFactory: mainTrafficFactory,
+		ParentLogger:       mainLogger,
+		BPFTrafficFactory:  mainTrafficFactory,
+		NetnsWatcherConfig: globalConfig.NetnsWatcherConfig,
 	}
 	w, err := node_watcher.NewNetnsWatcher(p)
 	if err != nil {
