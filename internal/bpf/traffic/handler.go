@@ -192,7 +192,7 @@ func (h *TrafficEventHandler) handleHostEgress(ctx context.Context) error {
 	return nil
 }
 
-// `trackHostEgress` is only useful when the dump mode is on
+// `dumpHostEgress` is only useful when the dump mode is on
 func (h *TrafficEventHandler) dumpHostEgress(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
@@ -206,12 +206,12 @@ func (h *TrafficEventHandler) dumpHostEgress(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		h.Infof("src %v:%v type %v => dst %v:%v type %v;Tx %v bytes", item.Meta.Src.IP, item.Meta.Src.Port, srcType, item.Meta.Dst.IP, item.Meta.Dst.Port, dstType, item.DataBytes)
+		h.Infof("host egress; src %v:%v type %v => dst %v:%v type %v;Tx %v bytes", item.Meta.Src.IP, item.Meta.Src.Port, srcType, item.Meta.Dst.IP, item.Meta.Dst.Port, dstType, item.DataBytes)
 		return nil
 	}
 }
 
-// `trackPodEgress` is only useful when the dump mode is on
+// `dumpPodEgress` is only useful when the dump mode is on
 func (h *TrafficEventHandler) dumpPodEgress(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
@@ -225,7 +225,7 @@ func (h *TrafficEventHandler) dumpPodEgress(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		h.Infof("src %v:%v type %v => dst %v:%v type %v;Tx %v bytes", item.Meta.Src.IP, item.Meta.Src.Port, srcType, item.Meta.Dst.IP, item.Meta.Dst.Port, dstType, item.DataBytes)
+		h.Infof("pod egress; src %v:%v type %v => dst %v:%v type %v;Tx %v bytes", item.Meta.Src.IP, item.Meta.Src.Port, srcType, item.Meta.Dst.IP, item.Meta.Dst.Port, dstType, item.DataBytes)
 		return nil
 	}
 }
