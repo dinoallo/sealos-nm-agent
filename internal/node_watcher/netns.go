@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sync"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
@@ -14,6 +16,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/puzpuzpuz/xsync"
 	"github.com/vishvananda/netlink"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -77,7 +80,6 @@ type NetnsWatcher struct {
 	log.Logger
 	watcher              *fsnotify.Watcher
 	netnsEntries         *xsync.MapOf[string, *NetnsEntry] // netnsHash -> NetnsEntry
-	waitQueue            chan string
 	relevantNetnsPattern *regexp.Regexp
 	NetnsWatcherParams
 }
@@ -96,7 +98,6 @@ func NewNetnsWatcher(params NetnsWatcherParams) (*NetnsWatcher, error) {
 		Logger:               logger,
 		watcher:              watcher,
 		netnsEntries:         xsync.NewMapOf[*NetnsEntry](),
-		waitQueue:            make(chan string, 10),
 		relevantNetnsPattern: re,
 		NetnsWatcherParams:   params,
 	}, nil
@@ -104,13 +105,10 @@ func NewNetnsWatcher(params NetnsWatcherParams) (*NetnsWatcher, error) {
 }
 
 func (w *NetnsWatcher) Start(ctx context.Context) error {
-	if err := w.startProcessing(ctx); err != nil {
-		return err
-	}
 	if err := w.initExistingNetns(); err != nil {
 		return err
 	}
-	if err := w.startWatching(ctx); err != nil {
+	if err := w.watchInotifyEvent(ctx); err != nil {
 		return err
 	}
 	return nil
@@ -121,72 +119,97 @@ func (w *NetnsWatcher) initExistingNetns() error {
 	if err != nil {
 		return err
 	}
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
-		fileName := file.Name()
-		if fileName == "." || fileName == ".." {
-			continue
-
-		}
-		w.waitQueue <- fileName
+	//TODO: concurrently update
+	var wg sync.WaitGroup
+	fileChan := make(chan os.DirEntry, len(files))
+	for i := 0; i < w.MaxWorkerCount; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for file := range fileChan {
+				if file.IsDir() {
+					continue
+				}
+				fileName := file.Name()
+				if fileName == "." || fileName == ".." {
+					continue
+				}
+				if err := w.updatePodNetnsByPath(fileName); err != nil {
+					w.Errorf("failed to update pod netns %v: %v", fileName, err)
+					continue
+				}
+			}
+		}(i + 1)
 	}
+	for _, file := range files {
+		fileChan <- file
+	}
+	close(fileChan)
+	wg.Wait()
 	return nil
 }
 
-func (w *NetnsWatcher) startWatching(ctx context.Context) error {
+func (w *NetnsWatcher) watchInotifyEvent(ctx context.Context) error {
 	w.watcher.Add(defaultBindMountPath)
+	wg := errgroup.Group{}
+	wg.SetLimit(w.MaxWorkerCount)
 	go func() {
 		for {
 			select {
-			case event, ok := <-w.watcher.Events:
-				if !ok {
-					w.Infof("the channel for events has been closed")
-					return
-				}
-				if event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) {
-					w.Debugf("receive event %v", event)
-					w.waitQueue <- event.Name
-				}
-			case err, ok := <-w.watcher.Errors:
-				if !ok {
-					w.Infof("the channel for errors has been closed")
-					return
-				}
-				w.Errorf("err: %v", err)
 			case <-ctx.Done():
+				return
+			default:
+				wg.Go(func() error {
+					w.handleInotifyEvent(ctx)
+					return nil
+				})
 			}
 		}
 	}()
 	return nil
 }
 
-func (w *NetnsWatcher) startProcessing(ctx context.Context) error {
-	go func() {
-		for {
-			select {
-			case netnsPath := <-w.waitQueue:
-				netnsName := filepath.Base(netnsPath)
-				if !w.isRelevantNetns(netnsName) {
-					continue
-				}
-				err := w.updatePodNetns(netnsName)
-				if err == nil {
-					w.Debugf("pod netns %v updated", netnsName)
-					continue
-				} else if errors.Is(err, ErrCheckingNetNsExists) {
-					w.Errorf("failed to update pod netns but we are unable to retry: %v", err)
-					continue
-				}
-				w.Infof("failed to update pod netns %v due to %v retry updating...", netnsName, err)
-				w.waitQueue <- netnsPath
-			case <-ctx.Done():
+func (w *NetnsWatcher) handleInotifyEvent(ctx context.Context) {
+	select {
+	case event, ok := <-w.watcher.Events:
+		if !ok {
+			w.Infof("the channel for events has been closed")
+			return
+		}
+		if event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) {
+			w.Debugf("receive event %v", event)
+			if err := w.updatePodNetnsByPath(event.Name); err != nil {
+				w.Errorf("failed to update pod netns %v due to %v", event.Name, err)
+				return
+			} else {
+				w.Debugf("pod netns %v updated", event.Name)
 				return
 			}
 		}
-	}()
-	return nil
+	case err, ok := <-w.watcher.Errors:
+		if !ok {
+			w.Infof("the channel for errors has been closed")
+			return
+		}
+		w.Errorf("err: %v", err)
+		return
+	case <-ctx.Done():
+		return
+	}
+}
+
+func (w *NetnsWatcher) updatePodNetnsByPath(netnsPath string) error {
+	netnsName := filepath.Base(netnsPath)
+	if !w.isRelevantNetns(netnsName) {
+		// this netns is not relevant to us. ignore it
+		return nil
+	}
+	updateOp := func() error {
+		w.Infof("try updating pod netns %v...", netnsName)
+		return w.updatePodNetns(netnsName)
+	}
+	b := backoff.WithMaxRetries(backoff.NewExponentialBackOff(), w.MaxUpdateRetries)
+	return backoff.Retry(updateOp, b)
 }
 
 func (w *NetnsWatcher) Close() {
