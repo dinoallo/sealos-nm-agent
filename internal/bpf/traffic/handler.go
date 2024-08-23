@@ -11,7 +11,7 @@ import (
 	"github.com/cilium/ebpf/ringbuf"
 	structsapi "github.com/dinoallo/sealos-networkmanager-agent/api/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
-	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/host"
+	"github.com/dinoallo/sealos-networkmanager-agent/pkg/host"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 	taglib "github.com/dinoallo/sealos-networkmanager-agent/pkg/tag"
 	"golang.org/x/sync/errgroup"
