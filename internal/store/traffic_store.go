@@ -5,8 +5,8 @@ import (
 
 	"github.com/dinoallo/sealos-networkmanager-agent/api/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
+	"github.com/dinoallo/sealos-networkmanager-agent/pkg/cache"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/db"
-	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/cache"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 	"golang.org/x/sync/errgroup"
 )
