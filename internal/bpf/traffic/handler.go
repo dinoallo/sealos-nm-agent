@@ -13,7 +13,7 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/host"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
-	taglib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/tag"
+	taglib "github.com/dinoallo/sealos-networkmanager-agent/pkg/tag"
 	"golang.org/x/sync/errgroup"
 )
 

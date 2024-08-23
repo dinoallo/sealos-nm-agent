@@ -2,7 +2,7 @@ package modules
 
 import (
 	"github.com/dinoallo/sealos-networkmanager-agent/api/structs"
-	taglib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/tag"
+	taglib "github.com/dinoallo/sealos-networkmanager-agent/pkg/tag"
 )
 
 type Classifier interface {
