@@ -12,7 +12,7 @@ import (
 	structsapi "github.com/dinoallo/sealos-networkmanager-agent/api/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/host"
-	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
+	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 	taglib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/tag"
 	"golang.org/x/sync/errgroup"
 )

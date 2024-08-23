@@ -5,7 +5,7 @@ import (
 	"net/http/pprof"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
-	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
+	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 )
 
 type DebugServiceParams struct {

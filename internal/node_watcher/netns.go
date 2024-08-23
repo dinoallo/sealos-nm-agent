@@ -13,7 +13,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/puzpuzpuz/xsync"
 	"github.com/vishvananda/netlink"
-	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
+	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 )
 
 const (

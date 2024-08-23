@@ -10,7 +10,7 @@ import (
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
-	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
+	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 )
 
 type TrafficFactoryParams struct {

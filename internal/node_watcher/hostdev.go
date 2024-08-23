@@ -7,7 +7,7 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 
-	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
+	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 	netlib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/net"
 )
 
