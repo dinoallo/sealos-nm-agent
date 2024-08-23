@@ -23,7 +23,7 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/db/mongo"
 	loglib "github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 	zaplog "github.com/dinoallo/sealos-networkmanager-agent/pkg/log/zap"
-	netlib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/net"
+	netlib "github.com/dinoallo/sealos-networkmanager-agent/pkg/net"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"

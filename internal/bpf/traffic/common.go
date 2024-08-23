@@ -5,7 +5,7 @@ import (
 	"unsafe"
 
 	structsapi "github.com/dinoallo/sealos-networkmanager-agent/api/structs"
-	netutil "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/net/util"
+	netutil "github.com/dinoallo/sealos-networkmanager-agent/pkg/net/util"
 	"golang.org/x/sys/unix"
 )
 

@@ -8,7 +8,7 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
-	netlib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/net"
+	netlib "github.com/dinoallo/sealos-networkmanager-agent/pkg/net"
 )
 
 type HostDevWatcherParams struct {
