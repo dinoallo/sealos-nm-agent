@@ -9,11 +9,11 @@ import (
 
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
+	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/tc_bpf"
 	"github.com/fsnotify/fsnotify"
 	"github.com/puzpuzpuz/xsync"
 	"github.com/vishvananda/netlink"
-	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 )
 
 const (
@@ -194,7 +194,7 @@ func (w *NetnsWatcher) Close() {
 		if err := netnsEntry.removeClsactQdiscForAllIfs(); err != nil {
 			w.Errorf("failed to remove the clsact qdisc for all interfaces inside pod netns %v: %v", netnsEntry.Name, err)
 		} else {
-			w.Debugf("successfully remove the clsact qdisc for all interfaces inside pod netns %v: %v", netnsEntry.Name, err)
+			w.Debugf("successfully remove the clsact qdisc for all interfaces inside pod netns %v", netnsEntry.Name)
 		}
 		return true
 	}
