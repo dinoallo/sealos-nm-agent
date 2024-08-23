@@ -5,9 +5,8 @@ import (
 
 	"github.com/dinoallo/sealos-networkmanager-agent/api/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
+	"github.com/dinoallo/sealos-networkmanager-agent/pkg/db"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/cache"
-	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/db"
-	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/db/common"
 	"gitlab.com/dinoallo/sealos-networkmanager-library/pkg/log"
 	"golang.org/x/sync/errgroup"
 )
@@ -142,13 +141,13 @@ func (s *TrafficStore) startFlushingForHostTraffic(ctx context.Context) {
 }
 
 func (s *TrafficStore) createCollIfNotExists(ctx context.Context, collName string) error {
-	timeSeriesOpts := common.TimeSeriesOpts{
+	timeSeriesOpts := db.TimeSeriesOpts{
 		TimeField:   structs.PodTrafficTimeField,
 		MetaField:   structs.PodTrafficMetaField,
 		ExpireAfter: 129600, // TODO: make this configurable
 	}
 	if err := s.CreateTimeSeriesColl(ctx, collName, timeSeriesOpts); err != nil {
-		if err == common.ErrCollectionAlreadyExists {
+		if err == db.ErrCollectionAlreadyExists {
 			s.Infof("the collection %v already exists, so we are not going to do anything", collName)
 		} else {
 			s.Errorf("failed to create the collection %v: %v", collName, err)
