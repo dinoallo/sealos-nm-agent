@@ -8,7 +8,7 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
 	"github.com/puzpuzpuz/xsync"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
-	podlib "gitlab.com/dinoallo/sealos-networkmanager-library/pkg/pod"
+	podlib "github.com/dinoallo/sealos-networkmanager-agent/pkg/pod"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
