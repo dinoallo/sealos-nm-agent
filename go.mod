@@ -4,6 +4,7 @@ go 1.21.0
 
 require (
 	github.com/caarlos0/env/v11 v11.0.1
+	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cilium/cilium v1.15.7
 	github.com/cilium/ebpf v0.15.0
 	github.com/dgraph-io/ristretto v0.1.1
