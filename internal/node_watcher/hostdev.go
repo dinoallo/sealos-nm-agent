@@ -79,7 +79,7 @@ func (w *HostDevWatcher) Close() {
 		if err := bpfHooker.FilterDel(ifEntry.EgressFilter); err != nil {
 			w.Errorf("failed to remove egress filter for host device %v: %v", ifEntry.Name, err)
 		} else {
-			w.Debugf("successfully remove egress filter for host device %v: %v", ifEntry.Name, err)
+			w.Debugf("successfully remove egress filter for host device %v", ifEntry.Name)
 		}
 		return true
 	}
