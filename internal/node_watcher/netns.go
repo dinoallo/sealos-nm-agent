@@ -3,8 +3,10 @@ package node_watcher
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"regexp"
+	"sync"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
@@ -60,10 +62,53 @@ func NewNetnsWatcher(params NetnsWatcherParams) (*NetnsWatcher, error) {
 }
 
 func (w *NetnsWatcher) Start(ctx context.Context) error {
+	if err := w.initExistingNetNs(); err != nil {
+		return err
+	}
 	if err := w.watchInotifyEvent(ctx); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (w *NetnsWatcher) initExistingNetNs() error {
+	files, err := os.ReadDir(defaultBindMountPath)
+	if err != nil {
+		return err
+	}
+	var wg sync.WaitGroup
+	fileChan := make(chan os.DirEntry, len(files))
+	for i := 0; i < w.MaxWorkerCount; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for file := range fileChan {
+				if file.IsDir() {
+					continue
+				}
+				fileName := file.Name()
+				if fileName == "." || fileName == ".." {
+					continue
+				}
+				netNs := filepath.Base(fileName)
+				if !w.isRelevantNetns(netNs) {
+					continue
+				}
+				if err := w.InitPod(netNs); err != nil {
+					w.Errorf("failed to update pod netns %v: %v", fileName, err)
+					continue
+				}
+				w.Infof("pod netns %v updated", netNs)
+			}
+		}(i + 1)
+	}
+	for _, file := range files {
+		fileChan <- file
+	}
+	close(fileChan)
+	wg.Wait()
+	return nil
+
 }
 
 func (w *NetnsWatcher) watchInotifyEvent(ctx context.Context) error {

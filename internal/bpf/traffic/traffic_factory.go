@@ -104,9 +104,6 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 }
 
 func (f *TrafficFactory) Start(ctx context.Context) error {
-	if err := f.Init(); err != nil {
-		return err
-	}
 	f.trafficEventReader.Start(ctx)
 	f.trafficEventHandler.Start(ctx)
 	return nil

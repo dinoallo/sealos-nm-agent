@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/cilium/ebpf"
@@ -65,13 +64,6 @@ func NewTrafficHooker(params TrafficHookerParams) (*TrafficHooker, error) {
 	}, nil
 }
 
-func (h *TrafficHooker) Init() error {
-	if err := h.initExistingPods(); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (h *TrafficHooker) InitPod(netNs string) error {
 	return h.tryUpdatingTCHooksForPod(netNs)
 }
@@ -99,42 +91,6 @@ func (h *TrafficHooker) Close() error {
 		h.Debugf("successfully remove the filters for all interfaces in the host netns")
 	}
 	return err
-}
-
-func (h *TrafficHooker) initExistingPods() error {
-	files, err := os.ReadDir(defaultBindMountPath)
-	if err != nil {
-		return err
-	}
-	var wg sync.WaitGroup
-	fileChan := make(chan os.DirEntry, len(files))
-	for i := 0; i < h.MaxWorkerCount; i++ {
-		wg.Add(1)
-		go func(workerID int) {
-			defer wg.Done()
-			for file := range fileChan {
-				if file.IsDir() {
-					continue
-				}
-				fileName := file.Name()
-				if fileName == "." || fileName == ".." {
-					continue
-				}
-				netNs := filepath.Base(fileName)
-				if err := h.tryUpdatingTCHooksForPod(netNs); err != nil {
-					h.Errorf("failed to update pod netns %v: %v", fileName, err)
-					continue
-				}
-				h.Infof("pod netns %v updated", netNs)
-			}
-		}(i + 1)
-	}
-	for _, file := range files {
-		fileChan <- file
-	}
-	close(fileChan)
-	wg.Wait()
-	return nil
 }
 
 func (h *TrafficHooker) tryUpdatingTCHooksForPod(netNs string) error {
