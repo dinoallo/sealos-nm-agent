@@ -3,8 +3,8 @@ package modules
 import "errors"
 
 type BPFTrafficFactory interface {
-	GetEgressFilterFDForHostDev() int
-	GetEgressFilterFDForPodDev() int
+	InitPod(netNs string) error
+	InitHostIface(ifName string) error
 }
 
 var (
@@ -21,6 +21,7 @@ var (
 	ErrInitializingDeviceHooker    = errors.New("failed to initialize a device hooker")
 	ErrCreatingTrafficEventHandler = errors.New("failed to create the reader for traffic events")
 	ErrCreatingTrafficEventReader  = errors.New("failed to create the handler for traffic events")
+	ErrCreatingTrafficHooker       = errors.New("failed to create the hooker for manipulating traffic programs and maps")
 	ErrLoadingBPFObjects           = errors.New("failed to load bpf objects")
 	ErrLoadingTrafficObjs          = errors.New("failed to load bpf traffic objects")
 	ErrAttachingEgressHookToCCM    = errors.New("failed to attach egress hook to cilium custom call map")

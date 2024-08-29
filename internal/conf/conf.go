@@ -136,20 +136,15 @@ func NewHostDevWatcherConfig() HostDevWatcherConfig {
 }
 
 type NetnsWatcherConfig struct {
-	PodIfName string `env:"POD_IF_NAME"`
 	NsPattern string `env:"NS_PATTERN"`
 	// Max worker counts to do concurrent job like watching inotify events about netns
 	MaxWorkerCount int `env:"MAX_WORKER_COUNT"`
-	// Max retries to update an pod netns if an error happens before a it's ignored by us
-	MaxUpdateRetries uint64 `env:"MAX_UPDATE_RETRIES"`
 }
 
 func NewNetnsWatcherConfig() NetnsWatcherConfig {
 	return NetnsWatcherConfig{
-		PodIfName:        "eth0",
-		NsPattern:        "^cni",
-		MaxWorkerCount:   5,
-		MaxUpdateRetries: 10,
+		NsPattern:      "^cni",
+		MaxWorkerCount: 5,
 	}
 }
 

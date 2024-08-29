@@ -21,7 +21,6 @@ type HostDevWatcherParams struct {
 
 type HostDevWatcher struct {
 	log.Logger
-	hostNetnsEntry *NetnsEntry
 	HostDevWatcherParams
 }
 
@@ -31,14 +30,12 @@ func NewHostDevWatcher(params HostDevWatcherParams) (*HostDevWatcher, error) {
 	if err != nil {
 		return nil, err
 	}
-	hostNetnsEntry, err := NewNetnsEntry("")
 	if err != nil {
 		return nil, err
 	}
 	return &HostDevWatcher{
 		Logger:               logger,
 		HostDevWatcherParams: params,
-		hostNetnsEntry:       hostNetnsEntry,
 	}, nil
 }
 
@@ -57,31 +54,10 @@ func (w *HostDevWatcher) Start(ctx context.Context) error {
 				return err
 			}
 		}
-		if err := w.updateHostDev(hostDev); err != nil {
+		if err := w.InitHostIface(hostDev); err != nil {
 			return err
 		}
 		w.Debugf("host dev %v watched", hostDev)
 	}
 	return nil
-}
-
-func (w *HostDevWatcher) updateHostDev(ifName string) error {
-	e := w.hostNetnsEntry
-	if err := e.installEgressFilterOnIf(ifName, egressFilterNameForHostDev, w.GetEgressFilterFDForHostDev()); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (w *HostDevWatcher) Close() {
-	bpfHooker := w.hostNetnsEntry.Hooker
-	doResettingHostDev := func(ifHash string, ifEntry *IfEntry) bool {
-		if err := bpfHooker.FilterDel(ifEntry.EgressFilter); err != nil {
-			w.Errorf("failed to remove egress filter for host device %v: %v", ifEntry.Name, err)
-		} else {
-			w.Debugf("successfully remove egress filter for host device %v", ifEntry.Name)
-		}
-		return true
-	}
-	w.hostNetnsEntry.IfEntries.Range(doResettingHostDev)
 }

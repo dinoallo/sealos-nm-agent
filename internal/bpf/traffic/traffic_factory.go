@@ -27,6 +27,7 @@ type TrafficFactory struct {
 	trafficEventReader  *TrafficEventReader
 	trafficEventHandler *TrafficEventHandler
 	hostNetnsAlias      string
+	*TrafficHooker
 	TrafficFactoryParams
 }
 
@@ -80,6 +81,16 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 	if err != nil {
 		return nil, errors.Join(err, modules.ErrCreatingTrafficEventReader)
 	}
+	hookerParams := TrafficHookerParams{
+		ParentLogger:     logger,
+		TrafficObjs:      &trafficObjs,
+		MaxWorkerCount:   2,  // TODO: make this configurable,
+		MaxUpdateRetries: 10, // TODO: make this configurable
+	}
+	hooker, err := NewTrafficHooker(hookerParams)
+	if err != nil {
+		return nil, errors.Join(err, modules.ErrCreatingTrafficHooker)
+	}
 	hostNetnsAlias := generateRandomHashForHostNet()
 	return &TrafficFactory{
 		Logger:               logger,
@@ -87,25 +98,22 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 		hostNetnsAlias:       hostNetnsAlias,
 		trafficEventHandler:  handler,
 		trafficEventReader:   reader,
+		TrafficHooker:        hooker,
 		TrafficFactoryParams: params,
 	}, nil
 }
 
 func (f *TrafficFactory) Start(ctx context.Context) error {
+	if err := f.Init(); err != nil {
+		return err
+	}
 	f.trafficEventReader.Start(ctx)
 	f.trafficEventHandler.Start(ctx)
 	return nil
 }
 
-func (f *TrafficFactory) GetEgressFilterFDForHostDev() int {
-	return f.trafficObjs.SealosToNetdev.FD()
-}
-
-func (f *TrafficFactory) GetEgressFilterFDForPodDev() int {
-	return f.trafficObjs.SealosFromContainer.FD()
-}
-
 func (f *TrafficFactory) Close() {
+	f.TrafficHooker.Close()
 	f.trafficObjs.Close()
 }
 

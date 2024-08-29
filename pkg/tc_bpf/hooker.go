@@ -16,7 +16,11 @@ const (
 )
 
 var (
+	ErrLinkNotExists        = errors.New("the link doesn't exist")
 	ErrClsactQdiscNotExists = errors.New("the clsact qdisc doesn't exist")
+	ErrClsactQdiscExists    = errors.New("the clsact qdisc already exists")
+	ErrFilterNotExists      = errors.New("the filter doesn't exist")
+	ErrFilterExists         = errors.New("the filter already exist")
 )
 
 type TcBpfHooker struct {
@@ -40,26 +44,57 @@ func NewTcBpfHooker(nsName string) (*TcBpfHooker, error) {
 	return &hooker, nil
 }
 
+func (h *TcBpfHooker) GetLink(ifName string) (netlink.Link, error) {
+	return h.getLink(ifName)
+}
+
 func (h *TcBpfHooker) AddClsactQdisc(ifName string) (netlink.Qdisc, error) {
 	link, err := h.getLink(ifName)
 	if err != nil {
 		return nil, err
 	}
-	qdisc := Clsact{
+	// check if the clsact qdisc already exists. if it does, we return an Exist error
+	qdisc := getClsactQdisc(link)
+	exists, err := h.checkClsActQdisc(link)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return qdisc, ErrClsactQdiscExists
+	}
+	// the clsact qdisc doesn't exist, let's create it
+	if err := h.Handle.QdiscAdd(qdisc); err != nil {
+		return nil, err
+	}
+	return qdisc, nil
+}
+
+func (h *TcBpfHooker) DelClsactQdisc(ifName string) error {
+	link, err := h.getLink(ifName)
+	if err != nil {
+		return err
+	}
+	qdisc := getClsactQdisc(link)
+	// check if the clsact qdisc exists. if it doesn't, we return an NonExist error
+	exists, err := h.checkClsActQdisc(link)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return ErrClsactQdiscNotExists
+	}
+	// the clsact qdisc exist, let's remove it
+	return h.Handle.QdiscDel(qdisc)
+}
+
+func getClsactQdisc(link netlink.Link) netlink.Qdisc {
+	return &Clsact{
 		QdiscAttrs: netlink.QdiscAttrs{
 			LinkIndex: link.Attrs().Index,
 			Handle:    netlink.MakeHandle(0xffff, 0),
 			Parent:    netlink.HANDLE_CLSACT,
 		},
 	}
-	if err := h.Handle.QdiscAdd(&qdisc); err != nil {
-		return nil, err
-	}
-	return &qdisc, nil
-}
-
-func (h *TcBpfHooker) DelQdisc(qdisc netlink.Qdisc) error {
-	return h.Handle.QdiscDel(qdisc)
 }
 
 func getHandleFromCurrentNs() (*netlink.Handle, error) {
@@ -78,10 +113,8 @@ func getHandleFromNs(nsName string) (*netlink.Handle, error) {
 	return handle, nil
 }
 
-type AddFilterOption struct {
-	// The name of this filter
-	FilterName string
-	// The name of the device to add filter to
+type FilterOption struct {
+	// The name of the device to del filter from
 	IfName string
 	// The program fd of this filter
 	ProgFD int
@@ -89,19 +122,28 @@ type AddFilterOption struct {
 	Prio uint16
 }
 
-func (h *TcBpfHooker) AddIngressFilter(opts AddFilterOption) (netlink.Filter, error) {
+func (h *TcBpfHooker) AddIngressFilter(opts FilterOption) (netlink.Filter, error) {
 	return h.addFilter(qdiscIngress, opts)
 }
 
-func (h *TcBpfHooker) AddEgressFilter(opts AddFilterOption) (netlink.Filter, error) {
+func (h *TcBpfHooker) AddEgressFilter(opts FilterOption) (netlink.Filter, error) {
 	return h.addFilter(qdiscRoot, opts)
 }
 
-func (h *TcBpfHooker) addFilter(sqt specialQdiscType, opts AddFilterOption) (netlink.Filter, error) {
+func (h *TcBpfHooker) DelIngressFilter(opts FilterOption) error {
+	return h.delFilter(qdiscIngress, opts)
+}
+
+func (h *TcBpfHooker) DelEgressFilter(opts FilterOption) error {
+	return h.delFilter(qdiscRoot, opts)
+}
+
+func (h *TcBpfHooker) addFilter(sqt specialQdiscType, opts FilterOption) (netlink.Filter, error) {
 	link, err := h.getLink(opts.IfName)
 	if err != nil {
 		return nil, err
 	}
+	// check if the clsact qdisc exists. if it doesn't, we return a NotExists error
 	ok, err := h.checkClsActQdisc(link)
 	if err != nil {
 		return nil, err
@@ -109,24 +151,58 @@ func (h *TcBpfHooker) addFilter(sqt specialQdiscType, opts AddFilterOption) (net
 	if !ok {
 		return nil, ErrClsactQdiscNotExists
 	}
-	ifIndex := link.Attrs().Index
-	attrs := getBpfFilterAttrs(ifIndex, opts.Prio, unix.ETH_P_ALL, sqt)
-	bpfFilter := netlink.BpfFilter{
-		FilterAttrs:  attrs,
-		Fd:           opts.ProgFD,
-		DirectAction: true,
-	}
-	if err := h.Handle.FilterAdd(&bpfFilter); err != nil {
+	bpfFilter := getBpfFilter(link, opts.ProgFD, opts.Prio, unix.ETH_P_ALL, sqt)
+	// check if the filter exists. if it does, we return an Exist error
+	ok, err = h.checkFilter(link, bpfFilter)
+	if err != nil {
 		return nil, err
 	}
-	return &bpfFilter, nil
+	if ok {
+		return bpfFilter, ErrFilterExists
+	}
+	// the filter doesn't exist, let's create it
+	if err := h.Handle.FilterAdd(bpfFilter); err != nil {
+		return nil, err
+	}
+	return bpfFilter, nil
 }
 
-func (h *TcBpfHooker) DelFilter(filter netlink.Filter) error {
-	if err := h.Handle.FilterDel(filter); err != nil {
+func (h *TcBpfHooker) delFilter(sqt specialQdiscType, opts FilterOption) error {
+	link, err := h.getLink(opts.IfName)
+	if err != nil {
+		return err
+	}
+	ok, err := h.checkClsActQdisc(link)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrClsactQdiscNotExists
+	}
+	// check if the filter exists. if it doesn't, we return a NotExist error
+	bpfFilter := getBpfFilter(link, opts.ProgFD, opts.Prio, unix.ETH_P_ALL, sqt)
+	ok, err = h.checkFilter(link, bpfFilter)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrFilterNotExists
+	}
+	if err := h.Handle.FilterDel(bpfFilter); err != nil {
 		return err
 	}
 	return nil
+}
+
+func getBpfFilter(link netlink.Link, progFD int, prio, proto uint16, sqt specialQdiscType) netlink.Filter {
+	ifIndex := link.Attrs().Index
+	attrs := getBpfFilterAttrs(ifIndex, prio, proto, sqt)
+	bpfFilter := netlink.BpfFilter{
+		FilterAttrs:  attrs,
+		Fd:           progFD,
+		DirectAction: true,
+	}
+	return &bpfFilter
 }
 
 func getBpfFilterAttrs(ifindex int, prio, proto uint16, sqt specialQdiscType) netlink.FilterAttrs {
@@ -151,6 +227,10 @@ func getBpfFilterAttrs(ifindex int, prio, proto uint16, sqt specialQdiscType) ne
 func (h *TcBpfHooker) getLink(ifName string) (netlink.Link, error) {
 	link, err := h.Handle.LinkByName(ifName)
 	if err != nil {
+		_, ok := err.(netlink.LinkNotFoundError)
+		if ok {
+			return nil, ErrLinkNotExists
+		}
 		return nil, err
 	}
 	return link, err
@@ -178,6 +258,25 @@ func (h *TcBpfHooker) checkClsActQdisc(link netlink.Link) (bool, error) {
 			found = true
 			break
 		}
+	}
+	return found, nil
+}
+
+func (h *TcBpfHooker) checkFilter(link netlink.Link, filter netlink.Filter) (bool, error) {
+	filters, err := h.Handle.FilterList(link, filter.Attrs().Parent)
+	if err != nil {
+		return false, err
+	}
+	var found bool = false
+	for _, _filter := range filters {
+		if _filter.Type() != filter.Type() {
+			continue
+		}
+		if _filter.Attrs().Handle != filter.Attrs().Handle {
+			continue
+		}
+		found = true
+		break
 	}
 	return found, nil
 }
