@@ -98,12 +98,7 @@ func (e *NetNsEntry) cleanUpFiltersOnAllIfs() error {
 		if ifEntry.EgressFilterFD == -1 {
 			return true
 		}
-		opts := tc_bpf.FilterOption{
-			IfName: ifEntry.Name,
-			ProgFD: ifEntry.EgressFilterFD,
-			Prio:   defaultFilterPrio,
-		}
-		err = bpfHooker.DelEgressFilter(opts)
+		err = removeEgressFilter(bpfHooker, ifEntry.Name)
 		return true
 	}
 	e.IfEntries.Range(cleanUpFilterForEachIf)

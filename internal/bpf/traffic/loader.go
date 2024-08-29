@@ -2,7 +2,6 @@ package traffic
 
 import (
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -15,7 +14,6 @@ import (
 
 const (
 	defaultBindMountPath = "/run/netns"
-	defaultAgentBPFRoot  = "/sys/fs/bpf/sealos-nm-agent"
 	defaultFilterPrio    = 1
 	defaultPodMainIf     = "eth0"
 
@@ -33,16 +31,6 @@ const (
 )
 
 var (
-	fromContainerProgPinnedPath = filepath.Join(defaultAgentBPFRoot, fromContainerProgFile)
-	toNetDevProgPinnedPath      = filepath.Join(defaultAgentBPFRoot, toNetDevProgFile)
-
-	fromContainerTrafficEventsMapPinnedPath = filepath.Join(defaultAgentBPFRoot, fromContainerTrafficEventsFile)
-	fromContainerTrafficNotisMapPinnedPath  = filepath.Join(defaultAgentBPFRoot, fromContainerTrafficNotisFile)
-	toNetDevTrafficEventsMapPinnedPath      = filepath.Join(defaultAgentBPFRoot, toNetDevTrafficEventsFile)
-	toNetDevTrafficNotisMapPinnedPath       = filepath.Join(defaultAgentBPFRoot, toNetDevTrafficNotisFile)
-)
-
-var (
 	ErrCheckingNetNsExists = errors.New("failed to check if the netns exists")
 )
 
@@ -55,9 +43,8 @@ type TrafficHookerParams struct {
 
 type TrafficHooker struct {
 	log.Logger
-	hostNetNsEntry   *NetNsEntry
-	netNsEntries     *xsync.MapOf[string, *NetNsEntry]
-	staleTrafficObjs *trafficObjects
+	hostNetNsEntry *NetNsEntry
+	netNsEntries   *xsync.MapOf[string, *NetNsEntry]
 	TrafficHookerParams
 }
 
@@ -66,66 +53,20 @@ func NewTrafficHooker(params TrafficHookerParams) (*TrafficHooker, error) {
 	if err != nil {
 		return nil, err
 	}
-	// check if there is still stale programs and maps left
-	staleFromContainerProg, err := getPinnedBpfProg(fromContainerProgPinnedPath)
-	if err != nil {
-		return nil, err
-	}
-	staleToNetDevProg, err := getPinnedBpfProg(toNetDevProgPinnedPath)
-	if err != nil {
-		return nil, err
-	}
-	staleFromContainerTrafficEvents, err := getPinnedBpfMap(fromContainerTrafficEventsMapPinnedPath)
-	if err != nil {
-		return nil, err
-	}
-	staleFromContainerTrafficNotis, err := getPinnedBpfMap(fromContainerTrafficNotisMapPinnedPath)
-	if err != nil {
-		return nil, err
-	}
-	staleToNetDevTrafficEvents, err := getPinnedBpfMap(toNetDevTrafficEventsMapPinnedPath)
-	if err != nil {
-		return nil, err
-	}
-	staleToNetDevTrafficNotis, err := getPinnedBpfMap(toNetDevTrafficNotisMapPinnedPath)
-	if err != nil {
-		return nil, err
-	}
 	hostNetnsEntry, err := NewNetNsEntry("")
 	if err != nil {
 		return nil, err
 	}
 	return &TrafficHooker{
-		Logger:         logger,
-		hostNetNsEntry: hostNetnsEntry,
-		netNsEntries:   xsync.NewMapOf[*NetNsEntry](),
-		staleTrafficObjs: &trafficObjects{
-			trafficPrograms: trafficPrograms{
-				SealosFromContainer: staleFromContainerProg,
-				SealosToNetdev:      staleToNetDevProg,
-			},
-			trafficMaps: trafficMaps{
-				FromContainerTrafficEvents: staleFromContainerTrafficEvents,
-				FromContainerTrafficNotis:  staleFromContainerTrafficNotis,
-				ToNetdevTrafficEvents:      staleToNetDevTrafficEvents,
-				ToNetdevTrafficNotis:       staleToNetDevTrafficNotis,
-			},
-		},
+		Logger:              logger,
+		hostNetNsEntry:      hostNetnsEntry,
+		netNsEntries:        xsync.NewMapOf[*NetNsEntry](),
 		TrafficHookerParams: params,
 	}, nil
 }
 
 func (h *TrafficHooker) Init() error {
 	if err := h.initExistingPods(); err != nil {
-		return err
-	}
-	if err := unpinObjs(h.staleTrafficObjs); err != nil {
-		return err
-	}
-	if err := closeObjs(h.staleTrafficObjs); err != nil {
-		return err
-	}
-	if err := pinObjs(h.TrafficObjs, defaultAgentBPFRoot); err != nil {
 		return err
 	}
 	return nil
@@ -157,109 +98,7 @@ func (h *TrafficHooker) Close() error {
 	} else {
 		h.Debugf("successfully remove the filters for all interfaces in the host netns")
 	}
-	if err = unpinObjs(h.TrafficObjs); err != nil {
-		h.Errorf("failed to unpin the traffic objects: %v", err)
-	}
 	return err
-}
-
-func pinObjs(o *trafficObjects, pinRoot string) error {
-	if err := os.MkdirAll(pinRoot, 0755); err != nil {
-		return err
-	}
-	return safePin(
-		Pinner{_Pinner: o.SealosFromContainer, Path: fromContainerProgPinnedPath},
-		Pinner{_Pinner: o.SealosToNetdev, Path: toNetDevProgPinnedPath},
-		Pinner{_Pinner: o.FromContainerTrafficEvents, Path: fromContainerTrafficEventsMapPinnedPath},
-		Pinner{_Pinner: o.FromContainerTrafficNotis, Path: fromContainerTrafficNotisMapPinnedPath},
-		Pinner{_Pinner: o.ToNetdevTrafficEvents, Path: toNetDevTrafficEventsMapPinnedPath},
-		Pinner{_Pinner: o.ToNetdevTrafficNotis, Path: toNetDevTrafficNotisMapPinnedPath},
-	)
-}
-
-func unpinObjs(o *trafficObjects) error {
-	return safeUnpin(
-		o.SealosFromContainer,
-		o.SealosToNetdev,
-		o.FromContainerTrafficEvents,
-		o.FromContainerTrafficNotis,
-		o.ToNetdevTrafficEvents,
-		o.ToNetdevTrafficNotis,
-	)
-}
-
-func closeObjs(o *trafficObjects) error {
-	return safeClose(
-		o.SealosFromContainer,
-		o.SealosToNetdev,
-		o.FromContainerTrafficEvents,
-		o.FromContainerTrafficNotis,
-		o.ToNetdevTrafficEvents,
-		o.ToNetdevTrafficNotis,
-	)
-}
-
-func isNil(i any) bool {
-	if i == nil {
-		return true
-	}
-	switch i.(type) {
-	case *ebpf.Program:
-		v := i.(*ebpf.Program)
-		return v == nil
-	case *ebpf.Map:
-		v := i.(*ebpf.Map)
-		return v == nil
-	default:
-		return false
-	}
-}
-
-func safeClose(closers ...io.Closer) error {
-	for _, closer := range closers {
-		if isNil(closer) {
-			continue
-		}
-		if err := closer.Close(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-type Unpinner interface {
-	Unpin() error
-}
-
-func safeUnpin(unpinners ...Unpinner) error {
-	for _, unpinner := range unpinners {
-		if isNil(unpinner) {
-			continue
-		}
-		if err := unpinner.Unpin(); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-type Pinner struct {
-	_Pinner interface {
-		Pin(path string) error
-	}
-	Path string
-}
-
-func safePin(pinners ...Pinner) error {
-	for _, pinner := range pinners {
-		if isNil(pinner._Pinner) {
-			continue
-		}
-		if err := pinner._Pinner.Pin(pinner.Path); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (h *TrafficHooker) initExistingPods() error {
@@ -359,15 +198,15 @@ func getIfHash(ifName string) string {
 	return ifName
 }
 
-func (h *TrafficHooker) installFilterOnIf(netnsEntry *NetNsEntry, ifName string, prog *ebpf.Program, staleProg *ebpf.Program) error {
+func (h *TrafficHooker) installFilterOnIf(netnsEntry *NetNsEntry, ifName string, prog *ebpf.Program) error {
 	if err := netnsEntry.installClsactQdiscOnIf(ifName); err != nil {
 		return err
 	}
-	if staleProg != nil {
-		if err := netnsEntry.removeEgressFilterOnIf(ifName); err != nil {
-			return err
-		}
+	// remove stale filters (if any)
+	if err := netnsEntry.removeEgressFilterOnIf(ifName); err != nil {
+		return err
 	}
+	// install filters
 	if prog != nil && prog.FD() > -1 {
 		if err := netnsEntry.installEgressFilterOnIf(ifName, prog.FD()); err != nil {
 			return err
@@ -377,96 +216,10 @@ func (h *TrafficHooker) installFilterOnIf(netnsEntry *NetNsEntry, ifName string,
 }
 
 func (h *TrafficHooker) installFilterOnHostIf(ifName string) error {
-	return h.installFilterOnIf(h.hostNetNsEntry, ifName, h.getToNetDevProg(false), h.getToNetDevProg(true))
+	return h.installFilterOnIf(h.hostNetNsEntry, ifName, h.TrafficObjs.SealosToNetdev)
 }
 
 func (h *TrafficHooker) installFiltersOnPodMainIf(netnsEntry *NetNsEntry) error {
 	ifName := defaultPodMainIf
-	return h.installFilterOnIf(netnsEntry, ifName, h.getFromContainerProg(false), h.getFromContainerProg(true))
-}
-
-func (w *TrafficHooker) getFromContainerProg(stale bool) *ebpf.Program {
-	if stale {
-		return w.staleTrafficObjs.SealosFromContainer
-	}
-	return w.TrafficObjs.SealosFromContainer
-}
-
-func (w *TrafficHooker) getToNetDevProg(stale bool) *ebpf.Program {
-	if stale {
-		return w.staleTrafficObjs.SealosToNetdev
-	}
-	return w.TrafficObjs.SealosToNetdev
-}
-
-func (w *TrafficHooker) getFromContainerTrafficEvents(stale bool) *ebpf.Map {
-	if stale {
-		return w.staleTrafficObjs.FromContainerTrafficEvents
-	}
-	return w.TrafficObjs.FromContainerTrafficEvents
-}
-
-func (w *TrafficHooker) getFromContainerTrafficNotis(stale bool) *ebpf.Map {
-	if stale {
-		return w.staleTrafficObjs.FromContainerTrafficNotis
-	}
-	return w.TrafficObjs.FromContainerTrafficNotis
-}
-
-func (w *TrafficHooker) getToNetDevTrafficEvents(stale bool) *ebpf.Map {
-	if stale {
-		return w.staleTrafficObjs.ToNetdevTrafficEvents
-	}
-	return w.TrafficObjs.ToNetdevTrafficEvents
-}
-
-func (w *TrafficHooker) getToNetDevTrafficNotis(stale bool) *ebpf.Map {
-	if stale {
-		return w.staleTrafficObjs.ToNetdevTrafficNotis
-	}
-	return w.TrafficObjs.ToNetdevTrafficNotis
-}
-
-func getPinnedBpfMap(pinnedPath string) (*ebpf.Map, error) {
-	exists, err := checkPinned(pinnedPath)
-	if err != nil {
-		return nil, err
-	}
-	var m *ebpf.Map = nil
-	if exists {
-		_m, err := ebpf.LoadPinnedMap(pinnedPath, nil)
-		if err != nil {
-			return m, err
-		}
-		m = _m
-	}
-	return m, nil
-}
-
-func getPinnedBpfProg(pinnedPath string) (*ebpf.Program, error) {
-	exists, err := checkPinned(pinnedPath)
-	if err != nil {
-		return nil, err
-	}
-	var prog *ebpf.Program = nil
-	if exists {
-		_prog, err := ebpf.LoadPinnedProgram(pinnedPath, nil)
-		if err != nil {
-			return prog, err
-		}
-		prog = _prog
-	}
-	return prog, nil
-}
-
-func checkPinned(pinnedPath string) (bool, error) {
-	// check if there is a file with `pinnedPath`
-	_, err := os.Stat(pinnedPath)
-	if err == nil {
-		return true, nil
-	} else if os.IsNotExist(err) {
-		return false, nil
-	} else {
-		return false, err
-	}
+	return h.installFilterOnIf(netnsEntry, ifName, h.TrafficObjs.SealosFromContainer)
 }
