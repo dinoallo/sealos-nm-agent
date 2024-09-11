@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	defaultBindMountPath = "/run/netns"
-	defaultFilterPrio    = 1
-	defaultPodMainIf     = "eth0"
+	defaultBindMountPath  = "/run/netns"
+	defaultPodFilterPrio  = 1
+	defaultHostFilterPrio = 100
+	defaultPodMainIf      = "eth0"
 
 	ingressFilterNameForHostDev = "sealos_nm_host_ingress_hook"
 	egressFilterNameForHostDev  = "sealos_nm_host_egress_hook"
@@ -154,17 +155,14 @@ func getIfHash(ifName string) string {
 	return ifName
 }
 
-func (h *TrafficHooker) installFilterOnIf(netnsEntry *NetNsEntry, ifName string, prog *ebpf.Program) error {
-	if err := netnsEntry.installClsactQdiscOnIf(ifName); err != nil {
-		return err
-	}
+func (h *TrafficHooker) installOrReplaceFilterOnIf(netnsEntry *NetNsEntry, ifName, filterName string, prio uint16, prog *ebpf.Program) error {
 	// remove stale filters (if any)
-	if err := netnsEntry.removeEgressFilterOnIf(ifName); err != nil {
+	if err := netnsEntry.ensureEgressFilterNotExists(ifName, prio); err != nil {
 		return err
 	}
 	// install filters
 	if prog != nil && prog.FD() > -1 {
-		if err := netnsEntry.installEgressFilterOnIf(ifName, prog.FD()); err != nil {
+		if err := netnsEntry.installEgressFilterOnIf(ifName, filterName, prog.FD(), prio); err != nil {
 			return err
 		}
 	}
@@ -172,10 +170,12 @@ func (h *TrafficHooker) installFilterOnIf(netnsEntry *NetNsEntry, ifName string,
 }
 
 func (h *TrafficHooker) installFilterOnHostIf(ifName string) error {
-	return h.installFilterOnIf(h.hostNetNsEntry, ifName, h.TrafficObjs.SealosToNetdev)
+	// install egress filters
+	return h.installOrReplaceFilterOnIf(h.hostNetNsEntry, ifName, egressFilterNameForHostDev, defaultHostFilterPrio, h.TrafficObjs.SealosToNetdev)
 }
 
 func (h *TrafficHooker) installFiltersOnPodMainIf(netnsEntry *NetNsEntry) error {
 	ifName := defaultPodMainIf
-	return h.installFilterOnIf(netnsEntry, ifName, h.TrafficObjs.SealosFromContainer)
+	// install egress filters
+	return h.installOrReplaceFilterOnIf(netnsEntry, ifName, egressFilterNameForPodDev, defaultPodFilterPrio, h.TrafficObjs.SealosFromContainer)
 }

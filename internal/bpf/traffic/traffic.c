@@ -86,9 +86,10 @@ SEC("classifier")
 int sealos_to_netdev(struct __sk_buff *ctx) {
   u32 custom_meta = ctx->cb[4];
   u32 identity = custom_meta & 0xffffff;
+  int ret = (custom_meta >> 24) & 0xff;
 
   submit_egress_traffic(ctx, identity, &to_netdev_traffic_events,
                         &to_netdev_traffic_notis);
 
-  return TC_ACT_UNSPEC;
+  return ret;
 }

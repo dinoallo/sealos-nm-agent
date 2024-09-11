@@ -3,18 +3,33 @@ package traffic
 import (
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/tc_bpf"
 	"github.com/puzpuzpuz/xsync"
-	"github.com/vishvananda/netlink"
 )
+
+type FilterEntry struct {
+	Name string
+	FD   int
+	Prio uint16
+}
+
+func NewFilterEntry(filterName string, fd int, prio uint16) *FilterEntry {
+	return &FilterEntry{
+		Name: filterName,
+		FD:   fd,
+		Prio: prio,
+	}
+}
 
 type IfEntry struct {
 	Name           string
-	EgressFilterFD int
+	IngressFilters *xsync.MapOf[string, *FilterEntry]
+	EgressFilters  *xsync.MapOf[string, *FilterEntry]
 }
 
 func NewIfEntry(ifName string) *IfEntry {
 	return &IfEntry{
 		Name:           ifName,
-		EgressFilterFD: -1,
+		IngressFilters: xsync.NewMapOf[*FilterEntry](),
+		EgressFilters:  xsync.NewMapOf[*FilterEntry](),
 	}
 }
 
@@ -53,7 +68,84 @@ func (e *NetNsEntry) checkLinkExists(ifName string) (bool, error) {
 	}
 }
 
-func (e *NetNsEntry) installClsactQdiscOnIf(ifName string) error {
+func (e *NetNsEntry) installEgressFilterOnIf(ifName string, filterName string, fd int, prio uint16) error {
+	err := e.ensureEgressFilterExists(ifName, fd, prio)
+	if err != nil {
+		return err
+	}
+	ifHash := getIfHash(ifName)
+	newIfEntry := NewIfEntry(ifName)
+	ifEntry, _ := e.IfEntries.LoadOrStore(ifHash, newIfEntry)
+	filterEntry := NewFilterEntry(filterName, fd, prio)
+	ifEntry.EgressFilters.Store(filterName, filterEntry)
+	return nil
+}
+
+func (e *NetNsEntry) removeEgressFilterOnIf(ifName string, filterName string) error {
+	ifHash := getIfHash(ifName)
+	ifEntry, loaded := e.IfEntries.Load(ifHash)
+	if !loaded {
+		return nil
+	}
+	filterEntry, loaded := ifEntry.EgressFilters.LoadAndDelete(filterName)
+	if !loaded {
+		return nil
+	}
+	return e.ensureEgressFilterNotExists(ifName, filterEntry.Prio)
+}
+
+func (e *NetNsEntry) cleanUpFiltersOnAllIfs() error {
+	var err error = nil
+	cleanUpEgressFiltersForEachIf := func(ifHash string, ifEntry *IfEntry) bool {
+		filters := ifEntry.EgressFilters
+		cleanUpFilter := func(filterName string, filterEntry *FilterEntry) bool {
+			filterEntry, loaded := filters.LoadAndDelete(filterName)
+			if !loaded || filterEntry.FD == -1 {
+				return true
+			}
+			err = e.ensureEgressFilterNotExists(ifEntry.Name, filterEntry.Prio)
+			return true
+		}
+		// clean up egress filters
+		ifEntry.EgressFilters.Range(cleanUpFilter)
+		return true
+	}
+	e.IfEntries.Range(cleanUpEgressFiltersForEachIf)
+	return err
+}
+
+func (e *NetNsEntry) ensureEgressFilterExists(ifName string, fd int, prio uint16) error {
+	bpfHooker := e.Hooker
+	opts := tc_bpf.FilterOption{
+		IfName: ifName,
+		ProgFD: fd,
+		Prio:   prio,
+	}
+	err := e.ensureClsactQdiscOnIfExists(ifName)
+	if err != nil && err != tc_bpf.ErrClsactQdiscExists {
+		return err
+	}
+	_, err = bpfHooker.AddEgressFilter(opts)
+	if err != nil && err != tc_bpf.ErrFilterExists {
+		return err
+	}
+	return nil
+}
+
+func (e *NetNsEntry) ensureEgressFilterNotExists(ifName string, prio uint16) error {
+	bpfHooker := e.Hooker
+	opts := tc_bpf.FilterOption{
+		IfName: ifName,
+		Prio:   prio,
+	}
+	err := bpfHooker.DelEgressFilter(opts)
+	if err != nil && err != tc_bpf.ErrClsactQdiscNotExists && err != tc_bpf.ErrFilterNotExists {
+		return err
+	}
+	return nil
+}
+
+func (e *NetNsEntry) ensureClsactQdiscOnIfExists(ifName string) error {
 	bpfHooker := e.Hooker
 	_, err := bpfHooker.AddClsactQdisc(ifName)
 	if err != nil && err != tc_bpf.ErrClsactQdiscExists {
@@ -63,63 +155,6 @@ func (e *NetNsEntry) installClsactQdiscOnIf(ifName string) error {
 	ifHash := getIfHash(ifName)
 	e.IfEntries.LoadOrStore(ifHash, newIfEntry)
 	return nil
-}
-
-func (e *NetNsEntry) installEgressFilterOnIf(ifName string, fd int) error {
-	bpfHooker := e.Hooker
-	_, err := installEgressFilter(bpfHooker, ifName, fd)
-	if err != nil && err != tc_bpf.ErrFilterExists {
-		return err
-	}
-	ifHash := getIfHash(ifName)
-	newIfEntry := NewIfEntry(ifName)
-	ifEntry, _ := e.IfEntries.LoadOrStore(ifHash, newIfEntry)
-	ifEntry.EgressFilterFD = fd
-	return nil
-}
-
-func (e *NetNsEntry) removeEgressFilterOnIf(ifName string) error {
-	bpfHooker := e.Hooker
-	err := removeEgressFilter(bpfHooker, ifName)
-	if err != nil && err != tc_bpf.ErrFilterNotExists {
-		return err
-	}
-	ifHash := getIfHash(ifName)
-	newIfEntry := NewIfEntry(ifName)
-	ifEntry, _ := e.IfEntries.LoadOrStore(ifHash, newIfEntry)
-	ifEntry.EgressFilterFD = -1
-	return nil
-}
-
-func (e *NetNsEntry) cleanUpFiltersOnAllIfs() error {
-	bpfHooker := e.Hooker
-	var err error = nil
-	cleanUpFilterForEachIf := func(ifHash string, ifEntry *IfEntry) bool {
-		if ifEntry.EgressFilterFD == -1 {
-			return true
-		}
-		err = removeEgressFilter(bpfHooker, ifEntry.Name)
-		return true
-	}
-	e.IfEntries.Range(cleanUpFilterForEachIf)
-	return err
-}
-
-func installEgressFilter(bpfHooker *tc_bpf.TcBpfHooker, ifName string, fd int) (netlink.Filter, error) {
-	opts := tc_bpf.FilterOption{
-		IfName: ifName,
-		ProgFD: fd,
-		Prio:   defaultFilterPrio,
-	}
-	return bpfHooker.AddEgressFilter(opts)
-}
-
-func removeEgressFilter(bpfHooker *tc_bpf.TcBpfHooker, ifName string) error {
-	opts := tc_bpf.FilterOption{
-		IfName: ifName,
-		Prio:   defaultFilterPrio,
-	}
-	return bpfHooker.DelEgressFilter(opts)
 }
 
 func (e *NetNsEntry) GetHash() string {
