@@ -65,9 +65,3 @@ image-publish-debug: image-build-debug
 image-build-test: generate
 	${DOCKER} build -t ${TEST_TAG} -f ./build/docker/test/Dockerfile --output type=oci .
 	${DOCKER} push ${TEST_TAG}
-
-# TODO: merge this into `make generate`
-protoc:
-	@echo "Generating Go files"
-	cd api/proto && protoc --go_out=. --go-grpc_out=. \
-		--go-grpc_opt=paths=source_relative --go_opt=paths=source_relative *.proto
