@@ -208,7 +208,7 @@ type GlobalConfig struct {
 func NewGlobalConfig() *GlobalConfig {
 	return &GlobalConfig{
 		Host:                    "127.0.0.1",
-		EnableHostTraffic:       true,
+		EnableHostTraffic:       false,
 		EnablePodTraffic:        true,
 		ClassifierConfig:        NewClassifierConfig(),
 		TrafficStoreConfig:      NewTrafficStoreConfig(),
