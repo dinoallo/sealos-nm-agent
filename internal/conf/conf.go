@@ -57,7 +57,7 @@ func NewClassifierConfig() ClassifierConfig {
 	}
 }
 
-type TrafficStoreConfig struct { // envPrefix: PTS_
+type TrafficStoreConfig struct { // envPrefix: TS_
 	Enabled               bool          `env:"ENABLED"`
 	PodTrafficColl        string        `env:"POD_TRAFFIC_COLL"`
 	HostTrafficColl       string        `env:"HOST_TRAFFIC_COLL"`
