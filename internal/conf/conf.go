@@ -85,16 +85,6 @@ func NewTrafficStoreConfig() TrafficStoreConfig {
 	}
 }
 
-type CepWatcherConfig struct {
-	MaxWorker int `env:"MAX_WORKER"`
-}
-
-func NewCepWatcherConfig() CepWatcherConfig {
-	return CepWatcherConfig{
-		MaxWorker: 5,
-	}
-}
-
 type EpWatcherConfig struct {
 	MaxWorker int `env:"MAX_WORKER"`
 }
@@ -206,7 +196,6 @@ type GlobalConfig struct {
 	DBConfig                `envPrefix:"DB_"`
 	BPFTrafficFactoryConfig `envPrefix:"TF_"`
 	HostDevWatcherConfig    `envPrefix:"HDW_"`
-	CepWatcherConfig        `envPrefix:"CEPW_"`
 	NetnsWatcherConfig      `envPrefix:"NW_"`
 	EpWatcherConfig         `envPrefix:"EPW_"`
 	CiliumNodeWatcherConfig `envPrefix:"CNW_"`
@@ -226,7 +215,6 @@ func NewGlobalConfig() *GlobalConfig {
 		DBConfig:                NewDBConfig(),
 		BPFTrafficFactoryConfig: NewBPFTrafficFactoryConfig(),
 		HostDevWatcherConfig:    NewHostDevWatcherConfig(),
-		CepWatcherConfig:        NewCepWatcherConfig(),
 		NetnsWatcherConfig:      NewNetnsWatcherConfig(),
 		EpWatcherConfig:         NewEpWatcherConfig(),
 		CiliumNodeWatcherConfig: NewCiliumNodeWatcherConfig(),
