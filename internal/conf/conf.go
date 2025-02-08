@@ -106,11 +106,13 @@ func NewEpWatcherConfig() EpWatcherConfig {
 }
 
 type CiliumNodeWatcherConfig struct {
-	MaxWorker int `env:"MAX_WORKER"`
+	Enabled   bool `env:"ENABLED"`
+	MaxWorker int  `env:"MAX_WORKER"`
 }
 
 func NewCiliumNodeWatcherConfig() CiliumNodeWatcherConfig {
 	return CiliumNodeWatcherConfig{
+		Enabled:   false,
 		MaxWorker: 5,
 	}
 }

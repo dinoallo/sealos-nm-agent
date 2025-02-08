@@ -160,6 +160,11 @@ func main() {
 		printErr(err)
 		return
 	}
+	// start the cilium node watcher
+	if err := startCiliumNodeWatcher(); err != nil {
+		printErr(err)
+		return
+	}
 	// start the endpoint watcher
 	if err := startEpWatcher(); err != nil {
 		printErr(err)
@@ -346,6 +351,9 @@ func startPodWatcher() error {
 	return nil
 }
 func startCiliumNodeWatcher() error {
+	if !globalConfig.CiliumNodeWatcherConfig.Enabled {
+		return nil
+	}
 	p := k8s_watcher.CiliumNodeWatcherParams{
 		ParentLogger:            mainLogger,
 		Client:                  mainMgr.GetClient(),

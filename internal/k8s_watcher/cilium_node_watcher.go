@@ -76,6 +76,7 @@ func (w *CiliumNodeWatcher) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err := w.RegisterCiliumHostAddr(ciliumHostAddr); err != nil {
 		return ctrl.Result{}, err
 	}
+	w.Debugf("cilium host addr %v registered", ciliumHostAddr)
 	return ctrl.Result{}, nil
 }
 
