@@ -73,15 +73,15 @@ rules:
 - apiGroups:
   - cilium.io
   resources:
-  - ciliumendpoints
+  - ciliumnodes
   verbs:
   - get
   - list
   - watch
 - apiGroups:
-  - ciliumendpoints
+  - ciliumnodes
   resources:
-  - ciliumendpoints/status
+  - ciliumnodes/status
   verbs:
   - get
 ---

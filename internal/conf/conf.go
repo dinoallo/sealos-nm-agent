@@ -105,6 +105,16 @@ func NewEpWatcherConfig() EpWatcherConfig {
 	}
 }
 
+type CiliumNodeWatcherConfig struct {
+	MaxWorker int `env:"MAX_WORKER"`
+}
+
+func NewCiliumNodeWatcherConfig() CiliumNodeWatcherConfig {
+	return CiliumNodeWatcherConfig{
+		MaxWorker: 5,
+	}
+}
+
 type IngressWatcherConfig struct {
 	MaxWorker int `env:"MAX_WORKER"`
 }
@@ -197,6 +207,7 @@ type GlobalConfig struct {
 	CepWatcherConfig        `envPrefix:"CEPW_"`
 	NetnsWatcherConfig      `envPrefix:"NW_"`
 	EpWatcherConfig         `envPrefix:"EPW_"`
+	CiliumNodeWatcherConfig `envPrefix:"CNW_"`
 	PodWatcherConfig        `envPrefix:"PODW_"`
 	IngressWatcherConfig    `envPrefix:"INGW_"`
 	DebugServiceConfig      `envPrefix:"DEBUG_"`
@@ -216,6 +227,7 @@ func NewGlobalConfig() *GlobalConfig {
 		CepWatcherConfig:        NewCepWatcherConfig(),
 		NetnsWatcherConfig:      NewNetnsWatcherConfig(),
 		EpWatcherConfig:         NewEpWatcherConfig(),
+		CiliumNodeWatcherConfig: NewCiliumNodeWatcherConfig(),
 		PodWatcherConfig:        NewPodWatcherConfig(),
 		IngressWatcherConfig:    NewIngressWatcherConfig(),
 		DebugServiceConfig:      NewDebugServiceConfig(),

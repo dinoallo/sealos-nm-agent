@@ -14,6 +14,8 @@ type Classifier interface {
 	UnregisterNodePort(podAddr string, podPort uint32) error
 	RegisterHostAddr(hostAddr string) error
 	UnregisterHostAddr(hostAddr string) error
+	RegisterCiliumHostAddr(ciliumHostAddr string) error
+	UnregisterCiliumHostAddr(ciliumHostAddr string) error
 	GetPodMeta(addr string) (structs.PodMeta, bool)
 	IsPodAddr(addr string) (bool, error)
 	IsHostAddr(addr string) (bool, error)
@@ -37,6 +39,7 @@ const (
 	AddrTypePod
 	AddrTypeSkipped
 	AddrTypeHost
+	AddrTypeCiliumHost
 	AddrTypeNode
 	AddrTypePrivate
 	AddrTypeWorld

@@ -46,6 +46,7 @@ type RawTrafficClassifier struct {
 	podMetaTable      *xsync.MapOf[string, structs.PodMeta]
 	specialPortTables *xsync.MapOf[string, *specialPortTable]
 	hostAddrs         *xsync.MapOf[string, struct{}]
+	ciliumHostAddrs   *xsync.MapOf[string, struct{}]
 	skippedCIDRs      []netip.Prefix
 	privateCIDRs      []netip.Prefix
 	podCIDRs          []netip.Prefix
@@ -104,6 +105,7 @@ func NewRawTrafficClassifer(params RawTrafficClassifierParams) (*RawTrafficClass
 		podMetaTable:               xsync.NewMapOf[structs.PodMeta](),
 		specialPortTables:          xsync.NewMapOf[*specialPortTable](),
 		hostAddrs:                  xsync.NewMapOf[struct{}](),
+		ciliumHostAddrs:            xsync.NewMapOf[struct{}](),
 		RawTrafficClassifierParams: params,
 		skippedCIDRs:               skippedCIDRs,
 		podCIDRs:                   podCIDRs,
@@ -172,6 +174,15 @@ func (c *RawTrafficClassifier) UnregisterHostAddr(hostAddr string) error {
 	c.hostAddrs.Delete(hostAddr)
 	return nil
 }
+func (c *RawTrafficClassifier) RegisterCiliumHostAddr(ciliumHostAddr string) error {
+	c.ciliumHostAddrs.LoadOrStore(ciliumHostAddr, struct{}{})
+	return nil
+}
+
+func (c *RawTrafficClassifier) UnregisterCiliumHostAddr(ciliumHostAddr string) error {
+	c.ciliumHostAddrs.Delete(ciliumHostAddr)
+	return nil
+}
 
 func (c *RawTrafficClassifier) CheckAndGetPodMeta(addr string) (structs.PodMeta, bool) {
 	podMeta, loaded := c.podMetaTable.Load(addr)
@@ -193,6 +204,7 @@ func (c *RawTrafficClassifier) GetAddrType(addr string) (modules.AddrType, error
 	if addr == "" {
 		return modules.AddrTypeUnknown, nil
 	}
+	// skipped address checking
 	isSkippedAddr, err := c.IsSkippedAddr(addr)
 	if err != nil {
 		return modules.AddrTypeUnknown, err
@@ -200,34 +212,43 @@ func (c *RawTrafficClassifier) GetAddrType(addr string) (modules.AddrType, error
 	if isSkippedAddr {
 		return modules.AddrTypeSkipped, nil
 	}
+	// cilium host address checking
+	// this should be done before pod address checking, since these addresses are in pod cidr
+	isCiliumHostAddr, err := c.IsCiliumHostAddr(addr)
+	if err != nil {
+		return modules.AddrTypeUnknown, err
+	} else if isCiliumHostAddr {
+		return modules.AddrTypeCiliumHost, nil
+	}
+	// host address checking
 	isHostAddr, err := c.IsHostAddr(addr)
 	if err != nil {
 		return modules.AddrTypeUnknown, err
-	}
-	if isHostAddr {
+	} else if isHostAddr {
 		return modules.AddrTypeHost, nil
 	}
+	// pod address checking
 	isPodAddr, err := c.IsPodAddr(addr)
 	if err != nil {
 		return modules.AddrTypeUnknown, err
-	}
-	if isPodAddr {
+	} else if isPodAddr {
 		return modules.AddrTypePod, nil
 	}
+	// node address checking
 	isNodeAddr, err := c.IsNodeAddr(addr)
 	if err != nil {
 		return modules.AddrTypeUnknown, err
-	}
-	if isNodeAddr {
+	} else if isNodeAddr {
 		return modules.AddrTypeNode, nil
 	}
+	// private address checking
 	isPrivateAddr, err := c.IsPrivateAddr(addr)
 	if err != nil {
 		return modules.AddrTypeUnknown, err
-	}
-	if isPrivateAddr {
+	} else if isPrivateAddr {
 		return modules.AddrTypePrivate, err
 	}
+	// none are matched, so we consider the address a world one
 	return modules.AddrTypeWorld, nil
 }
 
@@ -259,6 +280,10 @@ func (c *RawTrafficClassifier) IsNodeAddr(addr string) (bool, error) {
 
 func (c *RawTrafficClassifier) IsHostAddr(addr string) (bool, error) {
 	_, loaded := c.hostAddrs.Load(addr)
+	return loaded, nil
+}
+func (c *RawTrafficClassifier) IsCiliumHostAddr(addr string) (bool, error) {
+	_, loaded := c.ciliumHostAddrs.Load(addr)
 	return loaded, nil
 }
 

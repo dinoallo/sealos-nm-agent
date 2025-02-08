@@ -8,12 +8,13 @@ import (
 )
 
 type DummyClassifierConfig struct {
-	PodAddr     string
-	HostAddr    string
-	WorldAddr   string
-	NodeAddr    string
-	SkippedAddr string
-	PodPort     uint32 // only useful if PodAddr is set
+	PodAddr         string
+	HostAddr        string
+	WorldAddr       string
+	NodeAddr        string
+	SkippedAddr     string
+	CiliumHostAddrs []string
+	PodPort         uint32 // only useful if PodAddr is set
 }
 
 type DummyClassifier struct {
@@ -99,6 +100,26 @@ func (c *DummyClassifier) UnregisterHostAddr(hostAddr string) error {
 		return nil
 	}
 	log.Printf("unregister host addr %v", hostAddr)
+	return nil
+}
+
+func (c *DummyClassifier) RegisterCiliumHostAddr(hostAddr string) error {
+	for _, ciliumHostAddr := range c.CiliumHostAddrs {
+		if hostAddr == ciliumHostAddr {
+			log.Printf("register cilium host addr %v", ciliumHostAddr)
+			return nil
+		}
+	}
+	return nil
+}
+
+func (c *DummyClassifier) UnregisterCiliumHostAddr(hostAddr string) error {
+	for _, ciliumHostAddr := range c.CiliumHostAddrs {
+		if hostAddr == ciliumHostAddr {
+			log.Printf("unregister cilium host addr %v", ciliumHostAddr)
+			return nil
+		}
+	}
 	return nil
 }
 

@@ -45,20 +45,20 @@ var (
 	mainMgr      ctrl.Manager
 	globalConfig *conf.GlobalConfig
 
-	ErrInitingGlobalConfig    = errors.New("failed to init the global config")
-	ErrStartingDB             = errors.New("failed to start the database")
-	ErrStartingTrafficFactory = errors.New("failed to start the traffic factory")
-	ErrStartingCCMWatcher     = errors.New("failed to start the cilium ccm watcher")
-	ErrStartingClassifier     = errors.New("failed to start the classifier")
-	ErrStartingTrafficStore   = errors.New("failed to start the traffic store")
-	ErrStartingCtrlManager    = errors.New("failed to start the ctrl manager")
-	ErrCreatingCtrlManager    = errors.New("failed to create the ctrl manager")
-	ErrStartingHostDevWatcher = errors.New("failed to start the host device watcher")
-	ErrStartingNetnsWatcher   = errors.New("failed to start the net ns watcher")
-	ErrStartingPodWatcher     = errors.New("failed to start the pod watcher")
-	ErrStartingEpWatcher      = errors.New("failed to start the ep watcher")
-	ErrStartingCepWatcher     = errors.New("failed to start the cep watcher")
-	ErrStartingIngressWatcher = errors.New("failed to start the ingress watcher")
+	ErrInitingGlobalConfig       = errors.New("failed to init the global config")
+	ErrStartingDB                = errors.New("failed to start the database")
+	ErrStartingTrafficFactory    = errors.New("failed to start the traffic factory")
+	ErrStartingCCMWatcher        = errors.New("failed to start the cilium ccm watcher")
+	ErrStartingClassifier        = errors.New("failed to start the classifier")
+	ErrStartingTrafficStore      = errors.New("failed to start the traffic store")
+	ErrStartingCtrlManager       = errors.New("failed to start the ctrl manager")
+	ErrCreatingCtrlManager       = errors.New("failed to create the ctrl manager")
+	ErrStartingHostDevWatcher    = errors.New("failed to start the host device watcher")
+	ErrStartingNetnsWatcher      = errors.New("failed to start the net ns watcher")
+	ErrStartingPodWatcher        = errors.New("failed to start the pod watcher")
+	ErrStartingEpWatcher         = errors.New("failed to start the ep watcher")
+	ErrStartingCiliumNodeWatcher = errors.New("failed to start the cilium node watcher")
+	ErrStartingIngressWatcher    = errors.New("failed to start the ingress watcher")
 
 	scheme = runtime.NewScheme()
 )
@@ -342,6 +342,23 @@ func startPodWatcher() error {
 	}
 	if err := w.SetupWithManager(mainMgr); err != nil {
 		return errors.Join(err, ErrStartingPodWatcher)
+	}
+	return nil
+}
+func startCiliumNodeWatcher() error {
+	p := k8s_watcher.CiliumNodeWatcherParams{
+		ParentLogger:            mainLogger,
+		Client:                  mainMgr.GetClient(),
+		Scheme:                  mainMgr.GetScheme(),
+		Classifier:              mainClassifier,
+		CiliumNodeWatcherConfig: globalConfig.CiliumNodeWatcherConfig,
+	}
+	w, err := k8s_watcher.NewCiliumNodeWatcher(p)
+	if err != nil {
+		return errors.Join(err, ErrStartingCiliumNodeWatcher)
+	}
+	if err := w.SetupWithManager(mainMgr); err != nil {
+		return errors.Join(err, ErrStartingCiliumNodeWatcher)
 	}
 	return nil
 }
