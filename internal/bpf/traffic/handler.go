@@ -109,7 +109,7 @@ func (h *TrafficEventHandler) handlePodEgress(ctx context.Context) error {
 		if checkSkipped(srcAddrType, dstAddrType) {
 			return nil
 		}
-		if srcAddrType == modules.AddrTypePod {
+		if srcAddrType == modules.AddrTypePod && (dstAddrType == modules.AddrTypeWorld || dstAddrType == modules.AddrTypeHost || dstAddrType == modules.AddrTypeNode) {
 			if err := h.handleOutboundTrafficFromPod(ctx, item.Meta.Src, dstAddrType, &item); err != nil {
 				return err
 			}
