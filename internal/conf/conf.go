@@ -102,7 +102,7 @@ type CiliumNodeWatcherConfig struct {
 
 func NewCiliumNodeWatcherConfig() CiliumNodeWatcherConfig {
 	return CiliumNodeWatcherConfig{
-		Enabled:   false,
+		Enabled:   true,
 		MaxWorker: 5,
 	}
 }
