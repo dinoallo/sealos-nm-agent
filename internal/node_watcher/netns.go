@@ -72,12 +72,17 @@ func (w *NetnsWatcher) Start(ctx context.Context) error {
 }
 
 func (w *NetnsWatcher) initExistingNetNs() error {
-	files, err := os.ReadDir(defaultBindMountPath)
+	dir, err := os.Open(defaultBindMountPath)
 	if err != nil {
 		return err
 	}
+	defer dir.Close()
+
 	var wg sync.WaitGroup
-	fileChan := make(chan os.DirEntry, len(files))
+	fileChan := make(chan os.DirEntry, 100) // Buffer size of 100 entries
+	errChan := make(chan error, 1)
+
+	// Start worker pool
 	for i := 0; i < w.MaxWorkerCount; i++ {
 		wg.Add(1)
 		go func(workerID int) {
@@ -102,13 +107,38 @@ func (w *NetnsWatcher) initExistingNetNs() error {
 			}
 		}(i + 1)
 	}
-	for _, file := range files {
-		fileChan <- file
-	}
-	close(fileChan)
-	wg.Wait()
-	return nil
+	// Read directory in chunks
+	go func() {
+		defer close(fileChan)
+		const readBatchSize = 50 // Read 50 entries at a time
+		for {
+			entries, err := dir.ReadDir(readBatchSize)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			if len(entries) == 0 {
+				return
+			}
+			for _, entry := range entries {
+				fileChan <- entry
+			}
+		}
+	}()
 
+	// Wait for completion or error
+	doneChan := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(doneChan)
+	}()
+
+	select {
+	case err := <-errChan:
+		return err
+	case <-doneChan:
+		return nil
+	}
 }
 
 func (w *NetnsWatcher) watchInotifyEvent(ctx context.Context) error {
