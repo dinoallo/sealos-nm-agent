@@ -1,0 +1,10 @@
+FROM scratch
+
+COPY . .
+ENV NODE_CIDR ""
+ENV POD_CIDR ""
+ENV HOST_DEVS ""
+ENV MONGO_URI ""
+ENV MONGODB_VERSION ""
+ENV NO_PROMPT ""
+CMD ["bash entrypoint.sh"]

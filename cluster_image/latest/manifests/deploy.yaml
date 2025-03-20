@@ -1,0 +1,203 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: <name-placeholder>
+    app.kubernetes.io/name: serviceaccount
+    app.kubernetes.io/part-of: <name-placeholder>
+  name: <name-placeholder>-sa
+  namespace: <namespace-placeholder>
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: <name-placeholder>-role
+rules:
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices/status
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - services/status
+  verbs:
+  - get      
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pod/status
+  verbs:
+  - get      
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses/status
+  verbs:
+  - get
+- apiGroups:
+  - cilium.io
+  resources:
+  - ciliumnodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ciliumnodes
+  resources:
+  - ciliumnodes/status
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: <name-placeholder>
+    app.kubernetes.io/name: clusterrolebinding
+    app.kubernetes.io/part-of: <name-placeholder>    
+  name: <name-placeholder>-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: <name-placeholder>-role
+subjects:
+- kind: ServiceAccount
+  name: <name-placeholder>-sa
+  namespace: <namespace-placeholder>
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app.kubernetes.io/name: <name-placeholder>
+    app.kubernetes.io/part-of: sealos-nm
+    k8s-app: <name-placeholder>
+  name: <name-placeholder>
+  namespace: <namespace-placeholder>
+spec:
+  selector:
+    matchLabels:
+      k8s-app: <name-placeholder>
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: <name-placeholder>
+        app.kubernetes.io/part-of: sealos-nm
+        k8s-app: <name-placeholder>
+    spec:
+      serviceAccountName: <name-placeholder>-sa
+      tolerations:
+      # - key: node-role.kubernetes.io/control-plane
+      #   operator: Exists
+      #   effect: NoSchedule
+      # - key: node-role.kubernetes.io/master
+      #   operator: Exists
+      #   effect: NoSchedule
+      - operator: Exists
+        effect: NoSchedule
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                k8s-app: cilium
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - image: docker.io/dinoallo/sealos-nm-agent:latest
+        imagePullPolicy: IfNotPresent
+        name: <name-placeholder>
+        resources:
+          limits:
+            cpu: 1024m
+            memory: 2048Mi
+          requests:
+            cpu: 256m
+            memory: 512Mi
+        env:
+        - name: DB_URI
+          valueFrom:
+            secretKeyRef:
+              key: db_uri
+              name: <secret-placeholder>
+              optional: false
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              key: db_name
+              name: <secret-placeholder>
+              optional: false
+        - name: AGENT_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        envFrom:
+        - configMapRef:
+            name: <configmap-placeholder>
+        securityContext:
+          capabilities:
+            add:
+            - ALL
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: FallbackToLogsOnError
+        volumeMounts:
+        - mountPath: /sys/fs/bpf
+          mountPropagation: HostToContainer
+          name: bpf-maps
+        - mountPath: /run/netns
+          mountPropagation: HostToContainer
+          name: net-namespaces
+      dnsPolicy: ClusterFirstWithHostNet
+      hostNetwork: true
+      volumes:
+      - name: bpf-maps
+        hostPath:
+          path: /sys/fs/bpf
+          type: Directory
+      - name: net-namespaces
+        hostPath:
+          path: /run/netns
+          type: Directory
+  updateStrategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 50%
+    type: RollingUpdate
+

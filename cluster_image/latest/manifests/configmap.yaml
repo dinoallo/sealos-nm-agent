@@ -1,0 +1,14 @@
+apiVersion: v1
+data:
+  CLS_NODE_CIDR_LIST: "<node-cidr-placeholder>" # Fill in node cidr
+  CLS_POD_CIDR_LIST: "<pod-cidr-placeholder>" # Fill in pod cidr
+  HDW_HOST_DEVS: "<host-devices-placeholder>" # Fill in the device names usd in internal network of the nodes. Multiple devices can be specified as `ens1,ens2,ens3` etc.
+  PTS_BATCH_SIZE: "<traffic-data-batch-size-placeholder>"  # How much data should the agent write into the database at once?
+  DB_ENABLED: "true" # If this option is set to false, the agent will not write any data into database. Use this only for debugging
+  CNW_ENABLED: "true" # Toggle tracking cilium_host ips. This option should remain true if you don't know what you are doing
+  DEBUG_ENABLED: "false" # Toggle pprof, dumping, etc. Use this only for debugging; otherwise this should remain false
+  ENABLE_HOST_TRAFFIC: "false" # Deprecated. This option should always remain false
+kind: ConfigMap
+metadata:
+  name: <name-placeholder>
+  namespace: <namespace-placeholder>
