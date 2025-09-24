@@ -141,7 +141,7 @@ spec:
                 k8s-app: cilium
             topologyKey: kubernetes.io/hostname
       containers:
-      - image: docker.io/dinoallo/sealos-nm-agent:latest
+      - image: <main-image-placeholder>
         imagePullPolicy: IfNotPresent
         name: <name-placeholder>
         resources:

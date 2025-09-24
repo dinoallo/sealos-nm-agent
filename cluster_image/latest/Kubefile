@@ -7,4 +7,5 @@ ENV HOST_DEVS ""
 ENV MONGO_URI ""
 ENV MONGODB_VERSION ""
 ENV NO_PROMPT ""
+ENV MAIN_IMAGE ""
 CMD ["bash entrypoint.sh"]

@@ -15,6 +15,7 @@ databaseName="sealos-networkmanager"
 db_namespace="sealos"
 db_name="nm-traffic-db"
 db_secret_name="$db_name-conn-credential"
+main_image="${MAIN_IMAGE:-ghcr.io/dinoallo/sealos-nm-agent:latest}"
 
 manifest_dir="manifests"
 namespace_file="$manifest_dir/ns.yaml"
@@ -36,6 +37,7 @@ nodeCIDRPlaceholder="<node-cidr-placeholder>"
 podCIDRPlaceholder="<pod-cidr-placeholder>"
 hostDevsPlaceholder="<host-devices-placeholder>"
 trafficDataBatchSizePlaceholder="<traffic-data-batch-size-placeholder>"
+mainImagePlaceholder="<main-image-placeholder>"
 
 
 
@@ -167,6 +169,9 @@ function update_deploy {
   # update configmap
   echo "configmap: $configmap_name"
   sed -i "s|$configmapPlaceholder|$configmap_name|g" $deploy_file
+  # update main image
+  echo "main image: $main_image"
+  sed -i "s|$mainImagePlaceholder|$main_image|g" $deploy_file
 
 }
 
