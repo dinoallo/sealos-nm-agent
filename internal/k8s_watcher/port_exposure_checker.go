@@ -67,10 +67,6 @@ func (c *PortExposureChecker) Dump(w http.ResponseWriter, req *http.Request) {
 	printI := func(ingressHash string, i *I) bool {
 		fmt.Fprintf(w, "ingress: %v\n", ingressHash)
 		printRef := func(ibHash string, ib *IB) bool {
-			ib, loaded := c.ibs.Load(ibHash)
-			if !loaded {
-				return true
-			}
 			ib.mu.RLock()
 			fmt.Fprintf(w, "-> %v's port %v\n", ib.svcHash, ib.sbp)
 			ib.mu.RUnlock()
@@ -89,10 +85,6 @@ func (c *PortExposureChecker) Dump(w http.ResponseWriter, req *http.Request) {
 	printSVC := func(svcHash string, svc *SVC) bool {
 		fmt.Fprintf(w, "svc %v:\n", svcHash)
 		printRef := func(esHash string, es *ES) bool {
-			es, loaded := c.epSlices.Load(esHash)
-			if !loaded {
-				return true
-			}
 			es.mu.RLock()
 			fmt.Fprintf(w, "-> %v\n", esHash)
 			es.mu.RUnlock()
