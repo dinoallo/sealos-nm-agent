@@ -356,8 +356,11 @@ func (c *PortExposureChecker) removeIngressBackend(ibHash string) {
 		//TODO: handle me
 		log.Printf("failed to update exposure of an ingress backend %v while removing it: %v", ibHash, err)
 	}
-	// remove the reference to the backend
-	ib.backend.referencedBy.Delete(ibHash)
+	// remove the reference to itself on its backend SVC
+	if ib.backend.referencedBy != nil {
+		// remove the reference to the backend
+		ib.backend.referencedBy.Delete(ibHash)
+	}
 	// remove the IB from the indexedBySVC lookup table
 	ibSet, loaded := c.indexedBySVC.Load(ib.svcHash)
 	if !loaded {
