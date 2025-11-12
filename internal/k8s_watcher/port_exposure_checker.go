@@ -367,7 +367,6 @@ func (c *PortExposureChecker) removeIngressBackend(ibHash string) {
 		return
 	}
 	ibSet.Delete(ibHash)
-	return
 }
 
 func (c *PortExposureChecker) getOwnerService(epSlice discoveryv1.EndpointSlice) *corev1.Service {
