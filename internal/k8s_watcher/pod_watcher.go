@@ -6,9 +6,9 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/api/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/modules"
-	"github.com/puzpuzpuz/xsync"
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 	podlib "github.com/dinoallo/sealos-networkmanager-agent/pkg/pod"
+	"github.com/puzpuzpuz/xsync"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -111,10 +111,7 @@ func (w *PodWatcher) SetupWithManager(mgr ctrl.Manager) error {
 			UpdateFunc: func(ue event.UpdateEvent) bool {
 				oldPod := ue.ObjectOld.(*corev1.Pod)
 				newPod := ue.ObjectNew.(*corev1.Pod)
-				if oldPod.Status.PodIP != newPod.Status.PodIP {
-					return true
-				}
-				return false
+				return oldPod.Status.PodIP != newPod.Status.PodIP
 			},
 		}).
 		WithOptions(controller.Options{MaxConcurrentReconciles: w.MaxWorker}).
