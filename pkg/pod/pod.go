@@ -20,7 +20,7 @@ const (
 	CHECK_TERMINAL_LABEL_KEY = "TerminalID"
 	CHECK_APP_LABEL_KEY      = "app"
 	CHECK_JOB_LABEL_KEY      = "job-name"
-	DB_TYPE_LABEL_KEY        = "apps.kubernetes.io/instance"
+	DB_TYPE_LABEL_KEY        = "app.kubernetes.io/instance"
 	APP_TYPE_LABEL_KEY       = "app"
 	JOB_TYPE_LABEL_KEY       = "job-name"
 )
