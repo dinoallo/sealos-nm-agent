@@ -69,6 +69,7 @@ type TrafficStoreConfig struct { // envPrefix: TS_
 	CacheExpiredEntrySize int           `env:"CACHE_EXPIRED_ENTRY_SIZE"`
 	CacheEntrySize        int           `env:"CACHE_ENTRY_SIZE"`
 	UseTimeSeriesColl     bool          `env:"USE_TIME_SERIES_COLL"`
+	DBExpireAfter         time.Duration `env:"DB_EXPIRE_AFTER"`
 }
 
 func NewTrafficStoreConfig() TrafficStoreConfig {
@@ -84,6 +85,7 @@ func NewTrafficStoreConfig() TrafficStoreConfig {
 		CacheExpiredEntrySize: 1e4,
 		CacheEntrySize:        1e6,
 		UseTimeSeriesColl:     true,
+		DBExpireAfter:         time.Hour * 36,
 	}
 }
 

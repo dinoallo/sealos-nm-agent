@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"time"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/api/structs"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
@@ -147,7 +148,7 @@ func (s *TrafficStore) createCollIfNotExists(ctx context.Context, collName strin
 		timeSeriesOpts := db.TimeSeriesOpts{
 			TimeField:   structs.PodTrafficTimeField,
 			MetaField:   structs.PodTrafficMetaField,
-			ExpireAfter: 129600, // TODO: make this configurable
+			ExpireAfter: convertToSeconds(s.DBExpireAfter),
 		}
 		if err := s.CreateTimeSeriesColl(ctx, collName, timeSeriesOpts); err != nil {
 			if err == db.ErrCollectionAlreadyExists {
@@ -159,7 +160,7 @@ func (s *TrafficStore) createCollIfNotExists(ctx context.Context, collName strin
 		}
 	} else {
 		createCollOpts := db.CreateCollOpts{
-			ExpireAfter: 129600, // TODO: make this configurable
+			ExpireAfter: convertToSeconds(s.DBExpireAfter),
 		}
 		if err := s.CreateColl(ctx, collName, createCollOpts); err != nil {
 			if err == db.ErrCollectionAlreadyExists {
@@ -223,4 +224,8 @@ func (s *TrafficStore) flushHostTraffic(ctx context.Context, c *cache.Cache[*Hos
 		return err
 	}
 	return nil
+}
+
+func convertToSeconds(d time.Duration) int64 {
+	return int64(d.Seconds())
 }
