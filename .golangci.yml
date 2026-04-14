@@ -1,34 +1,41 @@
 version: "2"
 
-run:
-  timeout: 5m
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - .*\.pb\.go$
+      - .*_generate\.go$
 
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
 
-linters:
-  disable-all: true
-  enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - typecheck
-    - unused
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-
-exclusions:
-  generated: strict
-  rules:
-    - path: ".*_generate\\.go"
-      linters:
-        - staticcheck
-    - path: ".*\\.pb\\.go"
-      linters:
-        - staticcheck
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - .*\.pb\.go$
+      - .*_generate\.go$
