@@ -11,6 +11,10 @@ var (
 	ErrCollectionCheckFailed   = errors.New("unable to check if the collection exists")
 )
 
+type CreateCollOpts struct {
+	ExpireAfter int64
+}
+
 type TimeSeriesOpts struct {
 	TimeField   string
 	MetaField   string
@@ -18,6 +22,7 @@ type TimeSeriesOpts struct {
 }
 
 type DB interface {
+	CreateColl(ctx context.Context, collName string, opts CreateCollOpts) error
 	CreateTimeSeriesColl(ctx context.Context, collName string, opts TimeSeriesOpts) error
 	FindColl(ctx context.Context, collName string) (bool, error)
 	Insert(ctx context.Context, collName string, objs []any) error

@@ -16,6 +16,10 @@ func NewTestingDB() *TestingDB {
 	return &TestingDB{}
 }
 
+func (db *TestingDB) CreateColl(ctx context.Context, collName string, opts db.CreateCollOpts) error {
+	return nil
+}
+
 func (db *TestingDB) CreateTimeSeriesColl(ctx context.Context, collName string, opts db.TimeSeriesOpts) error {
 	return nil
 }

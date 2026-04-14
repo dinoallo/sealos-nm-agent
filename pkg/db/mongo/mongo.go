@@ -76,6 +76,27 @@ func (m *Mongo) FindColl(ctx context.Context, collName string) (bool, error) {
 	return exists, nil
 }
 
+func (m *Mongo) CreateColl(ctx context.Context, collName string, opts db.CreateCollOpts) error {
+	eas := opts.ExpireAfter
+	createOpts := options.CreateCollectionOptions{
+		ExpireAfterSeconds: &eas,
+	}
+	_ctx, cancel := context.WithTimeout(ctx, m.opts.ConnectionTimeout)
+	defer cancel()
+	err := m.db.CreateCollection(_ctx, collName, &createOpts)
+	if err == nil {
+		return nil
+	}
+	// check if the error is caused by existing collection
+	if exists, findErr := m.FindColl(_ctx, collName); findErr != nil {
+		return errors.Join(findErr, db.ErrCollectionCheckFailed)
+	} else if !exists {
+		return errors.Join(findErr, db.ErrCollectionCreateFailed)
+	} else {
+		return db.ErrCollectionAlreadyExists
+	}
+}
+
 func (m *Mongo) CreateTimeSeriesColl(ctx context.Context, collName string, opts db.TimeSeriesOpts) error {
 	eas := opts.ExpireAfter
 	_opts := options.CreateCollectionOptions{

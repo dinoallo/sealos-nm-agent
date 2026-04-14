@@ -51,11 +51,11 @@ func NewTrafficStore(params TrafficStoreParams) (*TrafficStore, error) {
 
 func (s *TrafficStore) Start(ctx context.Context) error {
 	// create the collection for pod traffic if it doesn't exist
-	if err := s.createCollIfNotExists(ctx, s.PodTrafficColl); err != nil {
+	if err := s.createCollIfNotExists(ctx, s.PodTrafficColl, s.UseTimeSeriesColl); err != nil {
 		return err
 	}
 	// create the collection for host traffic if it doesn't exist
-	if err := s.createCollIfNotExists(ctx, s.HostTrafficColl); err != nil {
+	if err := s.createCollIfNotExists(ctx, s.HostTrafficColl, s.UseTimeSeriesColl); err != nil {
 		return err
 	}
 	s.startFlushingForPodTraffic(ctx)
@@ -140,18 +140,34 @@ func (s *TrafficStore) startFlushingForHostTraffic(ctx context.Context) {
 	}()
 }
 
-func (s *TrafficStore) createCollIfNotExists(ctx context.Context, collName string) error {
-	timeSeriesOpts := db.TimeSeriesOpts{
-		TimeField:   structs.PodTrafficTimeField,
-		MetaField:   structs.PodTrafficMetaField,
-		ExpireAfter: 129600, // TODO: make this configurable
-	}
-	if err := s.CreateTimeSeriesColl(ctx, collName, timeSeriesOpts); err != nil {
-		if err == db.ErrCollectionAlreadyExists {
-			s.Infof("the collection %v already exists, so we are not going to do anything", collName)
-		} else {
-			s.Errorf("failed to create the collection %v: %v", collName, err)
-			return err
+func (s *TrafficStore) createCollIfNotExists(ctx context.Context, collName string, useTimeSeries bool) error {
+	// If the collection already exists, we don't need to do anything
+	// If useTimeSeries is true, we will create a time series collection, otherwise we will create a normal collection
+	if useTimeSeries {
+		timeSeriesOpts := db.TimeSeriesOpts{
+			TimeField:   structs.PodTrafficTimeField,
+			MetaField:   structs.PodTrafficMetaField,
+			ExpireAfter: 129600, // TODO: make this configurable
+		}
+		if err := s.CreateTimeSeriesColl(ctx, collName, timeSeriesOpts); err != nil {
+			if err == db.ErrCollectionAlreadyExists {
+				s.Infof("the collection %v already exists, so we are not going to do anything", collName)
+			} else {
+				s.Errorf("failed to create the collection %v: %v", collName, err)
+				return err
+			}
+		}
+	} else {
+		createCollOpts := db.CreateCollOpts{
+			ExpireAfter: 129600, // TODO: make this configurable
+		}
+		if err := s.CreateColl(ctx, collName, createCollOpts); err != nil {
+			if err == db.ErrCollectionAlreadyExists {
+				s.Infof("the collection %v already exists, so we are not going to do anything", collName)
+			} else {
+				s.Errorf("failed to create the collection %v: %v", collName, err)
+				return err
+			}
 		}
 	}
 	return nil
