@@ -81,24 +81,11 @@ func (e *NetNsEntry) installEgressFilterOnIf(ifName string, filterName string, f
 	return nil
 }
 
-func (e *NetNsEntry) removeEgressFilterOnIf(ifName string, filterName string) error {
-	ifHash := getIfHash(ifName)
-	ifEntry, loaded := e.IfEntries.Load(ifHash)
-	if !loaded {
-		return nil
-	}
-	filterEntry, loaded := ifEntry.EgressFilters.LoadAndDelete(filterName)
-	if !loaded {
-		return nil
-	}
-	return e.ensureEgressFilterNotExists(ifName, filterEntry.Prio)
-}
-
 func (e *NetNsEntry) cleanUpFiltersOnAllIfs() error {
 	var err error = nil
 	cleanUpEgressFiltersForEachIf := func(ifHash string, ifEntry *IfEntry) bool {
 		filters := ifEntry.EgressFilters
-		cleanUpFilter := func(filterName string, filterEntry *FilterEntry) bool {
+		cleanUpFilter := func(filterName string, _ *FilterEntry) bool {
 			filterEntry, loaded := filters.LoadAndDelete(filterName)
 			if !loaded || filterEntry.FD == -1 {
 				return true

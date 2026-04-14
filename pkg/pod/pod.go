@@ -26,23 +26,20 @@ const (
 )
 
 func GetPodTypeAndTypeName(ctx context.Context, labels map[string]string) (POD_TYPE, string) {
-	var podType POD_TYPE = POD_TYPE_UNKNOWN
 	var podTypeName string
 	if dbID, isDB := labels[CHECK_DB_LABEL_KEY]; isDB && dbID != "" {
-		podType = POD_TYPE_DB
 		if name, exists := labels[DB_TYPE_LABEL_KEY]; exists {
 			podTypeName = name
 		}
+		return POD_TYPE_DB, podTypeName
 	} else if tid, isTerm := labels[CHECK_TERMINAL_LABEL_KEY]; isTerm && tid != "" {
-		podType = POD_TYPE_TERMINAL
+		return POD_TYPE_TERMINAL, podTypeName
 	} else if aid, isApp := labels[CHECK_APP_LABEL_KEY]; isApp && aid != "" {
-		podType = POD_TYPE_APP
 		podTypeName = aid
+		return POD_TYPE_APP, podTypeName
 	} else if jid, isJob := labels[CHECK_JOB_LABEL_KEY]; isJob && jid != "" {
-		podType = POD_TYPE_JOB
 		podTypeName = strings.SplitN(jid, "-", 2)[0]
-	} else {
-		podType = POD_TYPE_OTHER
+		return POD_TYPE_JOB, podTypeName
 	}
-	return podType, podTypeName
+	return POD_TYPE_OTHER, podTypeName
 }

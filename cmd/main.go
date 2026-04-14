@@ -226,7 +226,9 @@ func startTrafficFactory(ctx context.Context) (error, func()) {
 	if err != nil {
 		return errors.Join(err, ErrStartingTrafficFactory), nil
 	}
-	tf.Start(ctx)
+	if err := tf.Start(ctx); err != nil {
+		return errors.Join(err, ErrStartingTrafficFactory), nil
+	}
 	closeTF := func() {
 		tf.Close()
 	}

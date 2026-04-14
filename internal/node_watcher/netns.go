@@ -18,11 +18,6 @@ import (
 const (
 	defaultBindMountPath = "/run/netns"
 	defaultFilterPrio    = 1
-
-	ingressFilterNameForHostDev = "sealos_nm_host_ingress_hook"
-	egressFilterNameForHostDev  = "sealos_nm_host_egress_hook"
-	ingressFilterNameForPodDev  = "sealos_nm_pod_ingress_hook"
-	egressFilterNameForPodDev   = "sealos_nm_pod_egress_hook"
 )
 
 var (
@@ -112,7 +107,9 @@ func (w *NetnsWatcher) initExistingNetNs() error {
 }
 
 func (w *NetnsWatcher) watchInotifyEvent(ctx context.Context) error {
-	w.watcher.Add(defaultBindMountPath)
+	if err := w.watcher.Add(defaultBindMountPath); err != nil {
+		return err
+	}
 	wg := errgroup.Group{}
 	wg.SetLimit(w.MaxWorkerCount)
 	go func() {
@@ -165,7 +162,9 @@ func (w *NetnsWatcher) handleInotifyEvent(ctx context.Context) {
 }
 
 func (w *NetnsWatcher) Close() {
-	w.watcher.Close()
+	if err := w.watcher.Close(); err != nil {
+		w.Errorf("failed to close watcher: %v", err)
+	}
 }
 
 func (w *NetnsWatcher) isRelevantNetns(netNsName string) bool {

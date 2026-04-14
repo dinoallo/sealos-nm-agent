@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
@@ -110,13 +111,12 @@ func (f *TrafficFactory) Start(ctx context.Context) error {
 }
 
 func (f *TrafficFactory) Close() {
-	f.TrafficHooker.Close()
-	f.trafficObjs.Close()
-}
-
-func getPodIfaceHash(ifaceName string) string {
-	//TODO: imple me
-	return ifaceName
+	if err := f.TrafficHooker.Close(); err != nil {
+		f.Errorf("failed to close traffic hooker: %v", err)
+	}
+	if err := f.trafficObjs.Close(); err != nil {
+		f.Errorf("failed to close traffic objects: %v", err)
+	}
 }
 
 func getNetnsHash(netnsName string) string {
@@ -125,6 +125,8 @@ func getNetnsHash(netnsName string) string {
 
 func generateRandomHashForHostNet() string {
 	b := make([]byte, 16)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("failed to generate random host net hash: %v", err))
+	}
 	return base64.URLEncoding.EncodeToString(b) + time.Now().Format("20060102150405")
 }

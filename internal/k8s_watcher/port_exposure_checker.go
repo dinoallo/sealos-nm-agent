@@ -63,40 +63,51 @@ func (c *PortExposureChecker) UpdateEpSlice(newEpSlice discoveryv1.EndpointSlice
 }
 
 func (c *PortExposureChecker) Dump(w http.ResponseWriter, req *http.Request) {
-	fmt.Fprintf(w, "print ingresses and their backends:\n")
+	writef := func(format string, args ...any) bool {
+		if _, err := fmt.Fprintf(w, format, args...); err != nil {
+			return false
+		}
+		return true
+	}
+
+	if !writef("print ingresses and their backends:\n") {
+		return
+	}
 	printI := func(ingressHash string, i *I) bool {
-		fmt.Fprintf(w, "ingress: %v\n", ingressHash)
+		if !writef("ingress: %v\n", ingressHash) {
+			return false
+		}
 		printRef := func(ibHash string, ib *IB) bool {
 			ib.mu.RLock()
-			fmt.Fprintf(w, "-> %v's port %v\n", ib.svcHash, ib.sbp)
-			ib.mu.RUnlock()
-			return true
+			defer ib.mu.RUnlock()
+			return writef("-> %v's port %v\n", ib.svcHash, ib.sbp)
 		}
 		i.backends.Range(printRef)
 		return true
 	}
 	c.ingresses.Range(printI)
-	fmt.Fprintf(w, "print backends:\n")
+	if !writef("print backends:\n") {
+		return
+	}
 	printIB := func(ibHash string, ib *IB) bool {
-		fmt.Fprintf(w, "ib: %v\n", ibHash)
-		return true
+		return writef("ib: %v\n", ibHash)
 	}
 	c.ibs.Range(printIB)
 	printSVC := func(svcHash string, svc *SVC) bool {
-		fmt.Fprintf(w, "svc %v:\n", svcHash)
+		if !writef("svc %v:\n", svcHash) {
+			return false
+		}
 		printRef := func(esHash string, es *ES) bool {
 			es.mu.RLock()
-			fmt.Fprintf(w, "-> %v\n", esHash)
-			es.mu.RUnlock()
-			return true
+			defer es.mu.RUnlock()
+			return writef("-> %v\n", esHash)
 		}
 		svc.epSlices.Range(printRef)
 		return true
 	}
 	c.services.Range(printSVC)
 	printES := func(epSliceHash string, es *ES) bool {
-		fmt.Fprintf(w, "epslice: %v\n", epSliceHash)
-		return true
+		return writef("epslice: %v\n", epSliceHash)
 	}
 	c.epSlices.Range(printES)
 }

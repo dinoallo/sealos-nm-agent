@@ -185,7 +185,7 @@ func (s *TrafficStore) flushPodTraffic(ctx context.Context, c *cache.Cache[*PodT
 			return err
 		}
 	}
-	if len(batch) < 0 {
+	if len(batch) == 0 {
 		return nil
 	}
 	_ctx, cancel := context.WithTimeout(ctx, s.FlushTimeout)
@@ -210,7 +210,7 @@ func (s *TrafficStore) flushHostTraffic(ctx context.Context, c *cache.Cache[*Hos
 			return err
 		}
 	}
-	if len(batch) < 0 {
+	if len(batch) == 0 {
 		return nil
 	}
 	_ctx, cancel := context.WithTimeout(ctx, s.FlushTimeout)

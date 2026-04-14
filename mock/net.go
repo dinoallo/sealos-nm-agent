@@ -4,11 +4,6 @@ import (
 	"math/rand"
 	"net"
 	"sync"
-	"time"
-)
-
-const (
-	suffixCharset = "abcdefghijklmnopqrstuvwxyz" + "0123456789"
 )
 
 var (
@@ -25,8 +20,6 @@ var (
 		"cilium_host",
 		"lo",
 	}
-
-	seededRand *rand.Rand = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
 
 type TestingNetLib struct {
@@ -97,17 +90,4 @@ func (m *TestingNetLib) Update() error {
 	defer m.interfaceMu.Unlock()
 	m.interfaces = interfaces
 	return nil
-}
-
-func generateRandomIface(prefix string) string {
-	suffix := generateRandomSuffix(8)
-	return prefix + suffix
-}
-
-func generateRandomSuffix(length int) string {
-	b := make([]byte, length)
-	for i := range b {
-		b[i] = suffixCharset[seededRand.Intn(len(suffixCharset))]
-	}
-	return string(b)
 }

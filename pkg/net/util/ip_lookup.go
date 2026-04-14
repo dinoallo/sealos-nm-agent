@@ -14,8 +14,13 @@ func GetOutboundV4AddrsInCIDR(externalDNSService string, include4In6 bool) ([]ne
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	defer func() {
+		_ = conn.Close()
+	}()
+	localAddr, ok := conn.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		return nil, fmt.Errorf("failed to convert local address to *net.UDPAddr")
+	}
 	addr, ok := netip.AddrFromSlice(localAddr.IP)
 	if !ok {
 		return nil, fmt.Errorf("failed to convert the ip of the local address of type net.IP to type netip.Addr")
@@ -47,8 +52,13 @@ func GetOutboundV6AddrsInCIDR(externalDNSService string) ([]netip.Prefix, error)
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
+	defer func() {
+		_ = conn.Close()
+	}()
+	localAddr, ok := conn.LocalAddr().(*net.UDPAddr)
+	if !ok {
+		return nil, fmt.Errorf("failed to convert local address to *net.UDPAddr")
+	}
 	addr, ok := netip.AddrFromSlice(localAddr.IP)
 	if !ok {
 		return nil, fmt.Errorf("failed to convert the ip of the local address of type net.IP to type netip.Addr")

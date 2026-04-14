@@ -109,8 +109,14 @@ func (w *PodWatcher) SetupWithManager(mgr ctrl.Manager) error {
 		For(&corev1.Pod{}).
 		WithEventFilter(predicate.Funcs{
 			UpdateFunc: func(ue event.UpdateEvent) bool {
-				oldPod := ue.ObjectOld.(*corev1.Pod)
-				newPod := ue.ObjectNew.(*corev1.Pod)
+				oldPod, oldOK := ue.ObjectOld.(*corev1.Pod)
+				if !oldOK || oldPod == nil {
+					return false
+				}
+				newPod, newOK := ue.ObjectNew.(*corev1.Pod)
+				if !newOK || newPod == nil {
+					return false
+				}
 				return oldPod.Status.PodIP != newPod.Status.PodIP
 			},
 		}).

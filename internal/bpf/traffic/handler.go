@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/cilium/ebpf/ringbuf"
 	structsapi "github.com/dinoallo/sealos-networkmanager-agent/api/structs"
@@ -15,10 +14,6 @@ import (
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/log"
 	taglib "github.com/dinoallo/sealos-networkmanager-agent/pkg/tag"
 	"golang.org/x/sync/errgroup"
-)
-
-const (
-	defaultSubmitTimeout = time.Second * 1
 )
 
 type TrafficEventHandlerConfig struct {

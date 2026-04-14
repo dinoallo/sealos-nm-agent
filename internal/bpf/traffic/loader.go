@@ -21,13 +21,6 @@ const (
 	egressFilterNameForHostDev  = "sealos_nm_host_egress_hook"
 	ingressFilterNameForPodDev  = "sealos_nm_pod_ingress_hook"
 	egressFilterNameForPodDev   = "sealos_nm_pod_egress_hook"
-
-	fromContainerProgFile          = "sealos_nm_from_container_prog"
-	toNetDevProgFile               = "sealos_nm_to_netdev_prog"
-	fromContainerTrafficEventsFile = "sealos_nm_from_container_traffic_events_map"
-	fromContainerTrafficNotisFile  = "sealos_nm_from_container_traffic_notis_map"
-	toNetDevTrafficEventsFile      = "sealos_nm_to_netdev_traffic_events_map"
-	toNetDevTrafficNotisFile       = "sealos_nm_to_netdev_traffic_notis_map"
 )
 
 var (

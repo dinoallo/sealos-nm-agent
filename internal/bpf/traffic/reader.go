@@ -86,7 +86,9 @@ func (r *TrafficEventReader) startReading(ctx context.Context, readerName, recor
 		for {
 			select {
 			case <-ctx.Done():
-				reader.Close()
+				if err := reader.Close(); err != nil {
+					r.Error("failed to close reader %v: %v", readerName, err)
+				}
 				return
 			default:
 				wg.Go(func() error {
