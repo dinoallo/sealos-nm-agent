@@ -15,7 +15,9 @@ func GetOutboundV4AddrsInCIDR(externalDNSService string, include4In6 bool) ([]ne
 		return nil, err
 	}
 	defer func() {
-		_ = conn.Close()
+		if closeErr := conn.Close(); closeErr != nil {
+			fmt.Printf("failed to close UDP connection: %v\n", closeErr)
+		}
 	}()
 	localAddr, ok := conn.LocalAddr().(*net.UDPAddr)
 	if !ok {
@@ -53,7 +55,9 @@ func GetOutboundV6AddrsInCIDR(externalDNSService string) ([]netip.Prefix, error)
 		return nil, err
 	}
 	defer func() {
-		_ = conn.Close()
+		if closeErr := conn.Close(); closeErr != nil {
+			fmt.Printf("failed to close UDP connection: %v\n", closeErr)
+		}
 	}()
 	localAddr, ok := conn.LocalAddr().(*net.UDPAddr)
 	if !ok {

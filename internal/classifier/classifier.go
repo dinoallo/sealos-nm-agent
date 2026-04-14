@@ -349,17 +349,27 @@ func (c *RawTrafficClassifier) IsPortNodePort(podAddr string, podPort uint32) (b
 }
 
 func (c *RawTrafficClassifier) DumpExposedPorts(w http.ResponseWriter, req *http.Request) {
-	_, _ = fmt.Fprintf(w, "dumping exposed ports:\n")
+	writef := func(format string, args ...any) bool {
+		if _, err := fmt.Fprintf(w, format, args...); err != nil {
+			return false
+		}
+		return true
+	}
+
+	if !writef("dumping exposed ports:\n") {
+		return
+	}
 	dumpExposedPorts := func(podAddr string, spt *specialPortTable) bool {
-		_, _ = fmt.Fprintf(w, "dump %v's exposed port:\n", podAddr)
+		if !writef("dump %v's exposed port:\n", podAddr) {
+			return false
+		}
 		dump := func(port uint32, v bool) bool {
-			_, _ = fmt.Fprintf(w, "%v is exposed\n", port)
-			return true
+			return writef("%v is exposed\n", port)
 		}
 		if spt != nil {
 			spt.exposedPorts.Range(dump)
-		} else {
-			_, _ = fmt.Fprintf(w, "why is there a nil exposedPortTable???\n")
+		} else if !writef("why is there a nil exposedPortTable???\n") {
+			return false
 		}
 		return true
 	}

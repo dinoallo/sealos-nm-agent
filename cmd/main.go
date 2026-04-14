@@ -307,9 +307,7 @@ func startHostDevWatcher(ctx context.Context) (error, func()) {
 	if err := w.Start(ctx); err != nil {
 		return errors.Join(err, ErrStartingHostDevWatcher), nil
 	}
-	closeHostDevWatcher := func() {
-		w.Close()
-	}
+	closeHostDevWatcher := func() {}
 	return nil, closeHostDevWatcher
 }
 
