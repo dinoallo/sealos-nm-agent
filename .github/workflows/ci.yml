@@ -42,6 +42,7 @@ jobs:
 
       - name: Verify generated code is up to date
         run: |
+          touch make.env
           make generate
           git diff --exit-code
 
