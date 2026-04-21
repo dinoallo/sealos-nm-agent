@@ -14,76 +14,76 @@ kind: ClusterRole
 metadata:
   name: sealos-nm-agent-role
 rules:
-- apiGroups:
-  - discovery.k8s.io
-  resources:
-  - endpointslices
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - discovery.k8s.io
-  resources:
-  - endpointslices/status
-  verbs:
-  - get
-- apiGroups:
-  - ""
-  resources:
-  - services
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - services/status
-  verbs:
-  - get      
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - pod/status
-  verbs:
-  - get      
-- apiGroups:
-  - networking.k8s.io
-  resources:
-  - ingresses
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - networking.k8s.io
-  resources:
-  - ingresses/status
-  verbs:
-  - get
-- apiGroups:
-  - cilium.io
-  resources:
-  - ciliumnodes
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
-  - ciliumnodes
-  resources:
-  - ciliumnodes/status
-  verbs:
-  - get
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - discovery.k8s.io
+    resources:
+      - endpointslices/status
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - services/status
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pod/status
+    verbs:
+      - get
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses/status
+    verbs:
+      - get
+  - apiGroups:
+      - cilium.io
+    resources:
+      - ciliumnodes
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ciliumnodes
+    resources:
+      - ciliumnodes/status
+    verbs:
+      - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -92,16 +92,16 @@ metadata:
     app.kubernetes.io/component: rbac
     app.kubernetes.io/created-by: sealos-nm-agent
     app.kubernetes.io/name: clusterrolebinding
-    app.kubernetes.io/part-of: sealos-nm-agent    
+    app.kubernetes.io/part-of: sealos-nm-agent
   name: sealos-nm-agent-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: sealos-nm-agent-role
 subjects:
-- kind: ServiceAccount
-  name: sealos-nm-agent-sa
-  namespace: sealos-nm-system
+  - kind: ServiceAccount
+    name: sealos-nm-agent-sa
+    namespace: sealos-nm-system
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -125,77 +125,79 @@ spec:
     spec:
       serviceAccountName: sealos-nm-agent-sa
       tolerations:
-      - key: node-role.kubernetes.io/control-plane
-        operator: Exists
-        effect: NoSchedule
-      - key: node-role.kubernetes.io/master
-        operator: Exists
-        effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchLabels:
-                k8s-app: cilium
-            topologyKey: kubernetes.io/hostname
+            - labelSelector:
+                matchLabels:
+                  k8s-app: cilium
+              topologyKey: kubernetes.io/hostname
       containers:
-      - image: docker.io/dinoallo/sealos-nm-agent:dev
-        imagePullPolicy: IfNotPresent
-        name: sealos-nm-agent
-        resources:
-          limits:
-            cpu: 2000m
-            memory: 512Mi
-          requests:
-            cpu: 250m
-            memory: 64Mi
-        env:
-        - name: DB_URI
-          valueFrom:
-            secretKeyRef:
-              key: db_uri
-              name: nm-db-conn-credential
-              optional: false
-        - name: DB_NAME
-          valueFrom:
-            secretKeyRef:
-              key: db_name
-              name: nm-db-conn-credential
-              optional: false
-        - name: AGENT_HOST
-          valueFrom:
-            fieldRef:
-              fieldPath: status.podIP
-        envFrom:
-        - configMapRef:
-            name: agent-env
-        securityContext:
-          capabilities:
-            add:
-            - ALL
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: FallbackToLogsOnError
-        volumeMounts:
-        - mountPath: /sys/fs/bpf
-          mountPropagation: HostToContainer
-          name: bpf-maps
-        - mountPath: /run/netns
-          mountPropagation: HostToContainer
-          name: net-namespaces
+        - image: docker.io/dinoallo/sealos-nm-agent:dev
+          imagePullPolicy: IfNotPresent
+          name: sealos-nm-agent
+          resources:
+            limits:
+              cpu: 2000m
+              memory: 512Mi
+            requests:
+              cpu: 250m
+              memory: 64Mi
+          env:
+            - name: DB_URI
+              valueFrom:
+                secretKeyRef:
+                  key: db_uri
+                  name: nm-db-conn-credential
+                  optional: false
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  key: db_name
+                  name: nm-db-conn-credential
+                  optional: false
+            - name: AGENT_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          envFrom:
+            - configMapRef:
+                name: agent-env
+          # Traffic store collection mode:
+          # - default: auto-detect MongoDB time series support and use time series collections when supported
+          # - set TS_FORCE_GENERAL_COLL=true in agent-env to always use general collections
+          securityContext:
+            capabilities:
+              add:
+                - ALL
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: FallbackToLogsOnError
+          volumeMounts:
+            - mountPath: /sys/fs/bpf
+              mountPropagation: HostToContainer
+              name: bpf-maps
+            - mountPath: /run/netns
+              mountPropagation: HostToContainer
+              name: net-namespaces
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       volumes:
-      - name: bpf-maps
-        hostPath:
-          path: /sys/fs/bpf
-          type: Directory
-      - name: net-namespaces
-        hostPath:
-          path: /run/netns
-          type: Directory
+        - name: bpf-maps
+          hostPath:
+            path: /sys/fs/bpf
+            type: Directory
+        - name: net-namespaces
+          hostPath:
+            path: /run/netns
+            type: Directory
   updateStrategy:
     rollingUpdate:
       maxSurge: 0
       maxUnavailable: 50%
     type: RollingUpdate
-

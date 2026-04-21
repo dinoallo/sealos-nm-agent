@@ -11,10 +11,13 @@ import (
 
 // a very simple, unindexed database
 type TestingDB struct {
+	SupportsTimeSeriesColl bool
 }
 
 func NewTestingDB() *TestingDB {
-	return &TestingDB{}
+	return &TestingDB{
+		SupportsTimeSeriesColl: true,
+	}
 }
 
 func (db *TestingDB) CreateColl(ctx context.Context, collName string, opts db.CreateCollOpts) error {
@@ -23,6 +26,10 @@ func (db *TestingDB) CreateColl(ctx context.Context, collName string, opts db.Cr
 
 func (db *TestingDB) CreateTimeSeriesColl(ctx context.Context, collName string, opts db.TimeSeriesOpts) error {
 	return nil
+}
+
+func (db *TestingDB) SupportsTimeSeries(ctx context.Context) (bool, error) {
+	return db.SupportsTimeSeriesColl, nil
 }
 
 func (db *TestingDB) FindColl(ctx context.Context, collName string) (bool, error) {

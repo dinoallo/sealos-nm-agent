@@ -3,6 +3,8 @@ package mongo
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/db"
@@ -145,6 +147,36 @@ func (m *Mongo) DeleteExpiredBefore(ctx context.Context, collName string, timeFi
 		return 0, err
 	}
 	return res.DeletedCount, nil
+}
+
+func (m *Mongo) SupportsTimeSeries(ctx context.Context) (bool, error) {
+	_ctx, cancel := context.WithTimeout(ctx, m.opts.ConnectionTimeout)
+	defer cancel()
+
+	var result struct {
+		Version string `bson:"version"`
+	}
+	if err := m.db.RunCommand(_ctx, bson.D{{Key: "buildInfo", Value: 1}}).Decode(&result); err != nil {
+		return false, err
+	}
+
+	version := strings.TrimSpace(result.Version)
+	if version == "" {
+		return false, nil
+	}
+
+	var major, minor int
+	if _, err := fmt.Sscanf(version, "%d.%d", &major, &minor); err != nil {
+		return false, nil
+	}
+
+	if major > 5 {
+		return true, nil
+	}
+	if major == 5 && minor >= 0 {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (m *Mongo) getCurColl(collName string) *mongo.Collection {

@@ -21,8 +21,10 @@ type TrafficStoreParams struct {
 
 type TrafficStore struct {
 	log.Logger
-	podTrafficCache  *cache.Cache[*PodTrafficAccount, structs.PodTraffic]
-	hostTrafficCache *cache.Cache[*HostTrafficAccount, structs.HostTraffic]
+	podTrafficCache        *cache.Cache[*PodTrafficAccount, structs.PodTraffic]
+	hostTrafficCache       *cache.Cache[*HostTrafficAccount, structs.HostTraffic]
+	useTimeSeriesColl      bool
+	timeSeriesDecisionMade bool
 	TrafficStoreParams
 }
 
@@ -44,20 +46,23 @@ func NewTrafficStore(params TrafficStoreParams) (*TrafficStore, error) {
 		return nil, err
 	}
 	return &TrafficStore{
-		Logger:             logger,
-		podTrafficCache:    podTrafficCache,
-		hostTrafficCache:   hostTrafficCache,
-		TrafficStoreParams: params,
+		Logger:                 logger,
+		podTrafficCache:        podTrafficCache,
+		hostTrafficCache:       hostTrafficCache,
+		useTimeSeriesColl:      false,
+		timeSeriesDecisionMade: false,
+		TrafficStoreParams:     params,
 	}, nil
 }
 
 func (s *TrafficStore) Start(ctx context.Context) error {
+	useTimeSeries := s.shouldUseTimeSeriesColl(ctx)
 	// create the collection for pod traffic if it doesn't exist
-	if err := s.createCollIfNotExists(ctx, s.PodTrafficColl, s.UseTimeSeriesColl); err != nil {
+	if err := s.createCollIfNotExists(ctx, s.PodTrafficColl, useTimeSeries); err != nil {
 		return err
 	}
 	// create the collection for host traffic if it doesn't exist
-	if err := s.createCollIfNotExists(ctx, s.HostTrafficColl, s.UseTimeSeriesColl); err != nil {
+	if err := s.createCollIfNotExists(ctx, s.HostTrafficColl, useTimeSeries); err != nil {
 		return err
 	}
 	s.startFlushingForPodTraffic(ctx)
@@ -175,6 +180,35 @@ func (s *TrafficStore) createCollIfNotExists(ctx context.Context, collName strin
 	return nil
 }
 
+func (s *TrafficStore) shouldUseTimeSeriesColl(ctx context.Context) bool {
+	if s.timeSeriesDecisionMade {
+		return s.useTimeSeriesColl
+	}
+	if s.ForceGeneralColl {
+		s.Infof("force using general collections because ForceGeneralColl is enabled")
+		s.useTimeSeriesColl = false
+		s.timeSeriesDecisionMade = true
+		return s.useTimeSeriesColl
+	}
+	supported, err := s.DB.SupportsTimeSeries(ctx)
+	if err != nil {
+		s.Errorf("failed to detect whether the database supports time series collections, fallback to general collections: %v", err)
+		s.useTimeSeriesColl = false
+		s.timeSeriesDecisionMade = true
+		return s.useTimeSeriesColl
+	}
+	if supported {
+		s.Infof("detected database support for time series collections, using time series collections")
+		s.useTimeSeriesColl = true
+		s.timeSeriesDecisionMade = true
+		return s.useTimeSeriesColl
+	}
+	s.Infof("database does not support time series collections, fallback to general collections")
+	s.useTimeSeriesColl = false
+	s.timeSeriesDecisionMade = true
+	return s.useTimeSeriesColl
+}
+
 //TODO: merge the following flushing functions
 
 func (s *TrafficStore) flushPodTraffic(ctx context.Context, c *cache.Cache[*PodTrafficAccount, structs.PodTraffic], coll string) error {
@@ -228,7 +262,7 @@ func (s *TrafficStore) flushHostTraffic(ctx context.Context, c *cache.Cache[*Hos
 }
 
 func (s *TrafficStore) CleanupExpiredTraffic(ctx context.Context) error {
-	if s.UseTimeSeriesColl || s.DBExpireAfter <= 0 {
+	if s.shouldUseTimeSeriesColl(ctx) || s.DBExpireAfter <= 0 {
 		return nil
 	}
 

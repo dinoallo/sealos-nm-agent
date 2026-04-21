@@ -31,10 +31,6 @@ func NewTrafficCleanup(params TrafficCleanupParams) (*TrafficCleanup, error) {
 }
 
 func (c *TrafficCleanup) Run(ctx context.Context) error {
-	if c.UseTimeSeriesColl {
-		c.Infof("skip traffic cleanup because time series collections handle expiration automatically")
-		return nil
-	}
 	if c.DBExpireAfter <= 0 {
 		c.Infof("skip traffic cleanup because DBExpireAfter is not positive")
 		return nil

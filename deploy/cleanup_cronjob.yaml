@@ -52,3 +52,6 @@ spec:
               envFrom:
                 - configMapRef:
                     name: agent-env
+              # To force cleanup against general collections even when MongoDB supports
+              # time series collections, set TS_FORCE_GENERAL_COLL=true in agent-env.
+              # The deprecated TS_USE_TIME_SERIES_COLL parameter is no longer used.

@@ -25,6 +25,7 @@ type TimeSeriesOpts struct {
 type DB interface {
 	CreateColl(ctx context.Context, collName string, opts CreateCollOpts) error
 	CreateTimeSeriesColl(ctx context.Context, collName string, opts TimeSeriesOpts) error
+	SupportsTimeSeries(ctx context.Context) (bool, error)
 	FindColl(ctx context.Context, collName string) (bool, error)
 	Insert(ctx context.Context, collName string, objs []any) error
 	DeleteExpiredBefore(ctx context.Context, collName string, timeField string, expireBefore time.Time) (int64, error)
