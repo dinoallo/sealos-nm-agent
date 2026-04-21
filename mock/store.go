@@ -27,3 +27,7 @@ func (s *DummyTrafficStore) UpdateHostTraffic(ctx context.Context, hash string, 
 	log.Printf("meta: %+v; metric: %+v", meta, metric)
 	return nil
 }
+
+func (s *DummyTrafficStore) CleanupExpiredTraffic(ctx context.Context) error {
+	return nil
+}

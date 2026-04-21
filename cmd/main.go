@@ -12,6 +12,7 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/bpf/traffic"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/classifier"
+
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/conf"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/debug"
 	"github.com/dinoallo/sealos-networkmanager-agent/internal/k8s_watcher"
@@ -45,12 +46,13 @@ var (
 	mainMgr      ctrl.Manager
 	globalConfig *conf.GlobalConfig
 
-	ErrInitingGlobalConfig       = errors.New("failed to init the global config")
-	ErrStartingDB                = errors.New("failed to start the database")
-	ErrStartingTrafficFactory    = errors.New("failed to start the traffic factory")
-	ErrStartingCCMWatcher        = errors.New("failed to start the cilium ccm watcher")
-	ErrStartingClassifier        = errors.New("failed to start the classifier")
-	ErrStartingTrafficStore      = errors.New("failed to start the traffic store")
+	ErrInitingGlobalConfig    = errors.New("failed to init the global config")
+	ErrStartingDB             = errors.New("failed to start the database")
+	ErrStartingTrafficFactory = errors.New("failed to start the traffic factory")
+	ErrStartingCCMWatcher     = errors.New("failed to start the cilium ccm watcher")
+	ErrStartingClassifier     = errors.New("failed to start the classifier")
+	ErrStartingTrafficStore   = errors.New("failed to start the traffic store")
+
 	ErrStartingCtrlManager       = errors.New("failed to start the ctrl manager")
 	ErrCreatingCtrlManager       = errors.New("failed to create the ctrl manager")
 	ErrStartingHostDevWatcher    = errors.New("failed to start the host device watcher")
@@ -105,6 +107,7 @@ func main() {
 		printErr(err)
 		return
 	}
+
 	// start the traffic factory
 	if err := rlimit.RemoveMemlock(); err != nil {
 		printErr(err)

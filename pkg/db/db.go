@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 var (
@@ -26,4 +27,5 @@ type DB interface {
 	CreateTimeSeriesColl(ctx context.Context, collName string, opts TimeSeriesOpts) error
 	FindColl(ctx context.Context, collName string) (bool, error)
 	Insert(ctx context.Context, collName string, objs []any) error
+	DeleteExpiredBefore(ctx context.Context, collName string, timeField string, expireBefore time.Time) (int64, error)
 }

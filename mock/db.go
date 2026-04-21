@@ -4,6 +4,7 @@ package mock
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/pkg/db"
 )
@@ -34,4 +35,9 @@ func (db *TestingDB) Insert(ctx context.Context, collName string, objs []any) er
 		log.Printf("%+v", obj)
 	}
 	return nil
+}
+
+func (db *TestingDB) DeleteExpiredBefore(ctx context.Context, collName string, timeField string, expireBefore time.Time) (int64, error) {
+	log.Printf("delete expired docs from coll=%s where %s < %s", collName, timeField, expireBefore.Format(time.RFC3339))
+	return 0, nil
 }

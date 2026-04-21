@@ -131,6 +131,22 @@ func (m *Mongo) Insert(ctx context.Context, collName string, objs []any) error {
 	return nil
 }
 
+func (m *Mongo) DeleteExpiredBefore(ctx context.Context, collName string, timeField string, expireBefore time.Time) (int64, error) {
+	coll := m.getCurColl(collName)
+	_ctx, cancel := context.WithTimeout(ctx, m.opts.ConnectionTimeout)
+	defer cancel()
+	filter := bson.M{
+		timeField: bson.M{
+			"$lt": expireBefore,
+		},
+	}
+	res, err := coll.DeleteMany(_ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+	return res.DeletedCount, nil
+}
+
 func (m *Mongo) getCurColl(collName string) *mongo.Collection {
 	return m.db.Collection(collName)
 }

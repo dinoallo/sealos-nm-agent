@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/api/structs"
@@ -224,6 +225,37 @@ func (s *TrafficStore) flushHostTraffic(ctx context.Context, c *cache.Cache[*Hos
 		return err
 	}
 	return nil
+}
+
+func (s *TrafficStore) CleanupExpiredTraffic(ctx context.Context) error {
+	if s.UseTimeSeriesColl || s.DBExpireAfter <= 0 {
+		return nil
+	}
+
+	expireBefore := time.Now().Add(-s.DBExpireAfter)
+	var errs []error
+
+	if s.PodTrafficColl != "" {
+		deleted, err := s.DB.DeleteExpiredBefore(ctx, s.PodTrafficColl, structs.PodTrafficTimeField, expireBefore)
+		if err != nil {
+			s.Errorf("failed to cleanup expired pod traffic from collection %v: %v", s.PodTrafficColl, err)
+			errs = append(errs, err)
+		} else {
+			s.Infof("cleaned up %d expired pod traffic records from collection %v before %v", deleted, s.PodTrafficColl, expireBefore.Format(time.RFC3339))
+		}
+	}
+
+	if s.HostTrafficColl != "" {
+		deleted, err := s.DB.DeleteExpiredBefore(ctx, s.HostTrafficColl, structs.HostTrafficTimeField, expireBefore)
+		if err != nil {
+			s.Errorf("failed to cleanup expired host traffic from collection %v: %v", s.HostTrafficColl, err)
+			errs = append(errs, err)
+		} else {
+			s.Infof("cleaned up %d expired host traffic records from collection %v before %v", deleted, s.HostTrafficColl, expireBefore.Format(time.RFC3339))
+		}
+	}
+
+	return errors.Join(errs...)
 }
 
 func convertToSeconds(d time.Duration) int64 {
