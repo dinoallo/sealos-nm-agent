@@ -58,18 +58,30 @@ func NewClassifierConfig() ClassifierConfig {
 }
 
 type TrafficStoreConfig struct { // envPrefix: TS_
-	Enabled               bool          `env:"ENABLED"`
-	PodTrafficColl        string        `env:"POD_TRAFFIC_COLL"`
-	HostTrafficColl       string        `env:"HOST_TRAFFIC_COLL"`
-	MaxWorkerCount        int           `env:"MAX_WORKER_COUNT"`
-	FlushTimeout          time.Duration `env:"FLUSH_TIMEOUT"`
-	GetBatchTimeout       time.Duration `env:"GET_BATCH_TIMEOUT"`
-	BatchSize             int           `env:"BATCH_SIZE"`
+	Enabled         bool   `env:"ENABLED"`
+	PodTrafficColl  string `env:"POD_TRAFFIC_COLL"`
+	HostTrafficColl string `env:"HOST_TRAFFIC_COLL"`
+
+	MaxWorkerCount  int           `env:"MAX_WORKER_COUNT"`
+	FlushTimeout    time.Duration `env:"FLUSH_TIMEOUT"`
+	GetBatchTimeout time.Duration `env:"GET_BATCH_TIMEOUT"`
+	BatchSize       int           `env:"BATCH_SIZE"`
+
 	CacheEntryTTL         time.Duration `env:"CACHE_ENTRY_TTL"`
 	CacheExpiredEntrySize int           `env:"CACHE_EXPIRED_ENTRY_SIZE"`
 	CacheEntrySize        int           `env:"CACHE_ENTRY_SIZE"`
-	ForceGeneralColl      bool          `env:"FORCE_GENERAL_COLL"`
-	DBExpireAfter         time.Duration `env:"DB_EXPIRE_AFTER"`
+
+	// ForceGeneralColl forces the traffic store to create and use general
+	// collections even when the target MongoDB deployment supports time series
+	// collections. By default this is false, which means the agent will try to
+	// detect time series support automatically and prefer time series
+	// collections when available.
+	ForceGeneralColl bool `env:"FORCE_GENERAL_COLL"`
+	// DBExpireAfter controls how long traffic data should be retained in the
+	// database. When time series collections are used, this value is applied as
+	// the collection-level expiration window. When general collections are used,
+	// this value is used by the cleanup job to delete expired traffic records.
+	DBExpireAfter time.Duration `env:"DB_EXPIRE_AFTER"`
 }
 
 func NewTrafficStoreConfig() TrafficStoreConfig {
