@@ -12,7 +12,7 @@ RUN go mod download
 
 # Copy the go source
 COPY api/ api/
-COPY cmd/main.go cmd/main.go
+COPY cmd/ cmd/
 COPY internal/ internal/
 COPY mock/ mock/
 COPY modules/ modules/
@@ -23,12 +23,14 @@ COPY pkg/ pkg/
 # was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
 # the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -a -o sealos-nm-agent ./cmd/main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -a -o /workspace/app/sealos-nm-agent ./cmd/main.go
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -a -o /workspace/app/cleanup ./cmd/cleanup/main.go
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details
 FROM gcr.io/distroless/static:latest
-WORKDIR /
-COPY --from=builder /workspace/sealos-nm-agent .
+WORKDIR /app
+COPY --from=builder /workspace/app/sealos-nm-agent /app/sealos-nm-agent
+COPY --from=builder /workspace/app/cleanup /app/cleanup
 
-ENTRYPOINT ["/sealos-nm-agent"]
+ENTRYPOINT ["/app/sealos-nm-agent"]

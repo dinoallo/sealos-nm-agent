@@ -22,33 +22,33 @@ spec:
         spec:
           restartPolicy: OnFailure
           containers:
-          - image: docker.io/dinoallo/sealos-nm-agent:dev
-            imagePullPolicy: IfNotPresent
-            name: sealos-nm-cleanup
-            command:
-            - /app/cleanup
-            resources:
-              limits:
-                cpu: 500m
-                memory: 256Mi
-              requests:
-                cpu: 100m
-                memory: 64Mi
-            env:
-            - name: DB_ENABLED
-              value: "true"
-            - name: DB_URI
-              valueFrom:
-                secretKeyRef:
-                  key: db_uri
-                  name: nm-db-conn-credential
-                  optional: false
-            - name: DB_NAME
-              valueFrom:
-                secretKeyRef:
-                  key: db_name
-                  name: nm-db-conn-credential
-                  optional: false
-            envFrom:
-            - configMapRef:
-                name: agent-env
+            - image: docker.io/dinoallo/sealos-nm-agent:dev
+              imagePullPolicy: IfNotPresent
+              name: sealos-nm-cleanup
+              command:
+                - /app/cleanup
+              resources:
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+                requests:
+                  cpu: 100m
+                  memory: 64Mi
+              env:
+                - name: DB_ENABLED
+                  value: "true"
+                - name: DB_URI
+                  valueFrom:
+                    secretKeyRef:
+                      key: db_uri
+                      name: nm-db-conn-credential
+                      optional: false
+                - name: DB_NAME
+                  valueFrom:
+                    secretKeyRef:
+                      key: db_name
+                      name: nm-db-conn-credential
+                      optional: false
+              envFrom:
+                - configMapRef:
+                    name: agent-env
