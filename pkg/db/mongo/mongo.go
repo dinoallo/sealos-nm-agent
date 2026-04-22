@@ -153,30 +153,51 @@ func (m *Mongo) SupportsTimeSeries(ctx context.Context) (bool, error) {
 	_ctx, cancel := context.WithTimeout(ctx, m.opts.ConnectionTimeout)
 	defer cancel()
 
-	var result struct {
-		Version string `bson:"version"`
-	}
-	if err := m.db.RunCommand(_ctx, bson.D{{Key: "buildInfo", Value: 1}}).Decode(&result); err != nil {
-		return false, err
-	}
-
-	version := strings.TrimSpace(result.Version)
-	if version == "" {
-		return false, nil
+	collName := fmt.Sprintf("__nm_ts_probe__%d", time.Now().UnixNano())
+	timeSeriesOpts := options.CreateCollectionOptions{
+		TimeSeriesOptions: &options.TimeSeriesOptions{
+			TimeField: "timestamp",
+		},
 	}
 
-	var major, minor int
-	if _, err := fmt.Sscanf(version, "%d.%d", &major, &minor); err != nil {
-		return false, nil
+	err := m.db.CreateCollection(_ctx, collName, &timeSeriesOpts)
+	if err != nil {
+		if isTimeSeriesUnsupportedErr(err) {
+			return false, nil
+		}
+		if isUnauthorizedErr(err) {
+			return false, fmt.Errorf("unable to probe time series support because the current MongoDB user is not allowed to create collections: %w", err)
+		}
+		return false, fmt.Errorf("unable to probe time series support by creating a temporary collection %q: %w", collName, err)
 	}
 
-	if major > 5 {
-		return true, nil
+	if dropErr := m.db.Collection(collName).Drop(_ctx); dropErr != nil {
+		return true, fmt.Errorf("time series support probe succeeded but failed to drop temporary collection %q: %w", collName, dropErr)
 	}
-	if major == 5 && minor >= 0 {
-		return true, nil
+
+	return true, nil
+}
+
+func isTimeSeriesUnsupportedErr(err error) bool {
+	if err == nil {
+		return false
 	}
-	return false, nil
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "timeseries") &&
+		(strings.Contains(msg, "not supported") ||
+			strings.Contains(msg, "unknown field") ||
+			strings.Contains(msg, "unrecognized field") ||
+			strings.Contains(msg, "failed to parse"))
+}
+
+func isUnauthorizedErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not authorized") ||
+		strings.Contains(msg, "unauthorized") ||
+		strings.Contains(msg, "permission denied")
 }
 
 func (m *Mongo) getCurColl(collName string) *mongo.Collection {
