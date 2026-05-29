@@ -56,7 +56,7 @@ func TestRemoveIngressBackendSkipsNilBackend(t *testing.T) {
 		referencedBy: xsync.NewMapOf[*I](),
 	})
 
-	checker.removeIngressBackend(ibHash)
+	require.NoError(t, checker.removeIngressBackend(ibHash))
 }
 
 func TestDerefIngressBackendsSkipsNilBackendEntry(t *testing.T) {
@@ -66,7 +66,7 @@ func TestDerefIngressBackendsSkipsNilBackendEntry(t *testing.T) {
 	i := NewI(networkingv1.Ingress{})
 	i.backends.Store(ibHash, nil)
 
-	checker.derefIngressBackends(ingressHash, i)
+	require.NoError(t, checker.derefIngressBackends(ingressHash, i))
 }
 
 func TestUpdateServiceInitializesNilReferenceMaps(t *testing.T) {
