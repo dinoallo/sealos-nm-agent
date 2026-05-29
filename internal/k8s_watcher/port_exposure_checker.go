@@ -36,6 +36,7 @@ type PortExposureChecker struct {
 	ingresses    *xsync.MapOf[string, *I]                        // ingressHash -> I
 	ibs          *xsync.MapOf[string, *IB]                       // ibHash -> ib
 	indexedBySVC *xsync.MapOf[string, *xsync.MapOf[string, *IB]] // svcHash -> ibs
+	stateMu      *sync.Mutex
 	PortExposureCheckerParams
 }
 
@@ -46,23 +47,31 @@ func NewPortExposureChecker(params PortExposureCheckerParams) *PortExposureCheck
 		ingresses:                 xsync.NewMapOf[*I](),
 		ibs:                       xsync.NewMapOf[*IB](),
 		indexedBySVC:              xsync.NewMapOf[*xsync.MapOf[string, *IB]](),
+		stateMu:                   &sync.Mutex{},
 		PortExposureCheckerParams: params,
 	}
 }
 
 func (c *PortExposureChecker) UpdateIngress(newIngress networkingv1.Ingress) error {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
 	hash := GetIngressHash(newIngress.Name, newIngress.Namespace)
 	_, err := c.updateIngress(hash, newIngress)
 	return err
 }
 
 func (c *PortExposureChecker) UpdateEpSlice(newEpSlice discoveryv1.EndpointSlice) error {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
 	hash := GetEpSliceHash(newEpSlice.Name, newEpSlice.Namespace)
 	_, err := c.updateEpSlice(hash, newEpSlice)
 	return err
 }
 
 func (c *PortExposureChecker) Dump(w http.ResponseWriter, req *http.Request) {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
+
 	writef := func(format string, args ...any) bool {
 		if _, err := fmt.Fprintf(w, format, args...); err != nil {
 			return false
@@ -236,10 +245,14 @@ func (s *PortExposureChecker) removeService(svcHash string) {
 }
 
 func (c *PortExposureChecker) RemoveIngress(hash string) error {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
 	return c.removeIngress(hash)
 }
 
 func (c *PortExposureChecker) RemoveEpSlice(hash string) error {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
 	return c.removeEpSlice(hash)
 }
 
