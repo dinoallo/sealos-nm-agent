@@ -36,7 +36,7 @@ type PortExposureChecker struct {
 	ingresses    *xsync.MapOf[string, *I]                        // ingressHash -> I
 	ibs          *xsync.MapOf[string, *IB]                       // ibHash -> ib
 	indexedBySVC *xsync.MapOf[string, *xsync.MapOf[string, *IB]] // svcHash -> ibs
-	stateMu      *sync.Mutex
+	stateMu      sync.Mutex
 	PortExposureCheckerParams
 }
 
@@ -47,7 +47,6 @@ func NewPortExposureChecker(params PortExposureCheckerParams) *PortExposureCheck
 		ingresses:                 xsync.NewMapOf[*I](),
 		ibs:                       xsync.NewMapOf[*IB](),
 		indexedBySVC:              xsync.NewMapOf[*xsync.MapOf[string, *IB]](),
-		stateMu:                   &sync.Mutex{},
 		PortExposureCheckerParams: params,
 	}
 }
@@ -86,7 +85,13 @@ func (c *PortExposureChecker) Dump(w http.ResponseWriter, req *http.Request) {
 		if !writef("ingress: %v\n", ingressHash) {
 			return false
 		}
+		if i == nil || i.backends == nil {
+			return true
+		}
 		printRef := func(ibHash string, ib *IB) bool {
+			if ib == nil {
+				return true
+			}
 			ib.mu.RLock()
 			defer ib.mu.RUnlock()
 			return writef("-> %v's port %v\n", ib.svcHash, ib.sbp)
@@ -106,7 +111,13 @@ func (c *PortExposureChecker) Dump(w http.ResponseWriter, req *http.Request) {
 		if !writef("svc %v:\n", svcHash) {
 			return false
 		}
+		if svc == nil || svc.epSlices == nil {
+			return true
+		}
 		printRef := func(esHash string, es *ES) bool {
+			if es == nil {
+				return true
+			}
 			es.mu.RLock()
 			defer es.mu.RUnlock()
 			return writef("-> %v\n", esHash)
@@ -123,7 +134,10 @@ func (c *PortExposureChecker) Dump(w http.ResponseWriter, req *http.Request) {
 
 func (c *PortExposureChecker) updateEpSlice(hash string, latest discoveryv1.EndpointSlice) (*ES, error) {
 	// find the owner service of the endpoint slice
-	service := c.getOwnerService(latest)
+	service, err := c.getOwnerService(latest)
+	if err != nil {
+		return nil, err
+	}
 	if service == nil {
 		/// if the owner service does not exist, just ignore it
 		return nil, nil
@@ -138,8 +152,9 @@ func (c *PortExposureChecker) updateEpSlice(hash string, latest discoveryv1.Endp
 	// update the ES of the endpoint slice
 	newES := NewES(svc, latest)
 	es, loaded := c.epSlices.LoadOrStore(hash, newES)
-	if !loaded {
+	if !loaded || es == nil {
 		es = newES
+		c.epSlices.Store(hash, es)
 	}
 	es.mu.Lock()
 	latestEpSlice := NewEndpointSlice(latest)
@@ -157,8 +172,14 @@ func (c *PortExposureChecker) updateEpSlice(hash string, latest discoveryv1.Endp
 	}
 	svc.referencedBy.Range(_updateExposure)
 	var isNodePort bool = service.Spec.Type == corev1.ServiceTypeNodePort
+	es.mu.RLock()
+	epSlice := es.epSlice
+	es.mu.RUnlock()
+	if epSlice == nil {
+		return es, nil
+	}
 	for _, servicePort := range service.Spec.Ports {
-		if err := c.updateNodePortForEp(servicePort.TargetPort, *es.epSlice, isNodePort); err != nil {
+		if err := c.updateNodePortForEp(servicePort.TargetPort, *epSlice, isNodePort); err != nil {
 			return nil, err
 		}
 	}
@@ -174,11 +195,20 @@ func (c *PortExposureChecker) removeEpSlice(esHash string) error {
 	}
 	// remove the reference to itself on its owner SVC
 	es.mu.RLock()
-	defer es.mu.RUnlock()
 	svc := es.ownedBy
+	es.mu.RUnlock()
+	if svc == nil {
+		return nil
+	}
 	svc.mu.RLock()
-	svcHash := GetServiceHash(svc.service.Name, svc.service.Namespace)
+	service := svc.service
+	referencedBy := svc.referencedBy
+	epSlices := svc.epSlices
 	svc.mu.RUnlock()
+	if service == nil {
+		return nil
+	}
+	svcHash := GetServiceHash(service.Name, service.Namespace)
 	// since this endpoint slice is removed, it's not exposed anymore
 	_updateExposure := func(ibHash string, ib *IB) bool {
 		if err := c.updateExposureForIngressBackend(ib, false); err != nil {
@@ -187,8 +217,12 @@ func (c *PortExposureChecker) removeEpSlice(esHash string) error {
 		}
 		return true
 	}
-	svc.referencedBy.Range(_updateExposure)
-	svc.epSlices.Delete(esHash)
+	if referencedBy != nil {
+		referencedBy.Range(_updateExposure)
+	}
+	if epSlices != nil {
+		epSlices.Delete(esHash)
+	}
 	// garbage collect the owner service if it doesn not have children anymore
 	if countEp(svc) <= 0 {
 		c.removeService(svcHash)
@@ -199,12 +233,19 @@ func (c *PortExposureChecker) removeEpSlice(esHash string) error {
 func (c *PortExposureChecker) updateService(svcHash string, latest corev1.Service) (*SVC, error) {
 	newSVC := NewSVC(latest)
 	svc, loaded := c.services.LoadOrStore(svcHash, newSVC)
-	if !loaded {
+	if !loaded || svc == nil {
 		svc = newSVC
+		c.services.Store(svcHash, svc)
 	}
 	latestService := NewService(latest)
 	svc.mu.Lock()
 	svc.service = latestService
+	if svc.epSlices == nil {
+		svc.epSlices = xsync.NewMapOf[*ES]()
+	}
+	if svc.referencedBy == nil {
+		svc.referencedBy = xsync.NewMapOf[*IB]()
+	}
 	svc.mu.Unlock()
 	// set up the reference to itself on existing, matching IB
 	ibs, loaded := c.indexedBySVC.Load(svcHash)
@@ -212,6 +253,9 @@ func (c *PortExposureChecker) updateService(svcHash string, latest corev1.Servic
 		return svc, nil
 	}
 	updateBackend := func(ibHash string, ib *IB) bool {
+		if ib == nil {
+			return true
+		}
 		ib.mu.Lock()
 		ib.backend = svc
 		ib.mu.Unlock()
@@ -224,24 +268,35 @@ func (c *PortExposureChecker) updateService(svcHash string, latest corev1.Servic
 
 func (s *PortExposureChecker) removeService(svcHash string) {
 	svc, loaded := s.services.LoadAndDelete(svcHash)
-	if !loaded {
+	if !loaded || svc == nil {
 		return
 	}
 	deref := func(epHash string, es *ES) bool {
+		if es == nil {
+			return true
+		}
 		es.mu.Lock()
 		defer es.mu.Unlock()
 		es.ownedBy = nil
 		return true
 	}
-	svc.epSlices.Range(deref)
+	if svc.epSlices != nil {
+		svc.epSlices.Range(deref)
+	}
 	derefItself := func(ibHash string, ib *IB) bool {
+		if ib == nil {
+			svc.referencedBy.Delete(ibHash)
+			return true
+		}
 		ib.mu.Lock()
 		ib.backend = nil
 		ib.mu.Unlock()
 		svc.referencedBy.Delete(ibHash)
 		return true
 	}
-	svc.referencedBy.Range(derefItself)
+	if svc.referencedBy != nil {
+		svc.referencedBy.Range(derefItself)
+	}
 }
 
 func (c *PortExposureChecker) RemoveIngress(hash string) error {
@@ -263,12 +318,16 @@ func (c *PortExposureChecker) updateIngress(hash string, latest networkingv1.Ing
 	newI := NewI(latest)
 	/// update the I in the lookup table
 	i, loaded := c.ingresses.LoadOrStore(hash, newI)
-	if !loaded {
+	if !loaded || i == nil {
 		i = newI
+		c.ingresses.Store(hash, i)
 	}
 	i.mu.Lock()
 	latestIngress := NewIngress(latest)
 	i.ingress = latestIngress /// update the ingress to the latest version
+	if i.backends == nil {
+		i.backends = xsync.NewMapOf[*IB]()
+	}
 	i.mu.Unlock()
 	backends, err := getBackends(latest) /// get the service backends for the latest ingress
 	if err != nil {
@@ -299,7 +358,7 @@ func (c *PortExposureChecker) updateIngress(hash string, latest networkingv1.Ing
 func (c *PortExposureChecker) removeIngress(hash string) error {
 	// delete the I from the lookup table
 	i, loaded := c.ingresses.LoadAndDelete(hash)
-	if !loaded {
+	if !loaded || i == nil {
 		return nil
 	}
 	// dereference all ingress backends
@@ -308,8 +367,17 @@ func (c *PortExposureChecker) removeIngress(hash string) error {
 }
 
 func (c *PortExposureChecker) derefIngressBackends(ingressHash string, i *I) {
+	if i == nil || i.backends == nil {
+		return
+	}
 	remove := func(ibHash string, ib *IB) bool {
-		ib.referencedBy.Delete(ingressHash)
+		if ib == nil {
+			i.backends.Delete(ibHash)
+			return true
+		}
+		if ib.referencedBy != nil {
+			ib.referencedBy.Delete(ingressHash)
+		}
 		// garbage collect the the ingress backend if it's not referenced by any ingresses
 		if countIngress(ib) <= 0 {
 			c.removeIngressBackend(ibHash)
@@ -325,13 +393,17 @@ func (c *PortExposureChecker) updateIngressBackend(svcHash string, latest networ
 	newIB := NewIB(svcHash, latest)
 	// update the IB in the lookup table
 	ib, loaded := c.ibs.LoadOrStore(ibHash, newIB)
-	if !loaded {
+	if !loaded || ib == nil {
 		ib = newIB
+		c.ibs.Store(ibHash, ib)
 	}
 	ib.mu.Lock()
 	ib.svcHash = svcHash
 	latestSBP := NewServiceBackendPort(latest)
 	ib.sbp = latestSBP
+	if ib.referencedBy == nil {
+		ib.referencedBy = xsync.NewMapOf[*I]()
+	}
 	ib.mu.Unlock()
 	// update the IB to the table indexed by svcHash for faster lookup
 	newIBSet := xsync.NewMapOf[*IB]()
@@ -342,10 +414,15 @@ func (c *PortExposureChecker) updateIngressBackend(svcHash string, latest networ
 	ibSet.Store(ibHash, ib)
 	// set up the backend of this IB
 	svc, loaded := c.services.Load(svcHash)
-	if !loaded {
+	if !loaded || svc == nil {
 		/// this IB currently doesn't have a real backend, ignore the following exposure update
 		return ib, nil
 	}
+	svc.mu.Lock()
+	if svc.referencedBy == nil {
+		svc.referencedBy = xsync.NewMapOf[*IB]()
+	}
+	svc.mu.Unlock()
 	ib.mu.Lock()
 	ib.backend = svc
 	ib.mu.Unlock()
@@ -361,11 +438,15 @@ func (c *PortExposureChecker) updateIngressBackend(svcHash string, latest networ
 func (c *PortExposureChecker) removeIngressBackend(ibHash string) {
 	// remove the IB in the lookup table
 	ib, loaded := c.ibs.LoadAndDelete(ibHash)
-	if !loaded {
+	if !loaded || ib == nil {
 		return
 	}
+	ib.mu.RLock()
+	backend := ib.backend
+	svcHash := ib.svcHash
+	ib.mu.RUnlock()
 	// this ib doesn't have a backend, we don't need to update exposure and handle dereferencing
-	if ib.backend == nil {
+	if backend == nil {
 		return
 	}
 	if err := c.updateExposureForIngressBackend(ib, false); err != nil {
@@ -373,21 +454,24 @@ func (c *PortExposureChecker) removeIngressBackend(ibHash string) {
 		log.Printf("failed to update exposure of an ingress backend %v while removing it: %v", ibHash, err)
 	}
 	// remove the reference to itself on its backend SVC
-	if ib.backend.referencedBy != nil {
+	if backend.referencedBy != nil {
 		// remove the reference to the backend
-		ib.backend.referencedBy.Delete(ibHash)
+		backend.referencedBy.Delete(ibHash)
 	}
 	// remove the IB from the indexedBySVC lookup table
-	ibSet, loaded := c.indexedBySVC.Load(ib.svcHash)
+	ibSet, loaded := c.indexedBySVC.Load(svcHash)
 	if !loaded {
 		return
 	}
 	ibSet.Delete(ibHash)
 }
 
-func (c *PortExposureChecker) getOwnerService(epSlice discoveryv1.EndpointSlice) *corev1.Service {
+func (c *PortExposureChecker) getOwnerService(epSlice discoveryv1.EndpointSlice) (*corev1.Service, error) {
 	labels := epSlice.GetLabels()
 	svcName := labels[svcLabelKey]
+	if svcName == "" {
+		return nil, nil
+	}
 	svcNN := types.NamespacedName{
 		Name:      svcName,
 		Namespace: epSlice.Namespace,
@@ -396,19 +480,40 @@ func (c *PortExposureChecker) getOwnerService(epSlice discoveryv1.EndpointSlice)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	if err := c.Get(ctx, svcNN, &service); err != nil {
-		return nil
+		if client.IgnoreNotFound(err) == nil {
+			return nil, nil
+		}
+		return nil, err
 	}
-	return &service
+	return &service, nil
 }
 
 func (c *PortExposureChecker) updateExposureForIngressBackend(ib *IB, exposure bool) error {
-	svc := ib.backend
-	if svc == nil {
+	if ib == nil {
 		return nil
 	}
-	targetPort := getForwardingPort(svc, *ib.sbp)
+	ib.mu.RLock()
+	svc := ib.backend
+	sbp := ib.sbp
+	ib.mu.RUnlock()
+	if svc == nil || sbp == nil {
+		return nil
+	}
+	targetPort := getForwardingPort(svc, *sbp)
+	if svc.epSlices == nil {
+		return nil
+	}
 	_updateExposure := func(esHash string, es *ES) bool {
-		if err := c.updateExposureForEp(targetPort, *es.epSlice, exposure); err != nil {
+		if es == nil {
+			return true
+		}
+		es.mu.RLock()
+		epSlice := es.epSlice
+		es.mu.RUnlock()
+		if epSlice == nil {
+			return true
+		}
+		if err := c.updateExposureForEp(targetPort, *epSlice, exposure); err != nil {
 			//TODO: handle me
 			return true
 		}
@@ -548,7 +653,7 @@ type IB struct {
 	backend      *SVC
 	referencedBy *xsync.MapOf[string, *I] // ingressHash -> i
 
-	mu *sync.RWMutex
+	mu sync.RWMutex
 }
 
 func NewIB(svcHash string, _sbp networkingv1.ServiceBackendPort) *IB {
@@ -557,7 +662,6 @@ func NewIB(svcHash string, _sbp networkingv1.ServiceBackendPort) *IB {
 		svcHash:      svcHash,
 		sbp:          sbp,
 		referencedBy: xsync.NewMapOf[*I](),
-		mu:           &sync.RWMutex{},
 	}
 }
 
@@ -566,7 +670,7 @@ type I struct {
 	ingress  *Ingress
 	backends *xsync.MapOf[string, *IB] // ibhash -> ib
 
-	mu *sync.RWMutex
+	mu sync.RWMutex
 }
 
 func NewI(_ingress networkingv1.Ingress) *I {
@@ -574,7 +678,6 @@ func NewI(_ingress networkingv1.Ingress) *I {
 	return &I{
 		ingress:  ingress,
 		backends: xsync.NewMapOf[*IB](),
-		mu:       &sync.RWMutex{},
 	}
 }
 
@@ -584,7 +687,7 @@ type SVC struct {
 	epSlices     *xsync.MapOf[string, *ES] // esHash -> epSlice
 	referencedBy *xsync.MapOf[string, *IB] // ibHash -> ib
 
-	mu *sync.RWMutex
+	mu sync.RWMutex
 }
 
 func NewSVC(_svc corev1.Service) *SVC {
@@ -593,7 +696,6 @@ func NewSVC(_svc corev1.Service) *SVC {
 		service:      svc,
 		epSlices:     xsync.NewMapOf[*ES](),
 		referencedBy: xsync.NewMapOf[*IB](),
-		mu:           &sync.RWMutex{},
 	}
 }
 
@@ -602,7 +704,7 @@ type ES struct {
 	epSlice *EndpointSlice
 	ownedBy *SVC
 
-	mu *sync.RWMutex
+	mu sync.RWMutex
 }
 
 func NewES(ownedBy *SVC, _epSlice discoveryv1.EndpointSlice) *ES {
@@ -610,7 +712,6 @@ func NewES(ownedBy *SVC, _epSlice discoveryv1.EndpointSlice) *ES {
 	return &ES{
 		epSlice: epSlice,
 		ownedBy: ownedBy,
-		mu:      &sync.RWMutex{},
 	}
 }
 
