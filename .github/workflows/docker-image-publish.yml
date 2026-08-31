@@ -2,65 +2,79 @@ name: Build and Publish Docker Image
 
 on:
   push:
-    branches:
-      - main
+    branches: ["**"]
     tags:
       - "v*"
+  pull_request:
+    branches: ["**"]
   workflow_dispatch:
-    inputs:
-      custom_tag:
-        description: "Custom image tag (optional)"
-        required: false
-        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
+  docker-prepare:
+    name: Docker Prepare
+    runs-on: ubuntu-24.04
+    outputs:
+      meta-images: ${{ steps.meta-images.outputs.value }}
+      image-tag: ${{ steps.meta-images.outputs.image-tag }}
+    steps:
+      - name: Build image metadata inputs
+        id: meta-images
+        env:
+          IMAGE_REPOSITORY: dinoallo/sealos-nm-agent
+        run: |
+          image_tag="sha-${GITHUB_SHA::7}"
+          {
+            echo "image-tag=$image_tag"
+            echo 'value<<EOF'
+            echo "ghcr.io/$IMAGE_REPOSITORY"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+  docker-build:
+    name: Docker Image Build
+    needs: docker-prepare
     permissions:
       contents: read
       packages: write
-    env:
-      IMAGE_NAME: dinoallo/sealos-nm-agent
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
+      id-token: write
+    uses: docker/github-builder/.github/workflows/build.yml@v1
+    with:
+      runner: |
+        default=ubuntu-24.04
+        linux/arm=ubuntu-24.04-arm
+        linux/arm64=ubuntu-24.04-arm
+      distribute: true
+      platforms: linux/amd64,linux/arm64
+      output: ${{ github.event_name == 'push' && 'image' || 'local' }}
+      push: ${{ github.event_name == 'push' }}
+      context: .
+      file: build/docker/main/Dockerfile
+      artifact-upload: false
+      sign: false
+      cache: true
+      cache-mode: max
+      cache-scope: sealos-nm-agent-image
+      sbom: false
+      set-meta-annotations: true
+      set-meta-labels: true
+      meta-images: ${{ needs.docker-prepare.outputs.meta-images }}
+      meta-tags: |
+        type=ref,event=branch
+        type=ref,event=pr
+        type=ref,event=tag
+        type=semver,pattern={{version}}
+        type=semver,pattern={{major}}.{{minor}}
+        type=raw,value=latest,enable={{is_default_branch}}
+        type=raw,value=${{ needs.docker-prepare.outputs.image-tag }}
+    secrets:
+      registry-auths: |
+        - registry: ghcr.io
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Resolve image tag
-        id: version
-        env:
-          CUSTOM_TAG: ${{ github.event.inputs.custom_tag }}
-          REF_NAME: ${{ github.ref_name }}
-          REF_TYPE: ${{ github.ref_type }}
-        run: |
-          if [ "$REF_TYPE" = "tag" ]; then
-            TAG="$REF_NAME"
-          elif [ -n "$CUSTOM_TAG" ]; then
-            TAG="$CUSTOM_TAG"
-          else
-            TAG=$(grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' go.mod | head -n1)
-          fi
-          echo "version=$TAG" >> $GITHUB_OUTPUT
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: build/docker/main/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-            ghcr.io/${{ env.IMAGE_NAME }}:latest
