@@ -19,6 +19,7 @@ import (
 type TrafficEventHandlerConfig struct {
 	PodTrafficDumpMode  bool
 	HostTrafficDumpMode bool
+	HostTrafficEnabled  bool
 	MaxWorker           int
 }
 
@@ -51,8 +52,10 @@ func (h *TrafficEventHandler) Start(ctx context.Context) {
 	}
 	h.doHandling(ctx, h.MaxWorker, h.handlePodEgress)
 	h.doHandling(ctx, h.MaxWorker, h.handlePodEgressNotis)
-	h.doHandling(ctx, h.MaxWorker, h.handleHostEgress)
-	h.doHandling(ctx, h.MaxWorker, h.handleHostEgressNotis)
+	if h.HostTrafficEnabled {
+		h.doHandling(ctx, h.MaxWorker, h.handleHostEgress)
+		h.doHandling(ctx, h.MaxWorker, h.handleHostEgressNotis)
+	}
 }
 
 func NewTrafficEventHandler(params TrafficEventHandlerParams) (*TrafficEventHandler, error) {

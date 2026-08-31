@@ -2,6 +2,7 @@ package traffic
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -41,6 +42,64 @@ type TrafficHooker struct {
 	netNsEntries   *xsync.MapOf[string, *NetNsEntry]
 	netNsMu        sync.Mutex
 	TrafficHookerParams
+}
+
+// podTrafficObjects limits collection loading to the objects used when host
+// traffic is disabled. CollectionSpec.LoadAndAssign only loads requested
+// objects and their dependencies, so the unused host ring buffer is never
+// created in the kernel.
+type podTrafficObjects struct {
+	SealosFromContainer        *ebpf.Program `ebpf:"sealos_from_container"`
+	FromContainerTrafficEvents *ebpf.Map     `ebpf:"from_container_traffic_events"`
+	FromContainerTrafficNotis  *ebpf.Map     `ebpf:"from_container_traffic_notis"`
+}
+
+func loadTrafficObjectsForHostMode(obj *trafficObjects, hostTrafficEnabled bool) error {
+	if hostTrafficEnabled {
+		return loadTrafficObjects(obj, nil)
+	}
+
+	spec, err := loadTraffic()
+	if err != nil {
+		return err
+	}
+	podObjs := podTrafficObjects{}
+	if err := spec.LoadAndAssign(&podObjs, nil); err != nil {
+		return err
+	}
+
+	obj.SealosFromContainer = podObjs.SealosFromContainer
+	obj.FromContainerTrafficEvents = podObjs.FromContainerTrafficEvents
+	obj.FromContainerTrafficNotis = podObjs.FromContainerTrafficNotis
+	return nil
+}
+
+func closeTrafficObjects(obj *trafficObjects) error {
+	var errs []error
+	closeOne := func(closer io.Closer) {
+		if err := closer.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if obj.SealosFromContainer != nil {
+		closeOne(obj.SealosFromContainer)
+	}
+	if obj.SealosToNetdev != nil {
+		closeOne(obj.SealosToNetdev)
+	}
+	if obj.FromContainerTrafficEvents != nil {
+		closeOne(obj.FromContainerTrafficEvents)
+	}
+	if obj.FromContainerTrafficNotis != nil {
+		closeOne(obj.FromContainerTrafficNotis)
+	}
+	if obj.ToNetdevTrafficEvents != nil {
+		closeOne(obj.ToNetdevTrafficEvents)
+	}
+	if obj.ToNetdevTrafficNotis != nil {
+		closeOne(obj.ToNetdevTrafficNotis)
+	}
+	return errors.Join(errs...)
 }
 
 func NewTrafficHooker(params TrafficHookerParams) (*TrafficHooker, error) {

@@ -15,8 +15,9 @@ import (
 )
 
 type TrafficFactoryParams struct {
-	Host         string
-	ParentLogger log.Logger
+	Host              string
+	EnableHostTraffic bool
+	ParentLogger      log.Logger
 	conf.BPFTrafficFactoryConfig
 	modules.TrafficStore
 	modules.Classifier
@@ -38,7 +39,7 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 		return nil, errors.Join(err, modules.ErrCreatingLogger)
 	}
 	trafficObjs := trafficObjects{}
-	if err := loadTrafficObjects(&trafficObjs, nil); err != nil {
+	if err := loadTrafficObjectsForHostMode(&trafficObjs, params.EnableHostTraffic); err != nil {
 		return nil, errors.Join(err, modules.ErrLoadingTrafficObjs)
 	}
 	egressPodTrafficRecords := make(chan *ringbuf.Record)
@@ -47,6 +48,7 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 	egressHostNotiRecords := make(chan *ringbuf.Record)
 	handlerConfig := TrafficEventHandlerConfig{
 		MaxWorker:           params.HandlerMaxWorker,
+		HostTrafficEnabled:  params.EnableHostTraffic,
 		HostTrafficDumpMode: params.HostDumpMode,
 		PodTrafficDumpMode:  params.PodDumpMode,
 	}
@@ -66,8 +68,9 @@ func NewTrafficFactory(params TrafficFactoryParams) (*TrafficFactory, error) {
 		return nil, errors.Join(err, modules.ErrCreatingTrafficEventHandler)
 	}
 	readerConfig := TrafficEventReaderConfig{
-		MaxWorker:      params.ReaderMaxWorker,
-		ReadingTimeout: 1 * time.Second, // TODO: make this configurable
+		MaxWorker:          params.ReaderMaxWorker,
+		HostTrafficEnabled: params.EnableHostTraffic,
+		ReadingTimeout:     1 * time.Second, // TODO: make this configurable
 	}
 	readerParams := TrafficEventReaderParams{
 		ParentLogger:             logger,
@@ -114,7 +117,7 @@ func (f *TrafficFactory) Close() {
 	if err := f.TrafficHooker.Close(); err != nil {
 		f.Errorf("failed to close traffic hooker: %v", err)
 	}
-	if err := f.trafficObjs.Close(); err != nil {
+	if err := closeTrafficObjects(&f.trafficObjs); err != nil {
 		f.Errorf("failed to close traffic objects: %v", err)
 	}
 }

@@ -221,6 +221,7 @@ func startDB() error {
 func startTrafficFactory(ctx context.Context) (error, func()) {
 	p := traffic.TrafficFactoryParams{
 		Host:                    globalConfig.Host,
+		EnableHostTraffic:       globalConfig.EnableHostTraffic,
 		ParentLogger:            mainLogger,
 		BPFTrafficFactoryConfig: globalConfig.BPFTrafficFactoryConfig,
 		TrafficStore:            mainTrafficStore,

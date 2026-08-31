@@ -18,8 +18,9 @@ const (
 )
 
 type TrafficEventReaderConfig struct {
-	MaxWorker      int
-	ReadingTimeout time.Duration
+	MaxWorker          int
+	HostTrafficEnabled bool
+	ReadingTimeout     time.Duration
 }
 
 type TrafficEventReaderParams struct {
@@ -75,8 +76,10 @@ func NewTrafficEventReader(params TrafficEventReaderParams) (*TrafficEventReader
 func (r *TrafficEventReader) Start(ctx context.Context) {
 	r.startReading(ctx, "pod_egress_reader", "pod_egress_chan", r.egressPodTrafficReader, r.EgressPodTrafficRecords)
 	r.startReading(ctx, "pod_noti_reader", "pod_noti_chan", r.egressPodNotiReader, r.EgressPodNotiRecords)
-	r.startReading(ctx, "host_egress_reader", "host_egress_chan", r.egressHostTrafficReader, r.EgressHostTrafficRecords)
-	r.startReading(ctx, "host_noti_reader", "host_noti_chan", r.egressHostNotiReader, r.EgressHostNotiRecords)
+	if r.HostTrafficEnabled {
+		r.startReading(ctx, "host_egress_reader", "host_egress_chan", r.egressHostTrafficReader, r.EgressHostTrafficRecords)
+		r.startReading(ctx, "host_noti_reader", "host_noti_chan", r.egressHostNotiReader, r.EgressHostNotiRecords)
+	}
 }
 
 func (r *TrafficEventReader) startReading(ctx context.Context, readerName, recordChanName string, reader *ringbuf.Reader, recordChan chan *ringbuf.Record) {
