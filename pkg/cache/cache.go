@@ -56,6 +56,10 @@ type Cache[V1 Convertable[V2], V2 any] struct {
 	cfg CacheConfig
 
 	entries        sync.Map
+	entryMu        sync.Mutex
+	entryCond      *sync.Cond
+	entryCount     int
+	closed         bool
 	expirationMu   sync.Mutex
 	expirations    expirationHeap[V1]
 	expiredEntries chan *V2
@@ -83,6 +87,7 @@ func NewCache[V1 Convertable[V2], V2 any](cfg CacheConfig) (*Cache[V1, V2], erro
 		stopExpiry:     make(chan struct{}),
 		expiryDone:     make(chan struct{}),
 	}
+	c.entryCond = sync.NewCond(&c.entryMu)
 	heap.Init(&c.expirations)
 	go c.runExpiry()
 	return c, nil
@@ -98,6 +103,20 @@ func (c *Cache[V1, V2]) LoadOrStore(key string, newValue V1) (V1, error) {
 		return entry.value, nil
 	}
 
+	// Allow one overflow entry so the expiry worker can evict the oldest entry
+	// and release capacity. Further writers wait while the output queue is
+	// backpressured instead of allowing the heap to grow without bound.
+	c.entryMu.Lock()
+	for c.entryCount > c.cfg.EntrySize && !c.closed {
+		c.entryCond.Wait()
+	}
+	if c.closed {
+		c.entryMu.Unlock()
+		var zero V1
+		return zero, ErrCacheClosed
+	}
+	c.entryCount++
+
 	newEntry := &cacheEntry[V1]{
 		key:       key,
 		value:     newValue,
@@ -105,6 +124,9 @@ func (c *Cache[V1, V2]) LoadOrStore(key string, newValue V1) (V1, error) {
 	}
 	actual, loaded := c.entries.LoadOrStore(key, newEntry)
 	if loaded {
+		c.entryCount--
+		c.entryCond.Broadcast()
+		c.entryMu.Unlock()
 		entry, ok := actual.(*cacheEntry[V1])
 		if !ok {
 			var zero V1
@@ -114,6 +136,7 @@ func (c *Cache[V1, V2]) LoadOrStore(key string, newValue V1) (V1, error) {
 	}
 
 	c.scheduleExpiry(newEntry)
+	c.entryMu.Unlock()
 	return newValue, nil
 }
 
@@ -139,9 +162,20 @@ func (c *Cache[V1, V2]) GetBatchExpiredEntries(parentCtx context.Context, timeou
 
 func (c *Cache[V1, V2]) Close() {
 	c.closeOnce.Do(func() {
+		c.entryMu.Lock()
+		c.closed = true
+		c.entryCond.Broadcast()
+		c.entryMu.Unlock()
 		close(c.stopExpiry)
 		<-c.expiryDone
 	})
+}
+
+func (c *Cache[V1, V2]) releaseEntry() {
+	c.entryMu.Lock()
+	c.entryCount--
+	c.entryCond.Broadcast()
+	c.entryMu.Unlock()
 }
 
 func (c *Cache[V1, V2]) scheduleExpiry(entry *cacheEntry[V1]) {
@@ -194,8 +228,10 @@ func (c *Cache[V1, V2]) runExpiry() {
 			continue
 		}
 		if !c.entries.CompareAndDelete(entry.key, entry) {
+			c.releaseEntry()
 			continue
 		}
+		c.releaseEntry()
 		for _, item := range entry.value.ConvertToData() {
 			select {
 			case c.expiredEntries <- item:

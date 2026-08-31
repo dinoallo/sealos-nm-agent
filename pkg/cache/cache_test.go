@@ -122,6 +122,94 @@ func TestCapacityExpiresOldestEntry(t *testing.T) {
 	assert.Same(t, second, stored)
 }
 
+func TestEntryLimitBoundsPendingEntriesWhenExpiredQueueIsBlocked(t *testing.T) {
+	c := newCache(t, CacheConfig{
+		EntryTTL:         time.Hour,
+		ExpiredEntrySize: 1,
+		EntrySize:        1,
+	})
+
+	for _, key := range []string{"first", "second"} {
+		_, err := c.LoadOrStore(key, &V1{Key: key, Value: map[string]string{"value": key}})
+		require.NoError(t, err)
+	}
+	require.Eventually(t, func() bool {
+		return len(c.expiredEntries) == 1 && c.entryCountValue() == 1
+	}, time.Second, time.Millisecond)
+
+	_, err := c.LoadOrStore("third", &V1{Key: "third", Value: map[string]string{"value": "third"}})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		return c.entryCountValue() == 1
+	}, time.Second, time.Millisecond)
+
+	_, err = c.LoadOrStore("fourth", &V1{Key: "fourth", Value: map[string]string{"value": "fourth"}})
+	require.NoError(t, err)
+	assert.Equal(t, 2, c.entryCountValue())
+
+	fifthDone := make(chan error, 1)
+	go func() {
+		_, err := c.LoadOrStore("fifth", &V1{Key: "fifth", Value: map[string]string{"value": "fifth"}})
+		fifthDone <- err
+	}()
+	select {
+	case err := <-fifthDone:
+		t.Fatalf("fifth write bypassed the entry limit: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	_, err = c.GetBatchExpiredEntries(context.Background(), time.Second, 1)
+	require.NoError(t, err)
+	select {
+	case err := <-fifthDone:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("bounded writer did not resume after the expired queue drained")
+	}
+}
+
+func TestCloseUnblocksWriterWaitingForCapacity(t *testing.T) {
+	c := newCache(t, CacheConfig{
+		EntryTTL:         time.Hour,
+		ExpiredEntrySize: 0,
+		EntrySize:        1,
+	})
+
+	for _, key := range []string{"first", "second"} {
+		if _, err := c.LoadOrStore(key, &V1{Key: key, Value: map[string]string{"value": key}}); err != nil {
+			require.NoError(t, err)
+		}
+	}
+	require.Eventually(t, func() bool {
+		return c.entryCountValue() == 1
+	}, time.Second, time.Millisecond)
+	_, err := c.LoadOrStore("third", &V1{Key: "third", Value: map[string]string{"value": "third"}})
+	require.NoError(t, err)
+
+	writeDone := make(chan error, 1)
+	go func() {
+		_, err := c.LoadOrStore("fourth", &V1{Key: "fourth"})
+		writeDone <- err
+	}()
+	require.Eventually(t, func() bool {
+		return c.entryCountValue() == 2
+	}, time.Second, time.Millisecond)
+
+	c.Close()
+	select {
+	case err := <-writeDone:
+		require.ErrorIs(t, err, ErrCacheClosed)
+	case <-time.After(time.Second):
+		t.Fatal("writer remained blocked after cache close")
+	}
+}
+
+func (c *Cache[V1, V2]) entryCountValue() int {
+	c.entryMu.Lock()
+	defer c.entryMu.Unlock()
+	return c.entryCount
+}
+
 func TestNewCacheRejectsInvalidConfig(t *testing.T) {
 	tests := []CacheConfig{
 		{EntryTTL: 0, EntrySize: 1},
@@ -146,11 +234,16 @@ func TestGetBatchExpiredEntriesRejectsInvalidBatchSize(t *testing.T) {
 
 func newTestCache(t *testing.T, ttl time.Duration, size int) *Cache[*V1, V2] {
 	t.Helper()
-	c, err := NewCache[*V1, V2](CacheConfig{
+	return newCache(t, CacheConfig{
 		EntryTTL:         ttl,
 		ExpiredEntrySize: 100,
 		EntrySize:        size,
 	})
+}
+
+func newCache(t *testing.T, cfg CacheConfig) *Cache[*V1, V2] {
+	t.Helper()
+	c, err := NewCache[*V1, V2](cfg)
 	require.NoError(t, err)
 	t.Cleanup(c.Close)
 	return c
