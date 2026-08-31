@@ -27,13 +27,13 @@ jobs:
       - name: Build image metadata inputs
         id: meta-images
         env:
-          IMAGE_REPOSITORY: dinoallo/sealos-nm-agent
+          GHCR_REPOSITORY: ${{ github.repository }}
         run: |
           image_tag="sha-${GITHUB_SHA::7}"
           {
             echo "image-tag=$image_tag"
             echo 'value<<EOF'
-            echo "ghcr.io/$IMAGE_REPOSITORY"
+            echo "ghcr.io/$GHCR_REPOSITORY"
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 
