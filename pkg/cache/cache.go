@@ -148,7 +148,7 @@ func (c *Cache[V1, V2]) GetBatchExpiredEntries(parentCtx context.Context, timeou
 	ctx, cancel := context.WithTimeout(parentCtx, timeout)
 	defer cancel()
 
-	batch := make([]*V2, 0, batchSize)
+	var batch []*V2
 	for len(batch) < batchSize {
 		select {
 		case <-ctx.Done():

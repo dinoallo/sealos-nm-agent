@@ -232,6 +232,15 @@ func TestGetBatchExpiredEntriesRejectsInvalidBatchSize(t *testing.T) {
 	}
 }
 
+func TestGetBatchExpiredEntriesAllocatesLazily(t *testing.T) {
+	c := newTestCache(t, time.Minute, 100)
+
+	expired, err := c.GetBatchExpiredEntries(context.Background(), time.Millisecond, 1<<20)
+	require.ErrorIs(t, err, ErrTimeoutGettingExpiredEntries)
+	assert.Empty(t, expired)
+	assert.Zero(t, cap(expired))
+}
+
 func newTestCache(t *testing.T, ttl time.Duration, size int) *Cache[*V1, V2] {
 	t.Helper()
 	return newCache(t, CacheConfig{
