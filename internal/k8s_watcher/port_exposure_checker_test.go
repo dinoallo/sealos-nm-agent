@@ -50,13 +50,20 @@ func TestRemoveEpSliceSkipsNilOwnerService(t *testing.T) {
 
 func TestRemoveIngressBackendSkipsNilBackend(t *testing.T) {
 	checker := newTestPortExposureChecker()
-	ibHash := GetIBHash(GetServiceHash("svc", "default"), networkingv1.ServiceBackendPort{})
-	checker.ibs.Store(ibHash, &IB{
-		svcHash:      GetServiceHash("svc", "default"),
+	svcHash := GetServiceHash("svc", "default")
+	ibHash := GetIBHash(svcHash, networkingv1.ServiceBackendPort{})
+	ib := &IB{
+		svcHash:      svcHash,
 		referencedBy: xsync.NewMapOf[*I](),
-	})
+	}
+	checker.ibs.Store(ibHash, ib)
+	ibSet := xsync.NewMapOf[*IB]()
+	ibSet.Store(ibHash, ib)
+	checker.indexedBySVC.Store(svcHash, ibSet)
 
 	require.NoError(t, checker.removeIngressBackend(ibHash))
+	_, loaded := checker.indexedBySVC.Load(svcHash)
+	require.False(t, loaded)
 }
 
 func TestDerefIngressBackendsSkipsNilBackendEntry(t *testing.T) {

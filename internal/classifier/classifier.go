@@ -122,6 +122,7 @@ func (c *RawTrafficClassifier) RegisterPod(addr string, podMeta structs.PodMeta)
 
 func (c *RawTrafficClassifier) UnregisterPod(addr string) error {
 	c.podMetaTable.LoadAndDelete(addr)
+	c.specialPortTables.Delete(addr)
 	return nil
 }
 

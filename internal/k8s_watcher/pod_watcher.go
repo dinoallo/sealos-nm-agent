@@ -63,25 +63,31 @@ func (w *PodWatcher) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	podHash := req.NamespacedName.String()
 	if err := w.Get(ctx, req.NamespacedName, &pod); err != nil {
 		if apierrors.IsNotFound(err) {
-			pat, loaded := w.podAddrTables.LoadAndDelete(podHash)
+			pat, loaded := w.podAddrTables.Load(podHash)
 			if !loaded {
 				return ctrl.Result{}, nil
 			}
-			unregister := func(podAddr string, v struct{}) bool {
-				if err := w.UnregisterPod(podAddr); err != nil {
-					//TODO: handle me
-					return true
-				}
-				pat.podAddrs.Delete(podAddr)
-				return true
+			if err := w.unregisterPodAddresses(pat, ""); err != nil {
+				return ctrl.Result{}, err
 			}
-			pat.podAddrs.Range(unregister)
+			w.podAddrTables.Delete(podHash)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
 	}
 	//TODO: support multiple PodIPs
 	addr := pod.Status.PodIP
+	if addr == "" {
+		pat, loaded := w.podAddrTables.Load(podHash)
+		if !loaded {
+			return ctrl.Result{}, nil
+		}
+		if err := w.unregisterPodAddresses(pat, ""); err != nil {
+			return ctrl.Result{}, err
+		}
+		w.podAddrTables.Delete(podHash)
+		return ctrl.Result{}, nil
+	}
 	labels := pod.GetLabels()
 	podType, podTypeName := podlib.GetPodTypeAndTypeName(ctx, labels)
 	podMeta := structs.PodMeta{
@@ -96,11 +102,32 @@ func (w *PodWatcher) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	if !loaded {
 		pat = newPAT
 	}
-	pat.podAddrs.Store(addr, struct{}{})
+	if err := w.unregisterPodAddresses(pat, addr); err != nil {
+		return ctrl.Result{}, err
+	}
 	if err := w.RegisterPod(addr, podMeta); err != nil {
 		return ctrl.Result{}, err
 	}
+	pat.podAddrs.Store(addr, struct{}{})
 	return ctrl.Result{}, nil
+}
+
+func (w *PodWatcher) unregisterPodAddresses(pat *podAddrTable, currentAddr string) error {
+	var firstErr error
+	pat.podAddrs.Range(func(podAddr string, _ struct{}) bool {
+		if podAddr == currentAddr {
+			return true
+		}
+		if err := w.UnregisterPod(podAddr); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			return true
+		}
+		pat.podAddrs.Delete(podAddr)
+		return true
+	})
+	return firstErr
 }
 
 func (w *PodWatcher) SetupWithManager(mgr ctrl.Manager) error {
