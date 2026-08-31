@@ -56,6 +56,12 @@ func NewNetNsEntry(netnsName string) (*NetNsEntry, error) {
 	return netnsEntry, nil
 }
 
+func (e *NetNsEntry) Close() {
+	if e != nil && e.Hooker != nil {
+		e.Hooker.Close()
+	}
+}
+
 func (e *NetNsEntry) checkLinkExists(ifName string) (bool, error) {
 	bpfHooker := e.Hooker
 	_, err := bpfHooker.GetLink(ifName)

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/cilium/ebpf"
@@ -38,6 +39,7 @@ type TrafficHooker struct {
 	log.Logger
 	hostNetNsEntry *NetNsEntry
 	netNsEntries   *xsync.MapOf[string, *NetNsEntry]
+	netNsMu        sync.Mutex
 	TrafficHookerParams
 }
 
@@ -69,12 +71,15 @@ func (h *TrafficHooker) InitHostIface(ifName string) error {
 func (h *TrafficHooker) Close() error {
 	var err error
 	// clean up for pods
+	h.netNsMu.Lock()
+	defer h.netNsMu.Unlock()
 	cleanUp := func(netNsHash string, netNsEntry *NetNsEntry) bool {
 		if err = netNsEntry.cleanUpFiltersOnAllIfs(); err != nil {
 			h.Errorf("failed to remove the filters for all interfaces inside pod netns %v: %v", netNsEntry.Name, err)
 		} else {
 			h.Debugf("successfully remove the filters for all interfaces inside pod netns %v", netNsEntry.Name)
 		}
+		netNsEntry.Close()
 		return true
 	}
 	h.netNsEntries.Range(cleanUp)
@@ -84,6 +89,7 @@ func (h *TrafficHooker) Close() error {
 	} else {
 		h.Debugf("successfully remove the filters for all interfaces in the host netns")
 	}
+	h.hostNetNsEntry.Close()
 	return err
 }
 
@@ -122,6 +128,9 @@ func (h *TrafficHooker) updateTCHooksForHost(ifName string) error {
 }
 
 func (h *TrafficHooker) updateTCHooksForPod(netNs string) error {
+	h.netNsMu.Lock()
+	defer h.netNsMu.Unlock()
+
 	netNsFullPath := filepath.Join(defaultBindMountPath, netNs)
 	netNsHash := getNetnsHash(netNs)
 	// verify that this net namespace still exists
@@ -129,18 +138,23 @@ func (h *TrafficHooker) updateTCHooksForPod(netNs string) error {
 	if os.IsNotExist(err) {
 		// if this netns doesn't exist, we ignore it and remove its entry (if any)
 		h.Debugf("pod netns %v doesn't exist. ignore it", netNs)
-		h.netNsEntries.Delete(netNsHash)
+		if netNsEntry, loaded := h.netNsEntries.LoadAndDelete(netNsHash); loaded {
+			netNsEntry.Close()
+		}
 		return nil
 	} else if err != nil {
 		return errors.Join(err, ErrCheckingNetNsExists)
 	}
 	// this netns exists, so we try to install filters
 	netnsHash := getNetnsHash(netNs)
-	newNetnsEntry, err := NewNetNsEntry(netnsHash)
-	if err != nil {
-		return err
+	netnsEntry, loaded := h.netNsEntries.Load(netnsHash)
+	if !loaded || netnsEntry == nil {
+		netnsEntry, err = NewNetNsEntry(netnsHash)
+		if err != nil {
+			return err
+		}
+		h.netNsEntries.Store(netnsHash, netnsEntry)
 	}
-	netnsEntry, _ := h.netNsEntries.LoadOrStore(netnsHash, newNetnsEntry)
 	return h.installFiltersOnPodMainIf(netnsEntry)
 }
 
