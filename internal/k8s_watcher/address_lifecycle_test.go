@@ -94,7 +94,7 @@ func TestPodWatcherRemovesPreviousAndEmptyAddresses(t *testing.T) {
 		Build()
 	classifier := newRecordingClassifier()
 	watcher := &PodWatcher{
-		podAddrTables: xsync.NewMapOf[*podAddrTable](),
+		podAddrs: xsync.NewMapOf[string](),
 		PodWatcherParams: PodWatcherParams{
 			Client:     k8sClient,
 			Scheme:     scheme,
@@ -118,7 +118,7 @@ func TestPodWatcherRemovesPreviousAndEmptyAddresses(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, classifier.hasPod(""))
 	assert.False(t, classifier.hasPod("10.0.0.3"))
-	_, tracked := watcher.podAddrTables.Load(req.NamespacedName.String())
+	_, tracked := watcher.podAddrs.Load(req.NamespacedName.String())
 	assert.False(t, tracked)
 }
 
