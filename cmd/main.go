@@ -144,6 +144,7 @@ func main() {
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:         scheme,
 		LeaderElection: false,
+		Cache:          k8s_watcher.CacheOptions(),
 		Metrics: metricsserver.Options{
 			BindAddress: "0",
 		},
@@ -220,6 +221,7 @@ func startDB() error {
 func startTrafficFactory(ctx context.Context) (error, func()) {
 	p := traffic.TrafficFactoryParams{
 		Host:                    globalConfig.Host,
+		EnableHostTraffic:       globalConfig.EnableHostTraffic,
 		ParentLogger:            mainLogger,
 		BPFTrafficFactoryConfig: globalConfig.BPFTrafficFactoryConfig,
 		TrafficStore:            mainTrafficStore,

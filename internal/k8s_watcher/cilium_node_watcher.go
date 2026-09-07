@@ -50,13 +50,14 @@ func (w *CiliumNodeWatcher) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	cnHash := getCiliumNodeHash(req.Name, req.Namespace)
 	if err := w.Get(ctx, req.NamespacedName, &cn); err != nil {
 		if apierrors.IsNotFound(err) {
-			ciliumHostAddr, loaded := w.ciliumHostAddrs.LoadAndDelete(cnHash)
+			ciliumHostAddr, loaded := w.ciliumHostAddrs.Load(cnHash)
 			if !loaded {
 				return ctrl.Result{}, nil
 			}
 			if err := w.UnregisterCiliumHostAddr(ciliumHostAddr); err != nil {
 				return ctrl.Result{}, err
 			}
+			w.ciliumHostAddrs.Delete(cnHash)
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
@@ -70,12 +71,26 @@ func (w *CiliumNodeWatcher) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 	if ciliumHostAddr == "" {
+		oldAddr, loaded := w.ciliumHostAddrs.Load(cnHash)
+		if !loaded {
+			return ctrl.Result{}, nil
+		}
+		if err := w.UnregisterCiliumHostAddr(oldAddr); err != nil {
+			return ctrl.Result{}, err
+		}
+		w.ciliumHostAddrs.Delete(cnHash)
 		return ctrl.Result{}, nil
 	}
-	w.ciliumHostAddrs.Store(cnHash, ciliumHostAddr)
+	oldAddr, loaded := w.ciliumHostAddrs.Load(cnHash)
+	if loaded && oldAddr != ciliumHostAddr {
+		if err := w.UnregisterCiliumHostAddr(oldAddr); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
 	if err := w.RegisterCiliumHostAddr(ciliumHostAddr); err != nil {
 		return ctrl.Result{}, err
 	}
+	w.ciliumHostAddrs.Store(cnHash, ciliumHostAddr)
 	w.Debugf("cilium host addr %v registered", ciliumHostAddr)
 	return ctrl.Result{}, nil
 }

@@ -44,6 +44,12 @@ func NewTcBpfHooker(nsName string) (*TcBpfHooker, error) {
 	return &hooker, nil
 }
 
+func (h *TcBpfHooker) Close() {
+	if h != nil && h.Handle != nil {
+		h.Handle.Close()
+	}
+}
+
 func (h *TcBpfHooker) GetLink(ifName string) (netlink.Link, error) {
 	return h.getLink(ifName)
 }
@@ -107,8 +113,12 @@ func getHandleFromNs(nsName string) (*netlink.Handle, error) {
 		return nil, err
 	}
 	handle, err := netlink.NewHandleAt(nsHandle)
-	if err != nil {
-		return nil, err
+	closeErr := nsHandle.Close()
+	if err != nil || closeErr != nil {
+		if handle != nil {
+			handle.Close()
+		}
+		return nil, errors.Join(err, closeErr)
 	}
 	return handle, nil
 }

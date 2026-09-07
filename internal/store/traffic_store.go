@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/dinoallo/sealos-networkmanager-agent/api/structs"
@@ -29,6 +30,10 @@ type TrafficStore struct {
 }
 
 func NewTrafficStore(params TrafficStoreParams) (*TrafficStore, error) {
+	if params.BatchSize <= 0 {
+		return nil, fmt.Errorf("batch size must be positive")
+	}
+
 	logger, err := params.ParentLogger.WithCompName("traffic_store")
 	if err != nil {
 		return nil, err
@@ -67,6 +72,11 @@ func (s *TrafficStore) Start(ctx context.Context) error {
 	}
 	s.startFlushingForPodTraffic(ctx)
 	s.startFlushingForHostTraffic(ctx)
+	go func() {
+		<-ctx.Done()
+		s.podTrafficCache.Close()
+		s.hostTrafficCache.Close()
+	}()
 	return nil
 }
 

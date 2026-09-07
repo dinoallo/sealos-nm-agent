@@ -20,16 +20,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-type podAddrTable struct {
-	podAddrs *xsync.MapOf[string, struct{}]
-}
-
-func newPodAddrTable() *podAddrTable {
-	return &podAddrTable{
-		podAddrs: xsync.NewMapOf[struct{}](),
-	}
-}
-
 // TODO: add logger
 type PodWatcherParams struct {
 	ParentLogger log.Logger
@@ -41,7 +31,8 @@ type PodWatcherParams struct {
 
 type PodWatcher struct {
 	log.Logger
-	podAddrTables *xsync.MapOf[string, *podAddrTable]
+	// Each Pod has one tracked Status.PodIP; the workqueue serializes reconciles per key.
+	podAddrs *xsync.MapOf[string, string]
 	PodWatcherParams
 }
 
@@ -52,7 +43,7 @@ func NewPodWatcher(params PodWatcherParams) (*PodWatcher, error) {
 	}
 	return &PodWatcher{
 		Logger:           logger,
-		podAddrTables:    xsync.NewMapOf[*podAddrTable](),
+		podAddrs:         xsync.NewMapOf[string](),
 		PodWatcherParams: params,
 	}, nil
 }
@@ -63,25 +54,15 @@ func (w *PodWatcher) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	podHash := req.NamespacedName.String()
 	if err := w.Get(ctx, req.NamespacedName, &pod); err != nil {
 		if apierrors.IsNotFound(err) {
-			pat, loaded := w.podAddrTables.LoadAndDelete(podHash)
-			if !loaded {
-				return ctrl.Result{}, nil
-			}
-			unregister := func(podAddr string, v struct{}) bool {
-				if err := w.UnregisterPod(podAddr); err != nil {
-					//TODO: handle me
-					return true
-				}
-				pat.podAddrs.Delete(podAddr)
-				return true
-			}
-			pat.podAddrs.Range(unregister)
-			return ctrl.Result{}, nil
+			return ctrl.Result{}, w.unregisterPodAddress(podHash, "")
 		}
 		return ctrl.Result{}, err
 	}
 	//TODO: support multiple PodIPs
 	addr := pod.Status.PodIP
+	if addr == "" {
+		return ctrl.Result{}, w.unregisterPodAddress(podHash, "")
+	}
 	labels := pod.GetLabels()
 	podType, podTypeName := podlib.GetPodTypeAndTypeName(ctx, labels)
 	podMeta := structs.PodMeta{
@@ -91,16 +72,26 @@ func (w *PodWatcher) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		TypeName:  podTypeName,
 		Node:      pod.Status.HostIP,
 	}
-	newPAT := newPodAddrTable()
-	pat, loaded := w.podAddrTables.LoadOrStore(podHash, newPAT)
-	if !loaded {
-		pat = newPAT
+	if err := w.unregisterPodAddress(podHash, addr); err != nil {
+		return ctrl.Result{}, err
 	}
-	pat.podAddrs.Store(addr, struct{}{})
 	if err := w.RegisterPod(addr, podMeta); err != nil {
 		return ctrl.Result{}, err
 	}
+	w.podAddrs.Store(podHash, addr)
 	return ctrl.Result{}, nil
+}
+
+func (w *PodWatcher) unregisterPodAddress(podHash, currentAddr string) error {
+	oldAddr, loaded := w.podAddrs.Load(podHash)
+	if !loaded || oldAddr == currentAddr {
+		return nil
+	}
+	if err := w.UnregisterPod(oldAddr); err != nil {
+		return err
+	}
+	w.podAddrs.Delete(podHash)
+	return nil
 }
 
 func (w *PodWatcher) SetupWithManager(mgr ctrl.Manager) error {

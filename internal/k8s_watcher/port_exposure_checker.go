@@ -447,7 +447,7 @@ func (c *PortExposureChecker) updateIngressBackend(svcHash string, latest networ
 	if err := c.updateExposureForIngressBackend(ib, true); err != nil {
 		if countIngress(ib) <= 0 {
 			c.ibs.Delete(ibHash)
-			ibSet.Delete(ibHash)
+			c.removeIndexedBackend(svcHash, ibHash)
 		}
 		return nil, fmt.Errorf("failed to update exposure of ingress backend %v: %w", ibHash, err)
 	}
@@ -469,9 +469,7 @@ func (c *PortExposureChecker) removeIngressBackend(ibHash string) error {
 	// this ib doesn't have a backend, we don't need to update exposure and handle dereferencing
 	if backend == nil {
 		c.ibs.Delete(ibHash)
-		if ibSet, loaded := c.indexedBySVC.Load(svcHash); loaded && ibSet != nil {
-			ibSet.Delete(ibHash)
-		}
+		c.removeIndexedBackend(svcHash, ibHash)
 		return nil
 	}
 	if err := c.updateExposureForIngressBackend(ib, false); err != nil {
@@ -483,13 +481,19 @@ func (c *PortExposureChecker) removeIngressBackend(ibHash string) error {
 		backend.referencedBy.Delete(ibHash)
 	}
 	c.ibs.Delete(ibHash)
-	// remove the IB from the indexedBySVC lookup table
+	c.removeIndexedBackend(svcHash, ibHash)
+	return nil
+}
+
+func (c *PortExposureChecker) removeIndexedBackend(svcHash, ibHash string) {
 	ibSet, loaded := c.indexedBySVC.Load(svcHash)
-	if !loaded {
-		return nil
+	if !loaded || ibSet == nil {
+		return
 	}
 	ibSet.Delete(ibHash)
-	return nil
+	if ibSet.Size() == 0 {
+		c.indexedBySVC.Delete(svcHash)
+	}
 }
 
 func (c *PortExposureChecker) getOwnerService(epSlice discoveryv1.EndpointSlice) (*corev1.Service, error) {

@@ -1,12 +1,11 @@
 package cache
 
 import (
+	"container/heap"
 	"context"
 	"fmt"
 	"sync"
 	"time"
-
-	"github.com/dgraph-io/ristretto"
 )
 
 type Convertable[V2 any] interface {
@@ -15,129 +14,146 @@ type Convertable[V2 any] interface {
 }
 
 type CacheConfig struct {
-	// ristretto.Config
 	EntryTTL         time.Duration
 	ExpiredEntrySize int
 	EntrySize        int
-	MetricEnabled    bool
 }
 
 func NewCacheConfig() CacheConfig {
 	return CacheConfig{
-		// Config: ristretto.Config{
-		// 	NumCounters:        1e7,
-		// 	MaxCost:            1 << 30,
-		// 	BufferItems:        64,
-		// 	Metrics:            false,
-		// 	IgnoreInternalCost: false,
-		// },
 		EntryTTL:         300 * time.Second,
 		ExpiredEntrySize: 1e4,
 		EntrySize:        1e6,
-		MetricEnabled:    false,
 	}
 }
 
-// func readRistrettoConfig(cfg conf.CacheConfig) ristretto.Config {
-// 	return ristretto.Config{
-// 		NumCounters: int64(cfg.CacheNumCounters),
-// 		MaxCost:     int64(cfg.CacheMaxCost),
-// 		BufferItems: int64(cfg.CacheBufferItems),
-// 		Metrics:     cfg.CacheMetrics,
-// 	}
-// }
+type cacheEntry[V any] struct {
+	key       string
+	value     V
+	expiresAt time.Time
+}
 
-// func ReadCacheConfig(cfg conf.CacheConfig) CacheConfig {
-// 	cacheConfig := NewCacheConfig()
-// 	rConfig := readRistrettoConfig(cfg)
-// 	cacheConfig.RistrettoConfig = rConfig
-// 	cacheConfig.EntryTTL = time.Second * time.Duration(cfg.CacheFlushingPeriod)
-// 	cacheConfig.ExpiredEntriesSize = cfg.CacheWaitingToFlushQueueSize
-// 	return cacheConfig
-// }
+type expirationHeap[V any] []*cacheEntry[V]
+
+func (h expirationHeap[V]) Len() int           { return len(h) }
+func (h expirationHeap[V]) Less(i, j int) bool { return h[i].expiresAt.Before(h[j].expiresAt) }
+func (h expirationHeap[V]) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+
+func (h *expirationHeap[V]) Push(value any) {
+	entry, ok := value.(*cacheEntry[V])
+	if !ok {
+		panic("cache: invalid expiration heap entry")
+	}
+	*h = append(*h, entry)
+}
+
+func (h *expirationHeap[V]) Pop() any {
+	old := *h
+	last := len(old) - 1
+	entry := old[last]
+	old[last] = nil
+	*h = old[:last]
+	return entry
+}
 
 type Cache[V1 Convertable[V2], V2 any] struct {
-	cfg            CacheConfig
-	expirableCache *ristretto.Cache
+	cfg CacheConfig
+
+	entries        sync.Map
+	entryMu        sync.Mutex
+	entryCond      *sync.Cond
+	entryCount     int
+	closed         bool
+	expirationMu   sync.Mutex
+	expirations    expirationHeap[V1]
 	expiredEntries chan *V2
-	entries        *sync.Map
+	wakeExpiry     chan struct{}
+	stopExpiry     chan struct{}
+	expiryDone     chan struct{}
+	closeOnce      sync.Once
 }
 
 func NewCache[V1 Convertable[V2], V2 any](cfg CacheConfig) (*Cache[V1, V2], error) {
-	entries := &sync.Map{}
-	expiredEntries := make(chan *V2, cfg.ExpiredEntrySize)
-	onEvicted := func(item *ristretto.Item) {
-		v, ok := item.Value.(V1)
-		if !ok {
-			return
-		}
-		key := v.GetHash()
-		actual, loaded := entries.LoadAndDelete(key)
-		if !loaded {
-			return
-		}
-		entry, ok := actual.(V1)
-		if !ok {
-			return
-		}
-		saveToFlush := entry.ConvertToData()
-		for _, v2 := range saveToFlush {
-			expiredEntries <- v2
-		}
+	if cfg.EntryTTL <= 0 {
+		return nil, fmt.Errorf("entry TTL must be positive")
 	}
-	rConfig := ristretto.Config{
-		MaxCost:            int64(cfg.EntrySize),
-		NumCounters:        int64(cfg.EntrySize) * 10,
-		OnEvict:            onEvicted,
-		Metrics:            cfg.MetricEnabled,
-		BufferItems:        64,
-		IgnoreInternalCost: true, //TODO: what is this??
+	if cfg.EntrySize <= 0 {
+		return nil, fmt.Errorf("entry size must be positive")
 	}
-	expirableCache, err := ristretto.NewCache(&rConfig)
-	if err != nil {
-		return nil, err
+	if cfg.ExpiredEntrySize < 0 {
+		return nil, fmt.Errorf("expired entry size cannot be negative")
 	}
-	return &Cache[V1, V2]{
+
+	c := &Cache[V1, V2]{
 		cfg:            cfg,
-		expirableCache: expirableCache,
-		expiredEntries: expiredEntries,
-		entries:        entries,
-	}, nil
+		expiredEntries: make(chan *V2, cfg.ExpiredEntrySize),
+		wakeExpiry:     make(chan struct{}, 1),
+		stopExpiry:     make(chan struct{}),
+		expiryDone:     make(chan struct{}),
+	}
+	c.entryCond = sync.NewCond(&c.entryMu)
+	heap.Init(&c.expirations)
+	go c.runExpiry()
+	return c, nil
 }
 
-// func (c *Cache[V1, V2]) LoadOrStore(key string, newEntry V1) (V1, bool, error) {
-// 	entryKey := key
-// 	_entry, loaded := c.entries.LoadOrStore(entryKey, newEntry)
-// 	if !loaded {
-// 		c.expirableCache.SetWithTTL(entryKey, newEntry, c.cfg.RistrettoConfig.MaxCost, c.cfg.EntryTTL)
-// 		_entry = newEntry
-// 	}
-// 	entry, ok := _entry.(V1)
-// 	if !ok {
-// 		return entry, false, fmt.Errorf("not a valid convertable type?")
-// 	}
-// 	return entry, loaded, nil
-// }
+func (c *Cache[V1, V2]) LoadOrStore(key string, newValue V1) (V1, error) {
+	if actual, loaded := c.entries.Load(key); loaded {
+		entry, ok := actual.(*cacheEntry[V1])
+		if !ok {
+			var zero V1
+			return zero, fmt.Errorf("invalid cache entry type")
+		}
+		return entry.value, nil
+	}
 
-func (c *Cache[V1, V2]) LoadOrStore(key string, newEntry V1) (V1, error) {
-	entryKey := key
-	_entry, loaded := c.entries.LoadOrStore(entryKey, newEntry)
-	if !loaded {
-		c.expirableCache.SetWithTTL(entryKey, newEntry, 1, c.cfg.EntryTTL)
-		_entry = newEntry
+	// Allow one overflow entry so the expiry worker can evict the oldest entry
+	// and release capacity. Further writers wait while the output queue is
+	// backpressured instead of allowing the heap to grow without bound.
+	c.entryMu.Lock()
+	for c.entryCount > c.cfg.EntrySize && !c.closed {
+		c.entryCond.Wait()
 	}
-	entry, ok := _entry.(V1)
-	if !ok {
-		return entry, fmt.Errorf("not a valid convertable type?")
+	if c.closed {
+		c.entryMu.Unlock()
+		var zero V1
+		return zero, ErrCacheClosed
 	}
-	return entry, nil
+	c.entryCount++
+
+	newEntry := &cacheEntry[V1]{
+		key:       key,
+		value:     newValue,
+		expiresAt: time.Now().Add(c.cfg.EntryTTL),
+	}
+	actual, loaded := c.entries.LoadOrStore(key, newEntry)
+	if loaded {
+		c.entryCount--
+		c.entryCond.Broadcast()
+		c.entryMu.Unlock()
+		entry, ok := actual.(*cacheEntry[V1])
+		if !ok {
+			var zero V1
+			return zero, fmt.Errorf("invalid cache entry type")
+		}
+		return entry.value, nil
+	}
+
+	c.scheduleExpiry(newEntry)
+	c.entryMu.Unlock()
+	return newValue, nil
 }
 
 func (c *Cache[V1, V2]) GetBatchExpiredEntries(parentCtx context.Context, timeout time.Duration, batchSize int) ([]*V2, error) {
+	if batchSize <= 0 {
+		return nil, fmt.Errorf("batch size must be positive")
+	}
+
 	ctx, cancel := context.WithTimeout(parentCtx, timeout)
 	defer cancel()
+
 	var batch []*V2
-	for size := 0; size < batchSize; size++ {
+	for len(batch) < batchSize {
 		select {
 		case <-ctx.Done():
 			return batch, ErrTimeoutGettingExpiredEntries
@@ -148,34 +164,112 @@ func (c *Cache[V1, V2]) GetBatchExpiredEntries(parentCtx context.Context, timeou
 	return batch, nil
 }
 
-// func (c *Cache[V1, V2]) onEvicted(item *ristretto.Item) {
-// 	v, ok := item.Value.(V1)
-// 	if !ok {
-// 		return
-// 	}
-// 	key := v.GetHash()
-// 	actual, loaded := c.entries.LoadAndDelete(key)
-// 	if !loaded {
-// 		return
-// 	}
-// 	entry, ok := actual.(V1)
-// 	if !ok {
-// 		return
-// 	}
-// 	saveToFlush := entry.ConvertToData()
-// 	for _, v2 := range saveToFlush {
-// 		c.saveToExpiredEntries(v2)
-// 	}
-// }
+func (c *Cache[V1, V2]) Close() {
+	c.closeOnce.Do(func() {
+		c.entryMu.Lock()
+		c.closed = true
+		c.entryCond.Broadcast()
+		c.entryMu.Unlock()
+		close(c.stopExpiry)
+		<-c.expiryDone
+	})
+}
 
-// func (c *Cache[V1, V2]) saveToExpiredEntries(entry *V2) {
-// 	//TODO: make timeout configurable
-// 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*1)
-// 	defer cancel()
-// 	select {
-// 	case <-ctx.Done():
-// 		return
-// 	case c.expiredEntries <- entry:
-// 		return
-// 	}
-// }
+func (c *Cache[V1, V2]) releaseEntry() {
+	c.entryMu.Lock()
+	c.entryCount--
+	c.entryCond.Broadcast()
+	c.entryMu.Unlock()
+}
+
+func (c *Cache[V1, V2]) scheduleExpiry(entry *cacheEntry[V1]) {
+	c.expirationMu.Lock()
+	wake := len(c.expirations) == 0 || entry.expiresAt.Before(c.expirations[0].expiresAt)
+	heap.Push(&c.expirations, entry)
+	wake = wake || len(c.expirations) > c.cfg.EntrySize
+	c.expirationMu.Unlock()
+
+	if wake {
+		select {
+		case c.wakeExpiry <- struct{}{}:
+		default:
+		}
+	}
+}
+
+func (c *Cache[V1, V2]) runExpiry() {
+	defer close(c.expiryDone)
+	for {
+		wait, exists := c.nextExpiry()
+		if !exists {
+			select {
+			case <-c.wakeExpiry:
+				continue
+			case <-c.stopExpiry:
+				return
+			}
+		}
+
+		if wait > 0 {
+			timer := time.NewTimer(wait)
+			select {
+			case <-timer.C:
+			case <-c.wakeExpiry:
+				if !timer.Stop() {
+					<-timer.C
+				}
+				continue
+			case <-c.stopExpiry:
+				if !timer.Stop() {
+					<-timer.C
+				}
+				return
+			}
+		}
+
+		entry := c.popExpiredOrOverflowEntry(time.Now())
+		if entry == nil {
+			continue
+		}
+		if !c.entries.CompareAndDelete(entry.key, entry) {
+			c.releaseEntry()
+			continue
+		}
+		c.releaseEntry()
+		for _, item := range entry.value.ConvertToData() {
+			select {
+			case c.expiredEntries <- item:
+			case <-c.stopExpiry:
+				return
+			}
+		}
+	}
+}
+
+func (c *Cache[V1, V2]) nextExpiry() (time.Duration, bool) {
+	c.expirationMu.Lock()
+	defer c.expirationMu.Unlock()
+	if len(c.expirations) == 0 {
+		return 0, false
+	}
+	if len(c.expirations) > c.cfg.EntrySize {
+		return 0, true
+	}
+	return time.Until(c.expirations[0].expiresAt), true
+}
+
+func (c *Cache[V1, V2]) popExpiredOrOverflowEntry(now time.Time) *cacheEntry[V1] {
+	c.expirationMu.Lock()
+	defer c.expirationMu.Unlock()
+	if len(c.expirations) == 0 {
+		return nil
+	}
+	if len(c.expirations) <= c.cfg.EntrySize && c.expirations[0].expiresAt.After(now) {
+		return nil
+	}
+	entry, ok := heap.Pop(&c.expirations).(*cacheEntry[V1])
+	if !ok {
+		panic("cache: invalid expiration heap entry")
+	}
+	return entry
+}

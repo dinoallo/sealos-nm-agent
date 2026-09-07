@@ -18,8 +18,9 @@ const (
 )
 
 type TrafficEventReaderConfig struct {
-	MaxWorker      int
-	ReadingTimeout time.Duration
+	MaxWorker          int
+	HostTrafficEnabled bool
+	ReadingTimeout     time.Duration
 }
 
 type TrafficEventReaderParams struct {
@@ -50,17 +51,23 @@ func NewTrafficEventReader(params TrafficEventReaderParams) (*TrafficEventReader
 	if err != nil {
 		return nil, errors.Join(err, modules.ErrCreatingEgressPodTrafficReader)
 	}
-	egressHostTrafficReader, err := ringbuf.NewReader(params.TrafficObjs.ToNetdevTrafficEvents)
-	if err != nil {
-		return nil, errors.Join(err, modules.ErrCreatingEgressHostTrafficReader)
+	var egressHostTrafficReader *ringbuf.Reader
+	var egressHostNotiReader *ringbuf.Reader
+	if params.HostTrafficEnabled {
+		egressHostTrafficReader, err = ringbuf.NewReader(params.TrafficObjs.ToNetdevTrafficEvents)
+		if err != nil {
+			return nil, errors.Join(err, modules.ErrCreatingEgressHostTrafficReader)
+		}
 	}
 	egressPodNotiReader, err := ringbuf.NewReader(params.TrafficObjs.FromContainerTrafficNotis)
 	if err != nil {
 		return nil, errors.Join(err, modules.ErrCreatingEgressPodNotiReader)
 	}
-	egressHostNotiReader, err := ringbuf.NewReader(params.TrafficObjs.ToNetdevTrafficNotis)
-	if err != nil {
-		return nil, errors.Join(err, modules.ErrCreatingEgressHostNotiReader)
+	if params.HostTrafficEnabled {
+		egressHostNotiReader, err = ringbuf.NewReader(params.TrafficObjs.ToNetdevTrafficNotis)
+		if err != nil {
+			return nil, errors.Join(err, modules.ErrCreatingEgressHostNotiReader)
+		}
 	}
 	return &TrafficEventReader{
 		Logger:                   logger,
@@ -75,8 +82,10 @@ func NewTrafficEventReader(params TrafficEventReaderParams) (*TrafficEventReader
 func (r *TrafficEventReader) Start(ctx context.Context) {
 	r.startReading(ctx, "pod_egress_reader", "pod_egress_chan", r.egressPodTrafficReader, r.EgressPodTrafficRecords)
 	r.startReading(ctx, "pod_noti_reader", "pod_noti_chan", r.egressPodNotiReader, r.EgressPodNotiRecords)
-	r.startReading(ctx, "host_egress_reader", "host_egress_chan", r.egressHostTrafficReader, r.EgressHostTrafficRecords)
-	r.startReading(ctx, "host_noti_reader", "host_noti_chan", r.egressHostNotiReader, r.EgressHostNotiRecords)
+	if r.HostTrafficEnabled {
+		r.startReading(ctx, "host_egress_reader", "host_egress_chan", r.egressHostTrafficReader, r.EgressHostTrafficRecords)
+		r.startReading(ctx, "host_noti_reader", "host_noti_chan", r.egressHostNotiReader, r.EgressHostNotiRecords)
+	}
 }
 
 func (r *TrafficEventReader) startReading(ctx context.Context, readerName, recordChanName string, reader *ringbuf.Reader, recordChan chan *ringbuf.Record) {
