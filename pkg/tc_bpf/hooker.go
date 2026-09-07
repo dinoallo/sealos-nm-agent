@@ -112,10 +112,13 @@ func getHandleFromNs(nsName string) (*netlink.Handle, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer nsHandle.Close()
 	handle, err := netlink.NewHandleAt(nsHandle)
-	if err != nil {
-		return nil, err
+	closeErr := nsHandle.Close()
+	if err != nil || closeErr != nil {
+		if handle != nil {
+			handle.Close()
+		}
+		return nil, errors.Join(err, closeErr)
 	}
 	return handle, nil
 }

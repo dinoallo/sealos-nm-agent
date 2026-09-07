@@ -40,7 +40,11 @@ func (h expirationHeap[V]) Less(i, j int) bool { return h[i].expiresAt.Before(h[
 func (h expirationHeap[V]) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
 
 func (h *expirationHeap[V]) Push(value any) {
-	*h = append(*h, value.(*cacheEntry[V]))
+	entry, ok := value.(*cacheEntry[V])
+	if !ok {
+		panic("cache: invalid expiration heap entry")
+	}
+	*h = append(*h, entry)
 }
 
 func (h *expirationHeap[V]) Pop() any {
@@ -263,5 +267,9 @@ func (c *Cache[V1, V2]) popExpiredOrOverflowEntry(now time.Time) *cacheEntry[V1]
 	if len(c.expirations) <= c.cfg.EntrySize && c.expirations[0].expiresAt.After(now) {
 		return nil
 	}
-	return heap.Pop(&c.expirations).(*cacheEntry[V1])
+	entry, ok := heap.Pop(&c.expirations).(*cacheEntry[V1])
+	if !ok {
+		panic("cache: invalid expiration heap entry")
+	}
+	return entry
 }

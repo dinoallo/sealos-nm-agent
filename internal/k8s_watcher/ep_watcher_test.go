@@ -44,8 +44,12 @@ func TestServiceExposureChanged(t *testing.T) {
 			require.NoError(t, err)
 			newObj, err := transformService(updated)
 			require.NoError(t, err)
+			oldService, ok := oldObj.(client.Object)
+			require.True(t, ok)
+			newService, ok := newObj.(client.Object)
+			require.True(t, ok)
 			require.Equal(t, tc.want, serviceExposureChanged(event.UpdateEvent{
-				ObjectOld: oldObj.(client.Object), ObjectNew: newObj.(client.Object),
+				ObjectOld: oldService, ObjectNew: newService,
 			}))
 		})
 	}

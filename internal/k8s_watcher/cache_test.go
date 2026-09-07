@@ -49,7 +49,8 @@ func TestTransformPodKeepsOnlyWatcherFields(t *testing.T) {
 
 	transformed, err := transformPod(pod)
 	require.NoError(t, err)
-	slim := transformed.(*corev1.Pod)
+	slim, ok := transformed.(*corev1.Pod)
+	require.True(t, ok)
 
 	assert.Equal(t, "10.0.0.2", slim.Status.PodIP)
 	assert.Equal(t, "10.0.0.1", slim.Status.HostIP)
@@ -80,7 +81,8 @@ func TestTransformServiceAndEndpointSliceKeepExposureFields(t *testing.T) {
 	}
 	transformed, err := transformService(service)
 	require.NoError(t, err)
-	slimService := transformed.(*corev1.Service)
+	slimService, ok := transformed.(*corev1.Service)
+	require.True(t, ok)
 	assert.Equal(t, corev1.ServiceTypeNodePort, slimService.Spec.Type)
 	assert.Equal(t, intstr.FromString("web"), slimService.Spec.Ports[0].TargetPort)
 	assert.Empty(t, slimService.Spec.ClusterIP)
@@ -111,7 +113,8 @@ func TestTransformServiceAndEndpointSliceKeepExposureFields(t *testing.T) {
 	}
 	transformed, err = transformEndpointSlice(epSlice)
 	require.NoError(t, err)
-	slimSlice := transformed.(*discoveryv1.EndpointSlice)
+	slimSlice, ok := transformed.(*discoveryv1.EndpointSlice)
+	require.True(t, ok)
 	assert.Equal(t, "svc", slimSlice.Labels[svcLabelKey])
 	assert.NotContains(t, slimSlice.Labels, "unused")
 	assert.Equal(t, []string{"10.0.0.2"}, slimSlice.Endpoints[0].Addresses)
@@ -147,7 +150,8 @@ func TestTransformIngressAndCiliumNodeKeepWatcherFields(t *testing.T) {
 	}
 	transformed, err := transformIngress(ingress)
 	require.NoError(t, err)
-	slimIngress := transformed.(*networkingv1.Ingress)
+	slimIngress, ok := transformed.(*networkingv1.Ingress)
+	require.True(t, ok)
 	require.Len(t, slimIngress.Spec.Rules, 1)
 	backend := slimIngress.Spec.Rules[0].HTTP.Paths[0].Backend
 	require.NotNil(t, backend.Service)
@@ -174,7 +178,8 @@ func TestTransformIngressAndCiliumNodeKeepWatcherFields(t *testing.T) {
 	}
 	transformed, err = transformCiliumNode(node)
 	require.NoError(t, err)
-	slimNode := transformed.(*ciliumv2.CiliumNode)
+	slimNode, ok := transformed.(*ciliumv2.CiliumNode)
+	require.True(t, ok)
 	require.Len(t, slimNode.Spec.Addresses, 1)
 	assert.Equal(t, addressing.NodeCiliumInternalIP, slimNode.Spec.Addresses[0].Type)
 	assert.Equal(t, "10.0.0.3", slimNode.Spec.Addresses[0].IP)

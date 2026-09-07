@@ -23,7 +23,11 @@ type benchmarkPodClient struct {
 }
 
 func (c benchmarkPodClient) Get(_ context.Context, key client.ObjectKey, obj client.Object, _ ...client.GetOption) error {
-	c.pods[key].DeepCopyInto(obj.(*corev1.Pod))
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		return fmt.Errorf("expected *corev1.Pod, got %T", obj)
+	}
+	c.pods[key].DeepCopyInto(pod)
 	return nil
 }
 
